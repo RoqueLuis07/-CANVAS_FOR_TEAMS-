@@ -187,3 +187,68 @@ async def is_stale(sync_type: str, ttl_seconds: int = 3600) -> bool:
     except Exception as e:
         logger.error(f"Error checking staleness: {e}")
         return True
+
+
+async def upsert_courses(courses: list) -> int:
+    """Upsert courses into database. Returns count of inserted/updated."""
+    try:
+        def _upsert():
+            conn = sqlite3.connect(str(DB_FILE))
+            cursor = conn.cursor()
+            count = 0
+
+            for course in courses:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO canvas_courses (id, name, course_code, updated_at)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    course.get('id'),
+                    course.get('name', ''),
+                    course.get('course_code', ''),
+                    datetime.utcnow()
+                ))
+                count += 1
+
+            conn.commit()
+            conn.close()
+            return count
+
+        return await asyncio.to_thread(_upsert)
+    except Exception as e:
+        logger.error(f"Error upserting courses: {e}")
+        return 0
+
+
+async def upsert_canvas_users(users: list) -> int:
+    """Upsert Canvas users into database. Returns count of inserted/updated."""
+    try:
+        def _upsert():
+            conn = sqlite3.connect(str(DB_FILE))
+            cursor = conn.cursor()
+            count = 0
+
+            for user in users:
+                try:
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO canvas_users (id, name, email, login_id, updated_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        user.get('id'),
+                        user.get('name', ''),
+                        user.get('email', ''),
+                        user.get('login_id', ''),
+                        datetime.utcnow()
+                    ))
+                    count += 1
+                except Exception as e:
+                    logger.warning(f"Skipping user {user.get('id')}: {e}")
+                    continue
+
+            conn.commit()
+            conn.close()
+            return count
+
+        return await asyncio.to_thread(_upsert)
+    except Exception as e:
+        logger.error(f"Error upserting Canvas users: {e}")
+        return 0
