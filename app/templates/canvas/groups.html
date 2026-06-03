@@ -178,7 +178,7 @@ async function addMember(groupId) {
   const userId = document.getElementById('addMemberId').value.trim();
   if (!userId) return;
   try {
-    await api.post(`/canvas/groups/${groupId}/members`, { user_ids: [userId] });
+    await api.post(`/canvas/groups/${groupId}/members/add`, { user_id: userId, role: 'member' });
     toast('Miembro añadido', 'success'); loadGroupMembers(groupId);
   } catch(e) { toast('Error: ' + e.message, 'danger'); }
 }

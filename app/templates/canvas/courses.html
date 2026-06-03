@@ -15,15 +15,18 @@
 
 <div class="table-card">
   <div class="card-header flex-wrap gap-2">
-    <input type="text" id="searchCourse" class="form-control search-box" placeholder="🔍 Buscar curso..." oninput="applyFilters()">
-    <select id="stateFilter" class="form-select" style="max-width:160px" onchange="applyFilters()">
+    <input type="text" id="searchCourse" class="form-control search-box" placeholder="🔍 ID, nombre, código, SIS..." oninput="applyFilters()">
+    <select id="stateFilter" class="form-select filter-select-sm" title="Filtrar por estado" onchange="applyFilters()">
       <option value="">Todos los estados</option>
-      <option value="available">Publicado</option>
-      <option value="unpublished">No publicado</option>
-      <option value="completed">Completado</option>
-      <option value="deleted">Eliminado</option>
+      <option value="available">✅ Publicado</option>
+      <option value="unpublished">⬜ No publicado</option>
+      <option value="completed">🔵 Concluido</option>
+      <option value="deleted">🔴 Eliminado</option>
+      <option value="created">📝 Borrador</option>
     </select>
-    <input type="text" id="periodFilter" class="form-control" style="max-width:160px" placeholder="📅 Período (ej. 2025)" oninput="applyFilters()">
+    <select id="termFilter" class="form-select filter-select-md" title="Filtrar por período" onchange="applyFilters()">
+      <option value="">Todos los períodos</option>
+    </select>
     <span class="ms-auto text-muted small" id="courseCount"></span>
     <button type="button" class="btn btn-sm btn-outline-success" onclick="exportTableToExcel('tableWrap','canvas_cursos.xlsx')" title="Exportar a Excel" aria-label="Exportar a Excel"><i class="bi bi-file-earmark-arrow-down"></i></button>
     <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadCourses()" title="Recargar" aria-label="Recargar lista"><i class="bi bi-arrow-clockwise"></i></button>
@@ -38,112 +41,150 @@
 <script>
 let _allCourses = [];
 
+/* ── Estado: etiqueta + colores Canvas-style ── */
+const _STATE_CFG = {
+  available:   { label: 'Publicado',     bg: '#0B874B', icon: 'bi-broadcast'         },
+  unpublished: { label: 'No publicado',  bg: '#6C7982', icon: 'bi-eye-slash'          },
+  completed:   { label: 'Concluido',     bg: '#0770A3', icon: 'bi-check-circle'       },
+  deleted:     { label: 'Eliminado',     bg: '#C7003D', icon: 'bi-trash'              },
+  created:     { label: 'Borrador',      bg: '#C68A0A', icon: 'bi-pencil'             },
+  claimed:     { label: 'Borrador',      bg: '#C68A0A', icon: 'bi-pencil'             },
+};
+function stateBadge(state) {
+  const cfg = _STATE_CFG[state] || { label: state || '—', bg: '#6C7982', icon: 'bi-question-circle' };
+  return `<span class="badge d-inline-flex align-items-center gap-1"
+               style="background:${cfg.bg};font-size:.72rem;padding:3px 8px">
+            <i class="bi ${cfg.icon}" style="font-size:.68rem"></i>${cfg.label}
+          </span>`;
+}
+
 function applyFilters() {
-  const q      = document.getElementById('searchCourse').value.toLowerCase();
-  const state  = document.getElementById('stateFilter').value;
-  const period = document.getElementById('periodFilter').value.toLowerCase();
+  const q    = document.getElementById('searchCourse').value.toLowerCase();
+  const st   = document.getElementById('stateFilter').value;
+  const term = document.getElementById('termFilter').value;
+
   const filtered = _allCourses.filter(c => {
-    const text = JSON.stringify(c).toLowerCase();
-    if (q && !text.includes(q)) return false;
-    if (state && c.workflow_state !== state) return false;
-    if (period) {
-      const startYear = (c.start_at || '').substring(0,4);
-      const endYear   = (c.end_at   || '').substring(0,4);
-      if (!startYear.includes(period) && !endYear.includes(period) && !(c.name||'').toLowerCase().includes(period)) return false;
+    if (st   && c.workflow_state !== st)                return false;
+    if (term && (c.term?.name || '') !== term)          return false;
+    if (q) {
+      const hay = [c.id, c.name, c.course_code, c.sis_course_id,
+                   c.term?.name, c.start_at, c.end_at]
+                  .join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
     }
     return true;
   });
-  document.getElementById('courseCount').textContent = filtered.length + ' / ' + _allCourses.length + ' cursos';
-  renderCoursesTable(filtered);
+
+  document.getElementById('courseCount').textContent =
+    filtered.length + (filtered.length !== _allCourses.length ? ` / ${_allCourses.length}` : '') + ' cursos';
+  pgInit('tableWrap', filtered, renderCoursesTable);
 }
 
+/* ── Tabla estilo Canvas LMS ── */
 function renderCoursesTable(courses) {
-  const stateBadge = (state) => {
-    const map = { available: 'success', unpublished: 'warning', completed: 'secondary', deleted: 'danger' };
-    return `<span class="badge bg-${map[state] || 'secondary'} small">${state === 'available' ? 'Publicado' : state === 'unpublished' ? 'No publicado' : state === 'completed' ? 'Completado' : 'Eliminado'}</span>`;
-  };
+  const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#x27;');
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('es-ES', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
 
-  const html = `<table class="table table-sm table-hover mb-0">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Nombre</th>
-        <th>Código</th>
-        <th>SIS ID</th>
-        <th>Inicio</th>
-        <th>Fin</th>
-        <th>Estado</th>
-        <th style="width:130px">Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${courses.map(row => `
-        <tr class="course-row" style="cursor:pointer" data-course='${JSON.stringify(row).replace(/'/g,"&#x27;")}'>
-          <td>
-            <span class="fw-semibold">${row.id}</span>
-            <button type="button" class="btn-copy-id copy-btn" title="Copiar ID" data-copy-id="${row.id}" data-copy-label="Course ID"><i class="bi bi-files"></i></button>
-          </td>
-          <td class="td-name fw-semibold">${row.name}</td>
-          <td>${row.course_code || '—'}</td>
-          <td class="text-muted small">${row.sis_course_id || '—'}</td>
-          <td>${row.start_at ? new Date(row.start_at).toLocaleDateString('es-ES') : '—'}</td>
-          <td>${row.end_at ? new Date(row.end_at).toLocaleDateString('es-ES') : '—'}</td>
-          <td>${stateBadge(row.workflow_state)}</td>
-          <td>
-            <button class="btn btn-sm btn-outline-info me-1 view-enrollments-btn" title="Ver matrículas" data-course-id="${row.id}" data-course-name="${row.name}"><i class="bi bi-people"></i></button>
-            <button class="btn btn-sm btn-outline-warning me-1 attendance-btn" title="Asistencias" data-course-id="${row.id}" data-course-name="${row.name}"><i class="bi bi-calendar-check"></i></button>
-            <button class="btn btn-sm btn-outline-danger delete-course-btn" title="Concluir curso" data-course-id="${row.id}" data-course-name="${row.name}"><i class="bi bi-trash"></i></button>
-          </td>
+  document.getElementById('tableWrap').innerHTML = `
+    <table class="table table-sm table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width:70px">ID</th>
+          <th>Nombre del curso</th>
+          <th>SIS ID</th>
+          <th>Período</th>
+          <th>Inicio</th>
+          <th>Fin</th>
+          <th>Estado</th>
+          <th style="width:110px">Acciones</th>
         </tr>
-      `).join('')}
-    </tbody>
-  </table>`;
+      </thead>
+      <tbody>
+        ${courses.map(row => {
+          const termName = row.term?.name || '—';
+          const termId   = row.enrollment_term_id || '';
+          return `
+          <tr class="course-row" data-course='${esc(JSON.stringify(row))}'>
+            <td>
+              <span class="fw-semibold small">${row.id}</span>
+              <button type="button" class="btn-copy-id copy-btn" title="Copiar ID"
+                      data-copy-id="${row.id}" data-copy-label="Course ID">
+                <i class="bi bi-files"></i>
+              </button>
+            </td>
+            <td>
+              <div class="fw-semibold td-name" style="line-height:1.3">${esc(row.name)}</div>
+              <div class="text-muted small">${esc(row.course_code || '')}
+                ${row.sis_course_id ? `<span class="ms-2 id-chip">${esc(row.sis_course_id)}</span>` : ''}
+              </div>
+            </td>
+            <td class="text-muted small">${esc(row.sis_course_id || '—')}</td>
+            <td>
+              <span class="badge bg-light text-dark border" style="font-size:.72rem">
+                <i class="bi bi-calendar3 me-1 text-canvas-blue"></i>${esc(termName)}
+              </span>
+            </td>
+            <td class="small text-muted">${fmtDate(row.start_at)}</td>
+            <td class="small text-muted">${fmtDate(row.end_at)}</td>
+            <td>${stateBadge(row.workflow_state)}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-info me-1 view-enrollments-btn"
+                      title="Ver matrículas"
+                      data-course-id="${row.id}" data-course-name="${esc(row.name)}">
+                <i class="bi bi-people"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-warning me-1 attendance-btn"
+                      title="Asistencias"
+                      data-course-id="${row.id}" data-course-name="${esc(row.name)}">
+                <i class="bi bi-calendar-check"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger delete-course-btn"
+                      title="Concluir curso"
+                      data-course-id="${row.id}" data-course-name="${esc(row.name)}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
 
-  document.getElementById('tableWrap').innerHTML = html;
-
-  // Attach event listeners
-  document.querySelectorAll('#tableWrap .copy-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      copyToClipboard(btn.dataset.copyId, btn.dataset.copyLabel);
-    });
-  });
-
-  document.querySelectorAll('#tableWrap .course-row').forEach(row => {
-    row.addEventListener('click', () => {
-      const courseData = JSON.parse(row.dataset.course.replace(/&#x27;/g, "'"));
-      openEditCourse(courseData);
-    });
-  });
-
-  document.querySelectorAll('#tableWrap .view-enrollments-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      viewEnrollments(btn.dataset.courseId, btn.dataset.courseName);
-    });
-  });
-
-  document.querySelectorAll('#tableWrap .attendance-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openAttendanceModal(btn.dataset.courseId, btn.dataset.courseName);
-    });
-  });
-
-  document.querySelectorAll('#tableWrap .delete-course-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteCourse(btn.dataset.courseId, btn.dataset.courseName);
-    });
-  });
+  document.querySelectorAll('#tableWrap .copy-btn').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); copyToClipboard(btn.dataset.copyId, btn.dataset.copyLabel); })
+  );
+  document.querySelectorAll('#tableWrap .course-row').forEach(row =>
+    row.addEventListener('click', () => openEditCourse(JSON.parse(row.dataset.course.replace(/&#x27;/g,"'"))))
+  );
+  document.querySelectorAll('#tableWrap .view-enrollments-btn').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); viewEnrollments(btn.dataset.courseId, btn.dataset.courseName); })
+  );
+  document.querySelectorAll('#tableWrap .attendance-btn').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); openAttendanceModal(btn.dataset.courseId, btn.dataset.courseName); })
+  );
+  document.querySelectorAll('#tableWrap .delete-course-btn').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); deleteCourse(btn.dataset.courseId, btn.dataset.courseName); })
+  );
 }
 
 async function loadCourses() {
+  document.getElementById('tableWrap').innerHTML =
+    '<div class="text-center py-5"><span class="spinner-border"></span><div class="text-muted small mt-2">Cargando todos los cursos…</div></div>';
   try {
-    const courses = await api.get('/canvas/courses?per_page=100');
+    const courses = await api.get('/canvas/courses');
     _allCourses = courses;
+
+    // Poblar dropdown de períodos con los términos únicos presentes
+    const termSel = document.getElementById('termFilter');
+    const terms   = [...new Set(courses.map(c => c.term?.name).filter(Boolean))].sort();
+    termSel.innerHTML = '<option value="">Todos los períodos</option>';
+    terms.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      termSel.appendChild(o);
+    });
+
     document.getElementById('courseCount').textContent = courses.length + ' cursos';
-    renderCoursesTable(courses);
+    pgInit('tableWrap', _allCourses, renderCoursesTable);
   } catch(e) { toast('Error cargando cursos: ' + e.message, 'danger'); }
 }
 

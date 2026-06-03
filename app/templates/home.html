@@ -5,7 +5,7 @@
 {% block content %}
 <div class="home-wrap">
 
-  <!-- Hero -->
+  <!-- Hero (Canvas-blue banner) -->
   <div class="hero-banner mb-4">
     <div class="hero-badge">
       <i class="bi bi-shield-check-fill"></i> Sistema institucional activo
@@ -14,79 +14,169 @@
     <p>Plataforma de gestión integrada para Canvas LMS y Microsoft Teams</p>
   </div>
 
-  <!-- Feature cards -->
+  <!-- Module tiles (Canvas-style) -->
   <div class="row g-3 mb-4">
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui" class="feature-card">
-        <div class="feature-card-icon fci-blue"><i class="bi bi-speedometer2"></i></div>
-        <h5>Dashboard</h5>
-        <p>Panel de control con estadísticas en tiempo real de usuarios, cursos y matrículas</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-blue">
+          <i class="bi bi-speedometer2 tile-bg-icon"></i>
+          <div class="tile-title">Dashboard</div>
+          <div class="tile-sub">Panel de control general</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Estadísticas en tiempo real de usuarios, cursos, matrículas y estado del sistema.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Abrir Dashboard</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/canvas/attendance" class="feature-card">
-        <div class="feature-card-icon fci-green"><i class="bi bi-clipboard-check"></i></div>
-        <h5>Asistencias</h5>
-        <p>Descarga matrices de asistencia en Excel con datos actualizados desde Canvas</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-teal">
+          <i class="bi bi-clipboard-check-fill tile-bg-icon"></i>
+          <div class="tile-title">Asistencias</div>
+          <div class="tile-sub">Canvas Roll Call</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Descarga matrices de asistencia en Excel con datos actualizados desde Canvas.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/canvas/attendance" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Ver Asistencias</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/canvas/users" class="feature-card">
-        <div class="feature-card-icon fci-teal"><i class="bi bi-people-fill"></i></div>
-        <h5>Usuarios Canvas</h5>
-        <p>Gestión masiva de usuarios, importación por Excel y sincronización con Teams</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-slate">
+          <i class="bi bi-people-fill tile-bg-icon"></i>
+          <div class="tile-title">Usuarios Canvas</div>
+          <div class="tile-sub">Gestión de cuentas</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Gestión masiva de usuarios, importación por Excel y sincronización con Teams.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/canvas/users" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Ver Usuarios</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/canvas/courses" class="feature-card">
-        <div class="feature-card-icon fci-yellow"><i class="bi bi-book-fill"></i></div>
-        <h5>Cursos</h5>
-        <p>Administra y sincroniza cursos entre Canvas LMS y Microsoft Teams</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-yellow">
+          <i class="bi bi-book-fill tile-bg-icon"></i>
+          <div class="tile-title">Cursos</div>
+          <div class="tile-sub">Canvas LMS</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Administra y sincroniza cursos entre Canvas LMS y Microsoft Teams.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/canvas/courses" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Ver Cursos</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/canvas/enrollments" class="feature-card">
-        <div class="feature-card-icon fci-red"><i class="bi bi-pencil-square"></i></div>
-        <h5>Matrículas</h5>
-        <p>Gestiona enrolaciones de estudiantes de forma masiva desde archivos Excel</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-red">
+          <i class="bi bi-pencil-square tile-bg-icon"></i>
+          <div class="tile-title">Matrículas</div>
+          <div class="tile-sub">Enrolaciones masivas</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Gestiona enrolaciones de estudiantes de forma masiva desde archivos Excel.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/canvas/enrollments" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Ver Matrículas</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/teams/teams" class="feature-card">
-        <div class="feature-card-icon fci-indigo"><i class="bi bi-microsoft-teams"></i></div>
-        <h5>Microsoft Teams</h5>
-        <p>Gestión de equipos, miembros y canales en Microsoft Teams / Azure AD</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-purple">
+          <i class="bi bi-microsoft-teams tile-bg-icon"></i>
+          <div class="tile-title">Microsoft Teams</div>
+          <div class="tile-sub">Azure Active Directory</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Gestión de equipos, miembros y canales en Microsoft Teams / Azure AD.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/teams/teams" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Ver Teams</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/sync" class="feature-card">
-        <div class="feature-card-icon fci-green"><i class="bi bi-arrow-left-right"></i></div>
-        <h5>Sincronización</h5>
-        <p>Sincroniza cursos de Canvas con Teams automáticamente, incluyendo matrículas</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-green">
+          <i class="bi bi-arrow-left-right tile-bg-icon"></i>
+          <div class="tile-title">Sincronización</div>
+          <div class="tile-sub">Canvas ↔ Teams</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Sincroniza cursos de Canvas con Teams automáticamente, incluyendo matrículas.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/sync" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Sincronizar</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/ingreso" class="feature-card">
-        <div class="feature-card-icon fci-yellow"><i class="bi bi-person-fill-add"></i></div>
-        <h5>Nuevo Ingreso</h5>
-        <p>Alta masiva de nuevos estudiantes con generación automática de credenciales</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-orange">
+          <i class="bi bi-person-fill-add tile-bg-icon"></i>
+          <div class="tile-title">Nuevo Ingreso</div>
+          <div class="tile-sub">Alta masiva de estudiantes</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Alta masiva de nuevos estudiantes con generación automática de credenciales.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/ingreso" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Nuevo Ingreso</a>
+        </div>
+      </div>
     </div>
 
     <div class="col-sm-6 col-lg-4">
-      <a href="/ui/audit" class="feature-card">
-        <div class="feature-card-icon fci-gray"><i class="bi bi-shield-lock"></i></div>
-        <h5>Auditoría</h5>
-        <p>Registro completo de todas las operaciones realizadas en el sistema</p>
-      </a>
+      <div class="canvas-tile">
+        <div class="canvas-tile-header tile-header-slate">
+          <i class="bi bi-shield-lock-fill tile-bg-icon"></i>
+          <div class="tile-title">Auditoría</div>
+          <div class="tile-sub">Registros del sistema</div>
+        </div>
+        <div class="canvas-tile-body">
+          <p class="text-muted small mb-0">
+            Registro completo de todas las operaciones realizadas en el sistema.
+          </p>
+        </div>
+        <div class="canvas-tile-footer">
+          <a href="/ui/audit" class="tile-link"><i class="bi bi-arrow-right me-1"></i>Ver Auditoría</a>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -103,20 +193,21 @@
           </div>
         </div>
         <p class="sys-desc">
-          Plataforma interna de integración entre Canvas LMS y Microsoft Teams para la gestión académica y administrativa.
+          Plataforma interna de integración entre Canvas LMS y Microsoft Teams
+          para la gestión académica y administrativa.
         </p>
       </div>
       <div class="col-md-6">
         <div class="row g-2">
           <div class="col-6">
             <div class="sys-meta-item">
-              <i class="bi bi-tag-fill text-primary"></i>
+              <i class="bi bi-tag-fill text-canvas-blue"></i>
               <span>Versión <strong class="text-body">1.1.0</strong></span>
             </div>
           </div>
           <div class="col-6">
             <div class="sys-meta-item">
-              <i class="bi bi-calendar3 text-primary"></i>
+              <i class="bi bi-calendar3 text-canvas-blue"></i>
               <span>Junio 2026</span>
             </div>
           </div>
@@ -128,7 +219,7 @@
           </div>
           <div class="col-6">
             <div class="sys-meta-item">
-              <i class="bi bi-hdd-stack text-primary"></i>
+              <i class="bi bi-hdd-stack text-canvas-blue"></i>
               <span>Canvas LMS + Azure AD</span>
             </div>
           </div>

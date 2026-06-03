@@ -372,17 +372,28 @@ async def upsert_azure_users(users: list) -> int:
         return 0
 
 
-async def get_azure_users() -> list:
-    """Return all Azure AD users from local DB."""
+async def get_azure_users(search: str | None = None) -> list:
+    """Return Azure AD users from local DB, optionally filtered by search term."""
     try:
         def _get():
             conn = sqlite3.connect(str(DB_FILE))
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, display_name, mail, user_principal_name
-                FROM azure_users ORDER BY display_name
-            """)
+            if search:
+                q = f"%{search.lower()}%"
+                cursor.execute("""
+                    SELECT id, display_name, mail, user_principal_name
+                    FROM azure_users
+                    WHERE lower(display_name) LIKE ?
+                       OR lower(user_principal_name) LIKE ?
+                       OR lower(coalesce(mail,'')) LIKE ?
+                    ORDER BY display_name
+                """, (q, q, q))
+            else:
+                cursor.execute("""
+                    SELECT id, display_name, mail, user_principal_name
+                    FROM azure_users ORDER BY display_name
+                """)
             rows = [dict(r) for r in cursor.fetchall()]
             conn.close()
             return rows

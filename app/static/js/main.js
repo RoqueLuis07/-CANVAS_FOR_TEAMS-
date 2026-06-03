@@ -149,7 +149,16 @@ async function apiCall(method, url, data = null) {
       502: 'Servidor no disponible',
       503: 'Servicio temporalmente no disponible',
     };
-    throw new Error(detail || httpMsg[r.status] || `Error ${r.status}: ${r.statusText}`);
+    const errMsg = detail || httpMsg[r.status] || `Error ${r.status}: ${r.statusText}`;
+    // Log API errors to the error panel
+    if (typeof logError === 'function') {
+      logError(errMsg, {
+        type:     `HTTP ${r.status}`,
+        severity: 'api',
+        source:   `${method} ${url}`,
+      });
+    }
+    throw new Error(errMsg);
   }
 
   return r.status === 204 ? {} : r.json();
@@ -467,4 +476,200 @@ function renderBulkResult(result, containerId) {
     </div>` : ''}`;
   if (containerId) document.getElementById(containerId).innerHTML = html;
   return html;
+}
+
+/* ── Pagination ── */
+const _pg = {};
+
+/**
+ * Initialize (or reset to page 1) a paginated list.
+ * @param {string}   wrapId   - id of the #tableWrap element
+ * @param {Array}    items    - full filtered dataset
+ * @param {Function} renderFn - function(pageSlice) that writes to #wrapId
+ * @param {number}   perPage  - rows per page (default 50)
+ */
+function pgInit(wrapId, items, renderFn, perPage = 50) {
+  _pg[wrapId] = { items, renderFn, page: 1, perPage };
+  _pgDraw(wrapId);
+}
+
+/* ── Error log panel ── */
+const _errHistory = [];
+let   _errPanelOpen = false;
+
+/**
+ * Register and display an error in the log panel.
+ * severity: 'error' | 'warning' | 'info' | 'api'
+ */
+function logError(message, { type = 'Error', severity = 'error', source = '', stack = '' } = {}) {
+  const ts    = new Date().toLocaleTimeString('es', { hour12: false });
+  const entry = { ts, type, severity, message: String(message), source, stack };
+  _errHistory.push(entry);
+
+  const panel = document.getElementById('err-panel');
+  const list  = document.getElementById('err-list');
+  const count = document.getElementById('err-count');
+  const badge = document.getElementById('err-badge-btn');
+  const bCount = document.getElementById('err-badge-count');
+
+  if (!panel || !list) return;
+
+  // Update counters
+  if (count)  count.textContent  = _errHistory.length;
+  if (bCount) bCount.textContent = _errHistory.length;
+
+  // Build entry HTML
+  const id     = 'err-' + Date.now();
+  const sevCls = { error: 'err-sev-error', warning: 'err-sev-warning', info: 'err-sev-info', api: 'err-sev-api' }[severity] || 'err-sev-error';
+  const sevLbl = { error: 'Error', warning: 'Advertencia', info: 'Info', api: 'API' }[severity] || 'Error';
+  const esc    = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const stackHtml = stack
+    ? `<button class="err-stack-toggle" onclick="_errToggleStack('${id}')" type="button">
+         <i class="bi bi-chevron-right" id="${id}-chevron"></i> Ver stack trace
+       </button>
+       <pre class="err-stack" id="${id}-stack">${esc(stack)}</pre>`
+    : '';
+
+  const copyText = `[${ts}] ${type}: ${message}${source ? '\nFuente: ' + source : ''}${stack ? '\n' + stack : ''}`;
+
+  const el = document.createElement('div');
+  el.className = 'err-entry';
+  el.innerHTML = `
+    <div class="err-entry-header">
+      <span class="err-severity ${sevCls}">${sevLbl}</span>
+      <span class="err-type">${esc(type)}</span>
+      <span class="err-ts">${ts}</span>
+    </div>
+    <div class="err-message">${esc(message)}</div>
+    ${source ? `<div class="err-source"><i class="bi bi-geo-alt-fill me-1" style="font-size:.68rem"></i>${esc(source)}</div>` : ''}
+    ${stackHtml}
+    <button class="err-copy-btn" type="button"
+            onclick="navigator.clipboard.writeText(${JSON.stringify(copyText)}).then(()=>toast('Copiado','success'))">
+      <i class="bi bi-clipboard me-1"></i>Copiar
+    </button>`;
+
+  // Most recent error at top
+  list.insertBefore(el, list.firstChild);
+
+  // Remove "empty" placeholder if present
+  list.querySelector('.err-empty')?.remove();
+
+  // Open panel automatically and hide badge
+  openErrPanel();
+  if (badge) badge.classList.add('err-badge-hidden');
+}
+
+function _errToggleStack(id) {
+  const stack   = document.getElementById(id + '-stack');
+  const chevron = document.getElementById(id + '-chevron');
+  if (!stack) return;
+  stack.classList.toggle('err-stack-open');
+  if (chevron) chevron.className = stack.classList.contains('err-stack-open')
+    ? 'bi bi-chevron-down'
+    : 'bi bi-chevron-right';
+}
+
+function openErrPanel() {
+  const panel = document.getElementById('err-panel');
+  const badge = document.getElementById('err-badge-btn');
+  if (panel) panel.classList.add('err-open');
+  if (badge) badge.classList.add('err-badge-hidden');
+  _errPanelOpen = true;
+}
+
+function closeErrPanel() {
+  const panel  = document.getElementById('err-panel');
+  const badge  = document.getElementById('err-badge-btn');
+  if (panel) panel.classList.remove('err-open');
+  if (_errHistory.length > 0 && badge) badge.classList.remove('err-badge-hidden');
+  _errPanelOpen = false;
+}
+
+function clearErrLog() {
+  _errHistory.length = 0;
+  const list  = document.getElementById('err-list');
+  const count = document.getElementById('err-count');
+  const badge = document.getElementById('err-badge-btn');
+  if (list)  list.innerHTML = '<div class="err-empty"><i class="bi bi-check-circle"></i>Sin errores registrados</div>';
+  if (count) count.textContent = '0';
+  if (badge) badge.classList.add('err-badge-hidden');
+}
+
+/* ── Global error interceptors ── */
+
+// Uncaught JS errors
+window.addEventListener('error', e => {
+  logError(e.message, {
+    type:     e.error?.name || 'Error',
+    severity: 'error',
+    source:   e.filename ? `${e.filename.split('/').pop()}:${e.lineno}` : '',
+    stack:    e.error?.stack || '',
+  });
+});
+
+// Unhandled promise rejections
+window.addEventListener('unhandledrejection', e => {
+  const err = e.reason;
+  const msg = err instanceof Error ? err.message : String(err ?? 'Promesa rechazada sin mensaje');
+  logError(msg, {
+    type:     err instanceof Error ? err.name : 'UnhandledRejection',
+    severity: 'error',
+    stack:    err instanceof Error ? (err.stack || '') : '',
+  });
+});
+
+/** Navigate to a specific page. */
+function pgGo(wrapId, page) {
+  if (!_pg[wrapId]) return;
+  _pg[wrapId].page = page;
+  _pgDraw(wrapId);
+  // Scroll the card header into view
+  const wrap = document.getElementById(wrapId);
+  wrap?.closest('.table-card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function _pgDraw(wrapId) {
+  const state = _pg[wrapId];
+  if (!state) return;
+  const { items, renderFn, perPage } = state;
+  const total  = items.length;
+  const pages  = Math.max(1, Math.ceil(total / perPage));
+  state.page   = Math.min(Math.max(1, state.page), pages);
+  const p      = state.page;
+  const start  = (p - 1) * perPage;
+
+  // Render the current page slice
+  renderFn(items.slice(start, start + perPage));
+
+  // Remove the old pagination bar (if any) from the table-card
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const card = wrap.closest('.table-card') || wrap.parentElement;
+  card.querySelector('.pg-bar')?.remove();
+  if (pages <= 1) return;
+
+  // Build page-number buttons (window of ±2 around current page)
+  const lo = Math.max(1, p - 2);
+  const hi = Math.min(pages, p + 2);
+  let nums = '';
+  if (lo > 1) nums += `<button class="pg-btn" onclick="pgGo('${wrapId}',1)">1</button>`;
+  if (lo > 2) nums += `<button class="pg-btn" disabled>…</button>`;
+  for (let i = lo; i <= hi; i++)
+    nums += `<button class="pg-btn${i === p ? ' active' : ''}" onclick="pgGo('${wrapId}',${i})">${i}</button>`;
+  if (hi < pages - 1) nums += `<button class="pg-btn" disabled>…</button>`;
+  if (hi < pages)     nums += `<button class="pg-btn" onclick="pgGo('${wrapId}',${pages})">${pages}</button>`;
+
+  const from = start + 1;
+  const to   = Math.min(start + perPage, total);
+
+  card.insertAdjacentHTML('beforeend', `
+    <div class="pg-bar">
+      <span class="pg-info">${from}–${to} de ${total}</span>
+      <div class="pg-btns">
+        <button class="pg-btn" ${p <= 1 ? 'disabled' : ''} onclick="pgGo('${wrapId}',${p - 1})">&laquo;</button>
+        ${nums}
+        <button class="pg-btn" ${p >= pages ? 'disabled' : ''} onclick="pgGo('${wrapId}',${p + 1})">&raquo;</button>
+      </div>
+    </div>`);
 }

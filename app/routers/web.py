@@ -48,6 +48,11 @@ async def canvas_enrollments(request: Request):
     return _r(request, "canvas/enrollments.html")
 
 
+@router.get("/ui/canvas/groups", response_class=HTMLResponse)
+async def canvas_groups(request: Request):
+    return _r(request, "canvas/groups.html")
+
+
 @router.get("/ui/diagnostico", response_class=HTMLResponse)
 async def diagnostico(request: Request):
     return _r(request, "diagnostico_matriculas.html")

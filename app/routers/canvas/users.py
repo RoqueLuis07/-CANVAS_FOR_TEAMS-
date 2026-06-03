@@ -53,7 +53,7 @@ async def list_users(
     background_tasks: BackgroundTasks,
     search_term: Annotated[str | None, Query(description="Buscar por nombre o email")] = None,
     per_page: Annotated[int, Query(ge=1, le=100)] = 100,
-    max_records: Annotated[int, Query(ge=1, le=5000)] = 1000,
+    max_records: Annotated[int, Query(ge=1, le=10000)] = 5000,
 ):
     cache_key = f"canvas:users:{search_term or ''}:{per_page}:{max_records}"
     cached = cache.get(cache_key)

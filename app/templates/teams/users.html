@@ -58,90 +58,93 @@ const ACTIONS = row => `
   <button class="btn btn-sm btn-outline-danger" title="Eliminar"
     onclick="deleteUser('${row.id}','${(row.displayName||'').replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button>`;
 
+/* Render a page slice (already filtered + paginated by pgInit) */
+function _renderTeamsUsersPage(users) {
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#x27;');
+  document.getElementById('tableWrap').innerHTML = `
+    <table class="table table-sm table-hover mb-0" style="cursor:pointer;table-layout:auto">
+      <thead>
+        <tr>
+          <th style="width:30px"></th>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>UPN</th>
+          <th>Email</th>
+          <th>Depto</th>
+          <th>Cargo</th>
+          <th>Activo</th>
+          <th style="width:100px">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${users.map(row => `
+          <tr class="tu-row" data-upn="${esc(row.userPrincipalName||row.mail||'')}" data-name="${esc(row.displayName||'')}">
+            <td><input type="checkbox" class="form-check-input" onclick="event.stopPropagation(); toggleRowSelection(event, this)"></td>
+            <td title="${esc(row.id)}">
+              <span class="small text-muted" style="max-width:130px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                <strong>${row.id.substring(0,20)}…</strong>
+              </span>
+              <button type="button" class="btn btn-sm btn-link p-0 ms-1 copy-id-btn"
+                      title="Copiar ID" data-copy-val="${esc(row.id)}" data-copy-lbl="Azure User ID">
+                <i class="bi bi-files"></i>
+              </button>
+            </td>
+            <td class="fw-semibold small td-name">${esc(row.displayName)}</td>
+            <td class="small text-muted">${esc(row.userPrincipalName || '—')}</td>
+            <td class="small text-muted">${esc(row.mail || '—')}</td>
+            <td class="small">${esc(row.department || '—')}</td>
+            <td class="small">${esc(row.jobTitle || '—')}</td>
+            <td><span class="badge ${row.accountEnabled ? 'bg-success' : 'bg-danger'} badge-xs">${row.accountEnabled ? 'Sí' : 'No'}</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 edit-tu-btn" title="Editar"
+                      data-user='${JSON.stringify(row).replace(/'/g,"&#x27;")}'>
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger del-tu-btn" title="Eliminar"
+                      data-user-id="${esc(row.id)}" data-user-name="${esc(row.displayName||'')}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  document.querySelectorAll('#tableWrap .tu-row').forEach(tr => {
+    tr.addEventListener('click', () => openTeamsUserProfile(tr.dataset.upn, tr.dataset.name));
+  });
+  document.querySelectorAll('#tableWrap .copy-id-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); copyToClipboard(btn.dataset.copyVal, btn.dataset.copyLbl); });
+  });
+  document.querySelectorAll('#tableWrap .edit-tu-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openEditUser(JSON.parse(btn.dataset.user.replace(/&#x27;/g,"'"))); });
+  });
+  document.querySelectorAll('#tableWrap .del-tu-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); deleteUser(btn.dataset.userId, btn.dataset.userName); });
+  });
+}
+
+/* Apply dept/status filters then paginate */
 function renderUsers(users) {
   const dept   = document.getElementById('deptFilter').value;
   const status = document.getElementById('statusFilter').value;
   const filtered = users.filter(u => {
-    if (dept   && u.department !== dept) return false;
-    if (status !== '' && String(u.accountEnabled) !== status) return false;
+    if (dept   && u.department !== dept)                       return false;
+    if (status !== '' && String(u.accountEnabled) !== status)  return false;
     return true;
   });
   document.getElementById('userCount').textContent =
     filtered.length + (users.length !== filtered.length ? ` / ${users.length}` : '') + ' usuarios';
   clearSelection('tableWrap');
 
-  const html = `<table class="table table-sm table-hover mb-0" style="cursor:pointer;table-layout:auto">
-    <thead style="background:var(--card-border);position:sticky;top:0;z-index:10">
-      <tr>
-        <th style="width:30px"></th>
-        <th style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ID</th>
-        <th>Nombre</th>
-        <th>UPN</th>
-        <th>Email</th>
-        <th>Depto</th>
-        <th>Cargo</th>
-        <th>Activo</th>
-        <th style="width:100px">Acciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${filtered.map(row => `
-        <tr class="user-row" data-upn="${row.userPrincipalName||row.mail||''}" data-name="${row.displayName||''}">
-          <td><input type="checkbox" class="form-check-input" onclick="event.stopPropagation(); toggleRowSelection(event, this)"></td>
-          <td style="display:flex;align-items:center;gap:0.5rem;flex-wrap:nowrap" title="${row.id}"><span class="small text-muted" style="min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><strong>${row.id.substring(0, 20)}...</strong></span> <button type="button" class="btn btn-sm btn-link p-0 copy-btn" style="color:var(--text-muted);flex-shrink:0" title="Copiar ID" data-copy-id="${row.id}" data-copy-label="Azure User ID"><i class="bi bi-files"></i></button></td>
-          <td class="fw-semibold small" style="color:var(--sidebar-accent)">${row.displayName}</td>
-          <td class="small text-muted">${row.userPrincipalName || '—'}</td>
-          <td class="small text-muted">${row.mail || '—'}</td>
-          <td class="small">${row.department || '—'}</td>
-          <td class="small">${row.jobTitle || '—'}</td>
-          <td><span class="badge ${row.accountEnabled ? 'bg-success' : 'bg-danger'} small">${row.accountEnabled ? 'Sí' : 'No'}</span></td>
-          <td>
-            <button class="btn btn-sm btn-outline-primary me-1 edit-user-btn" title="Editar" data-user='${JSON.stringify(row).replace(/'/g,"&#x27;")}'><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-sm btn-outline-danger delete-user-btn" title="Eliminar" data-user-id="${row.id}" data-user-name="${row.displayName||''}"><i class="bi bi-trash"></i></button>
-          </td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>`;
-
-  document.getElementById('tableWrap').innerHTML = html;
-
-  // Attach event listeners
-  document.querySelectorAll('#tableWrap .copy-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      copyToClipboard(btn.dataset.copyId, btn.dataset.copyLabel);
-    });
-  });
-
-  document.querySelectorAll('#tableWrap .user-row').forEach(row => {
-    row.addEventListener('click', () => {
-      openTeamsUserProfile(row.dataset.upn, row.dataset.name);
-    });
-  });
-
-  document.querySelectorAll('#tableWrap .edit-user-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const userData = JSON.parse(btn.dataset.user.replace(/&#x27;/g, "'"));
-      openEditUser(userData);
-    });
-  });
-
-  document.querySelectorAll('#tableWrap .delete-user-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteUser(btn.dataset.userId, btn.dataset.userName);
-    });
-  });
-
-  // Populate department dropdown if needed
+  // Populate department dropdown on first load
   if (_allUsers.length > 0 && document.getElementById('deptFilter').options.length <= 1) {
     const depts = [...new Set(_allUsers.map(u => u.department).filter(Boolean))].sort();
     const sel = document.getElementById('deptFilter');
     sel.innerHTML = '<option value="">Todos los departamentos</option>';
     depts.forEach(d => { const o = document.createElement('option'); o.value = d; o.textContent = d; sel.appendChild(o); });
   }
+
+  pgInit('tableWrap', filtered, _renderTeamsUsersPage);
 }
 
 function onSearchInput() {
@@ -165,14 +168,14 @@ async function loadUsers(loadAll = false) {
   document.getElementById('tableWrap').innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span><span class="ms-2 text-muted">Cargando usuarios…</span></div>';
   document.getElementById('userCount').textContent = '';
   try {
-    const maxRecords = loadAll ? 5000 : 200;
+    const maxRecords = loadAll ? 10000 : 1000;
     const users = await api.get(`/teams/users?max_records=${maxRecords}`);
     _allUsers = users;
     _loadedAll = loadAll || users.length < maxRecords;
     renderUsers(_allUsers);
     if (!_loadedAll) {
       document.getElementById('userCount').textContent +=
-        ` — <a href="#" onclick="loadUsers(true);return false;" class="small">Cargar todos</a>`;
+        ` — <a href="#" onclick="loadUsers(true);return false;" class="small">Cargar todos (${maxRecords}+)</a>`;
     }
   } catch(e) { toast('Error cargando usuarios: ' + e.message, 'danger'); }
 }

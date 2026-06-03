@@ -19,7 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from app.core import database
+from app.core import database, cache as _cache
 from app.core.config import settings
 from app.routers import (
     audit,
@@ -32,6 +32,7 @@ from app.routers import (
     sync,
     web,
 )
+from app.routers.teams import teams_mgmt, users as teams_users
 
 # Setup paths
 BASE_DIR = Path(__file__).parent
@@ -86,8 +87,10 @@ async def health_check():
 async def get_stats():
     """Get application statistics."""
     try:
+        courses = await database.count_courses()
         return {
-            "courses": await database.count_courses(),
+            "courses": courses,
+            "canvas_courses": courses,
             "canvas_users": await database.count_canvas_users(),
             "azure_users": await database.count_azure_users(),
         }
@@ -95,6 +98,7 @@ async def get_stats():
         logger.error(f"Stats error: {e}", exc_info=True)
         return {
             "courses": 0,
+            "canvas_courses": 0,
             "canvas_users": 0,
             "azure_users": 0,
             "error": str(e)
@@ -107,6 +111,13 @@ async def ping():
     return {"pong": True}
 
 
+@app.post("/cache/clear", tags=["Health"])
+async def clear_cache():
+    """Clears the in-memory cache."""
+    removed = _cache.clear_all()
+    return {"cleared": removed}
+
+
 # Include routers with error handling
 routers_to_load = [
     ("Auth", auth.router),
@@ -117,6 +128,8 @@ routers_to_load = [
     ("Profile", profile.router),
     ("Sync", sync.router),
     ("Audit", audit.router),
+    ("Teams · Teams", teams_mgmt.router),
+    ("Teams · Users", teams_users.router),
     ("Web", web.router),
 ]
 

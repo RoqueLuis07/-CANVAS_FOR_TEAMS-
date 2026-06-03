@@ -13,7 +13,7 @@
 </div>
 
 <!-- Course selector -->
-<div style="position:relative;z-index:50;margin-bottom:1rem">
+<div class="position-relative mb-3" style="z-index:50">
   <div class="table-card">
     <div class="card-header gap-2 flex-wrap">
       <label class="form-label mb-0 me-2 fw-semibold">Curso:</label>
@@ -79,7 +79,6 @@ function filterCourseList(query) {
   const results = document.getElementById('courseResults');
   if (!query || query.length < 1) {
     results.style.display = 'none';
-    document.getElementById('courseSelect').style.display = 'none';
     return;
   }
 

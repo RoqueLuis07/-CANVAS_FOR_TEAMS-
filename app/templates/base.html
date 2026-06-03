@@ -6,87 +6,136 @@
   <title>{% block title %}USIL – Gestión TI{% endblock %}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <link href="/static/css/style.css?v=10" rel="stylesheet">
+  <link href="/static/css/style.css?v=20" rel="stylesheet">
 </head>
 <body>
 
-<!-- Sidebar -->
-<nav id="sidebar">
-  <a href="/ui/home" class="sidebar-brand-link">
-    <div class="sidebar-brand">
-      <img src="/static/img/usil-logo-white.svg" alt="USIL – Universidad San Ignacio de Loyola" class="sidebar-brand-logo">
-    </div>
+<!-- ── Sidebar (Canvas-style) ── -->
+<nav id="sidebar" role="navigation" aria-label="Navegación principal">
+
+  <!-- Brand -->
+  <a href="/ui/home" class="sidebar-brand sidebar-brand-link" title="Inicio">
+    <img src="/static/img/usil-logo-white.svg"
+         alt="Universidad San Ignacio de Loyola"
+         class="sidebar-brand-logo">
   </a>
 
+  <!-- Dashboard -->
+  <a href="/ui" class="sidebar-link {% block nav_db %}{% endblock %}">
+    <i class="bi bi-speedometer2"></i><span>Dashboard</span>
+  </a>
+
+  <!-- Canvas LMS -->
   <div class="sidebar-section">Canvas LMS</div>
-  <a href="/ui/canvas/users"       class="sidebar-link {% block nav_cu %}{% endblock %}"><i class="bi bi-people-fill"></i><span>Usuarios</span></a>
-  <a href="/ui/canvas/courses"     class="sidebar-link {% block nav_cc %}{% endblock %}"><i class="bi bi-book-fill"></i><span>Cursos</span></a>
-  <a href="/ui/canvas/attendance"  class="sidebar-link {% block nav_ca %}{% endblock %}"><i class="bi bi-clipboard-check"></i><span>Asistencias</span></a>
-  <a href="/ui/canvas/enrollments" class="sidebar-link {% block nav_ce %}{% endblock %}"><i class="bi bi-pencil-square"></i><span>Matrículas</span></a>
+  <a href="/ui/canvas/users"       class="sidebar-link {% block nav_cu %}{% endblock %}">
+    <i class="bi bi-people-fill"></i><span>Usuarios</span>
+  </a>
+  <a href="/ui/canvas/courses"     class="sidebar-link {% block nav_cc %}{% endblock %}">
+    <i class="bi bi-book-fill"></i><span>Cursos</span>
+  </a>
+  <a href="/ui/canvas/attendance"  class="sidebar-link {% block nav_ca %}{% endblock %}">
+    <i class="bi bi-clipboard-check-fill"></i><span>Asistencias</span>
+  </a>
+  <a href="/ui/canvas/enrollments" class="sidebar-link {% block nav_ce %}{% endblock %}">
+    <i class="bi bi-pencil-square"></i><span>Matrículas</span>
+  </a>
+  <a href="/ui/canvas/groups" class="sidebar-link {% block nav_cg %}{% endblock %}">
+    <i class="bi bi-collection-fill"></i><span>Grupos</span>
+  </a>
 
+  <!-- Microsoft Teams -->
   <div class="sidebar-section">Microsoft Teams</div>
-  <a href="/ui/teams/users"        class="sidebar-link {% block nav_tu %}{% endblock %}"><i class="bi bi-person-badge-fill"></i><span>Usuarios Azure AD</span></a>
-  <a href="/ui/teams/teams"        class="sidebar-link {% block nav_tt %}{% endblock %}"><i class="bi bi-microsoft-teams"></i><span>Teams</span></a>
+  <a href="/ui/teams/users"        class="sidebar-link {% block nav_tu %}{% endblock %}">
+    <i class="bi bi-person-badge-fill"></i><span>Usuarios Azure AD</span>
+  </a>
+  <a href="/ui/teams/teams"        class="sidebar-link {% block nav_tt %}{% endblock %}">
+    <i class="bi bi-microsoft-teams"></i><span>Teams</span>
+  </a>
 
+  <!-- Herramientas -->
   <div class="sidebar-section">Herramientas</div>
-  <a href="/ui/profile"            class="sidebar-link {% block nav_pf %}{% endblock %}"><i class="bi bi-person-circle"></i><span>Mi perfil</span></a>
-  <a href="/ui/sync"               class="sidebar-link {% block nav_sy %}{% endblock %}"><i class="bi bi-arrow-left-right"></i><span>Sincronización</span></a>
-  <a href="/ui/ingreso"            class="sidebar-link {% block nav_ni %}{% endblock %}"><i class="bi bi-person-fill-add"></i><span>Nuevo Ingreso</span></a>
-  <a href="/ui/jobs"               class="sidebar-link {% block nav_jh %}{% endblock %}"><i class="bi bi-clipboard-list"></i><span>Historial Trabajos</span></a>
+  <a href="/ui/sync"               class="sidebar-link {% block nav_sy %}{% endblock %}">
+    <i class="bi bi-arrow-left-right"></i><span>Sincronización</span>
+  </a>
+  <a href="/ui/ingreso"            class="sidebar-link {% block nav_ni %}{% endblock %}">
+    <i class="bi bi-person-fill-add"></i><span>Nuevo Ingreso</span>
+  </a>
+  <a href="/ui/jobs"               class="sidebar-link {% block nav_jh %}{% endblock %}">
+    <i class="bi bi-clipboard-list"></i><span>Historial Trabajos</span>
+  </a>
+  <a href="/ui/audit"              class="sidebar-link {% block nav_au %}{% endblock %}">
+    <i class="bi bi-shield-lock-fill"></i><span>Auditoría</span>
+  </a>
+  <a href="/ui/profile"            class="sidebar-link {% block nav_pf %}{% endblock %}">
+    <i class="bi bi-person-circle"></i><span>Mi Perfil</span>
+  </a>
 
   <div class="sidebar-footer">
-    <span>Área de TI · v1.1.0</span>
+    <i class="bi bi-circle-fill me-1 sidebar-status-dot"></i>
+    Sistema activo &nbsp;·&nbsp; v1.1.0
   </div>
 </nav>
 
-<!-- Backdrop mobile -->
+<!-- Mobile backdrop -->
 <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
-<!-- Main -->
+<!-- ── Main wrapper ── -->
 <div id="main-content">
 
   <!-- Topbar -->
-  <div class="topbar">
-    <button type="button" class="btn btn-sm btn-icon me-2" onclick="toggleSidebar()" title="Menú" aria-label="Abrir menú">
+  <header class="topbar">
+    <button type="button" class="btn btn-sm btn-icon me-1"
+            onclick="toggleSidebar()" title="Menú" aria-label="Abrir menú">
       <i class="bi bi-list fs-5"></i>
     </button>
 
-    <span class="topbar-breadcrumb d-none d-md-inline">{% block breadcrumb %}{% endblock %}</span>
+    <nav aria-label="breadcrumb" class="d-none d-md-flex align-items-center gap-1">
+      <i class="bi bi-house-fill topbar-home-icon"></i>
+      <span class="topbar-breadcrumb">{% block breadcrumb %}{% endblock %}</span>
+    </nav>
 
     <!-- Búsqueda global -->
     <div id="gsearch-wrap" class="mx-3 d-none d-lg-block">
-      <i class="bi bi-search" id="gsearch-icon"></i>
-      <input type="text" id="gsearch-input" placeholder="Buscar usuarios, cursos..." autocomplete="off"
+      <label for="gsearch-input" class="visually-hidden">Búsqueda global</label>
+      <i class="bi bi-search" id="gsearch-icon" aria-hidden="true"></i>
+      <input type="search" id="gsearch-input"
+             placeholder="Buscar usuarios, cursos…" autocomplete="off"
+             title="Búsqueda global"
              oninput="onGlobalSearch(this.value)"
-             onblur="setTimeout(()=>document.getElementById('gsearch-results').style.display='none',200)"
-             title="Búsqueda global" aria-label="Búsqueda global">
-      <div id="gsearch-results" role="listbox"></div>
+             onblur="setTimeout(()=>document.getElementById('gsearch-results').style.display='none',200)">
+      <div id="gsearch-results" role="listbox" aria-label="Resultados de búsqueda"></div>
     </div>
 
     <div class="topbar-right ms-auto">
-      <button type="button" class="btn btn-sm btn-icon" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
+      <!-- Theme toggle -->
+      <button type="button" class="btn btn-sm btn-icon"
+              id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
         <i class="bi bi-moon-fill"></i>
       </button>
+
       {% if user %}
         <a href="/ui/profile" class="topbar-user" title="Mi perfil">
           <div class="topbar-avatar">{{ (user.name or '?')[:1].upper() }}</div>
-          <span class="topbar-username d-none d-md-inline">{{ user.name.split()[0] if user.name else 'Usuario' }}</span>
+          <span class="topbar-username d-none d-md-inline">
+            {{ user.name.split()[0] if user.name else 'Usuario' }}
+          </span>
         </a>
-        <a href="/auth/logout" class="btn btn-sm btn-icon text-danger" title="Cerrar sesión" aria-label="Cerrar sesión">
+        <a href="/auth/logout" class="btn btn-sm btn-icon text-danger"
+           title="Cerrar sesión" aria-label="Cerrar sesión">
           <i class="bi bi-box-arrow-right"></i>
         </a>
       {% else %}
         <a href="/ui/login" class="btn btn-sm btn-primary px-3">Iniciar sesión</a>
       {% endif %}
     </div>
-  </div>
+  </header>
 
-  <!-- Contenido -->
-  <div class="page-body">
+  <!-- Page content -->
+  <main class="page-body" role="main">
     {% block content %}{% endblock %}
-  </div>
+  </main>
 
-  <!-- Footer institucional -->
+  <!-- Footer -->
   <footer class="page-footer">
     <div class="d-flex align-items-center gap-2">
       <img src="/static/img/usil-logo.svg" alt="USIL" class="footer-logo">
@@ -95,13 +144,13 @@
     <div class="footer-links">
       <a href="/ui">Dashboard</a>
       <a href="/ui/audit">Auditoría</a>
-      <a href="/docs" target="_blank">API Docs</a>
+      <a href="/docs" target="_blank" rel="noopener">API Docs</a>
     </div>
   </footer>
 
-</div>
+</div><!-- /#main-content -->
 
-<!-- Toast container -->
+<!-- Toast notifications -->
 <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" aria-live="polite"></div>
 
 <!-- Floating bulk-action bar -->
@@ -112,13 +161,14 @@
           onclick="bulkDeleteConfirm(document.getElementById('bulk-bar').dataset.container)">
     <i class="bi bi-trash-fill me-1"></i>Eliminar seleccionados
   </button>
-  <button type="button" class="btn btn-outline-secondary btn-sm" title="Cancelar selección" aria-label="Cancelar selección"
+  <button type="button" class="btn btn-outline-secondary btn-sm"
+          title="Cancelar selección" aria-label="Cancelar selección"
           onclick="clearSelection(document.getElementById('bulk-bar').dataset.container)">
     <i class="bi bi-x-lg"></i>
   </button>
 </div>
 
-<!-- Modal global -->
+<!-- Global modal -->
 <div class="modal fade" id="globalModal" tabindex="-1" aria-modal="true" role="dialog">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -132,7 +182,7 @@
   </div>
 </div>
 
-<!-- Modal confirmación -->
+<!-- Confirm modal -->
 <div class="modal fade" id="confirmModal" tabindex="-1" aria-modal="true" role="dialog">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -140,9 +190,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
       </div>
       <div class="modal-body text-center pt-0 px-4 pb-2">
-        <div id="confirmIcon" class="mb-3">
-          <i class="bi bi-exclamation-triangle-fill"></i>
-        </div>
+        <div id="confirmIcon" class="mb-3"><i class="bi bi-exclamation-triangle-fill"></i></div>
         <h5 id="confirmTitle" class="fw-bold mb-2">¿Confirmar acción?</h5>
         <p id="confirmMsg" class="text-muted mb-0"></p>
       </div>
@@ -154,9 +202,36 @@
   </div>
 </div>
 
+<!-- ── Error log panel ── -->
+<div id="err-panel" class="err-panel" role="log" aria-label="Registro de errores">
+  <div class="err-panel-header">
+    <span class="err-panel-title">
+      <i class="bi bi-exclamation-octagon-fill err-icon-red"></i>
+      Registro de errores
+      <span id="err-count" class="err-count">0</span>
+    </span>
+    <div class="err-panel-btns">
+      <button type="button" class="err-hdr-btn" onclick="clearErrLog()" title="Limpiar log">
+        <i class="bi bi-trash3"></i>
+      </button>
+      <button type="button" class="err-hdr-btn" onclick="closeErrPanel()" title="Cerrar panel">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+  </div>
+  <div id="err-list" class="err-list"></div>
+</div>
+
+<!-- Badge button shown when panel is closed but there are errors -->
+<button type="button" id="err-badge-btn" class="err-badge-btn err-badge-hidden"
+        onclick="openErrPanel()" title="Ver errores registrados" aria-label="Ver errores">
+  <i class="bi bi-exclamation-octagon-fill"></i>
+  <span id="err-badge-count">0</span>
+</button>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="/static/js/main.js"></script>
+<script src="/static/js/main.js?v=3"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

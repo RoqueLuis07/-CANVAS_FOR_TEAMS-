@@ -14,7 +14,7 @@
 
 <div class="table-card">
   <div class="card-header flex-wrap gap-2">
-    <input type="text" id="searchUser" class="form-control search-box" placeholder="🔍 Buscar usuario..." oninput="filterTable('searchUser','tableWrap')">
+    <input type="text" id="searchUser" class="form-control search-box" placeholder="🔍 Buscar usuario..." oninput="_filterCanvasUsers()">
     <span class="text-muted small" id="userCount"></span>
     <span id="selBadge_tableWrap" class="badge bg-danger sel-badge"></span>
     <span class="sel-hint ms-auto"><i class="bi bi-check2-square me-1"></i>Marca filas para eliminar en masa</span>
@@ -29,14 +29,23 @@
 
 {% block scripts %}
 <script>
-async function loadUsers() {
-  clearSelection('tableWrap');
-  try {
-    const users = await api.get('/canvas/users?per_page=100');
-    document.getElementById('userCount').textContent = users.length + ' usuarios';
+let _allCanvasUsers = [];
 
-    const html = `<table class="table table-sm table-hover mb-0" style="cursor:pointer">
-      <thead style="background:var(--card-border);position:sticky;top:0;z-index:10">
+function _filterCanvasUsers() {
+  const q = document.getElementById('searchUser').value.toLowerCase();
+  const filtered = q
+    ? _allCanvasUsers.filter(u => JSON.stringify(u).toLowerCase().includes(q))
+    : _allCanvasUsers;
+  document.getElementById('userCount').textContent =
+    filtered.length + (_allCanvasUsers.length !== filtered.length ? ` / ${_allCanvasUsers.length}` : '') + ' usuarios';
+  pgInit('tableWrap', filtered, _renderCanvasUsersPage);
+}
+
+function _renderCanvasUsersPage(users) {
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#x27;');
+  document.getElementById('tableWrap').innerHTML = `
+    <table class="table table-sm table-hover mb-0" style="cursor:pointer">
+      <thead>
         <tr>
           <th style="width:30px"></th>
           <th>ID</th>
@@ -49,23 +58,57 @@ async function loadUsers() {
       </thead>
       <tbody>
         ${users.map(row => `
-          <tr onclick="openUserProfile('${row.id}','${(row.email||row.login_id||'').replace(/'/g,"\\'")}','${row.name.replace(/'/g,"\\'")}')">
+          <tr class="cu-row" data-id="${esc(String(row.id))}"
+              data-email="${esc(row.email||row.login_id||'')}"
+              data-name="${esc(row.name||'')}">
             <td><input type="checkbox" class="form-check-input" onclick="event.stopPropagation(); toggleRowSelection(event, this)"></td>
-            <td class="small text-muted"><strong>${row.id}</strong> <button type="button" class="btn btn-sm btn-link p-0 ms-1" style="color:var(--text-muted)" title="Copiar ID" onclick="event.stopPropagation(); copyToClipboard('${row.id}', 'Canvas User ID')"><i class="bi bi-files"></i></button></td>
-            <td class="fw-semibold small" style="color:var(--sidebar-accent)">${row.name}</td>
-            <td class="small text-muted">${row.email || '—'}</td>
-            <td class="small">${row.login_id || '—'}</td>
-            <td class="small text-muted">${row.sis_user_id || '—'}</td>
-            <td onclick="event.stopPropagation()">
-              <button type="button" class="btn btn-sm btn-outline-primary me-1" title="Editar" onclick="openEditUser(${JSON.stringify(row).replace(/"/g,'&quot;')})"><i class="bi bi-pencil"></i></button>
-              <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="deleteUser('${row.id}','${row.name}')"><i class="bi bi-trash"></i></button>
+            <td class="small text-muted">
+              <strong>${row.id}</strong>
+              <button type="button" class="btn btn-sm btn-link p-0 ms-1 copy-id-btn"
+                      title="Copiar ID" data-copy-val="${row.id}" data-copy-lbl="Canvas User ID">
+                <i class="bi bi-files"></i>
+              </button>
             </td>
-          </tr>
-        `).join('')}
+            <td class="fw-semibold small td-name">${esc(row.name)}</td>
+            <td class="small text-muted">${esc(row.email || '—')}</td>
+            <td class="small">${esc(row.login_id || '—')}</td>
+            <td class="small text-muted">${esc(row.sis_user_id || '—')}</td>
+            <td onclick="event.stopPropagation()">
+              <button type="button" class="btn btn-sm btn-outline-primary me-1 edit-cu-btn"
+                      title="Editar" data-user='${JSON.stringify(row).replace(/'/g,"&#x27;")}'>
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger del-cu-btn"
+                      title="Eliminar" data-id="${row.id}" data-name="${esc(row.name)}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>`).join('')}
       </tbody>
     </table>`;
 
-    document.getElementById('tableWrap').innerHTML = html;
+  document.querySelectorAll('#tableWrap .cu-row').forEach(tr => {
+    tr.addEventListener('click', () => openUserProfile(tr.dataset.id, tr.dataset.email, tr.dataset.name));
+  });
+  document.querySelectorAll('#tableWrap .copy-id-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); copyToClipboard(btn.dataset.copyVal, btn.dataset.copyLbl); });
+  });
+  document.querySelectorAll('#tableWrap .edit-cu-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openEditUser(JSON.parse(btn.dataset.user.replace(/&#x27;/g,"'"))); });
+  });
+  document.querySelectorAll('#tableWrap .del-cu-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); deleteUser(btn.dataset.id, btn.dataset.name); });
+  });
+}
+
+async function loadUsers() {
+  clearSelection('tableWrap');
+  document.getElementById('tableWrap').innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span><span class="ms-2 text-muted">Cargando usuarios…</span></div>';
+  try {
+    const users = await api.get('/canvas/users?per_page=100&max_records=5000');
+    _allCanvasUsers = users;
+    document.getElementById('userCount').textContent = users.length + ' usuarios';
+    pgInit('tableWrap', _allCanvasUsers, _renderCanvasUsersPage);
   } catch(e) { toast('Error cargando usuarios: ' + e.message, 'danger'); }
 }
 

@@ -23,54 +23,64 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/canvas/courses", tags=["Canvas · Courses"])
 _ACCOUNT = settings.canvas_account_id
 
-# TTL largo: cursos cambian poco (30 min)
-_COURSES_TTL = 1800
-_COURSES_STALE_TTL = 3600  # Mantiene en caché 1h, refresca en background
+# Todos los estados posibles de un curso en Canvas LMS
+_ALL_STATES = ["created", "claimed", "available", "completed", "deleted"]
+
+# TTL del caché: 30 min (los cursos cambian poco)
+_COURSES_STALE_TTL = 1800
+
+_CACHE_KEY = "canvas:courses:all"
 
 
-def _courses_cache_key(search_term: str | None, state_key: str, per_page: int) -> str:
-    return f"canvas:courses:{search_term or ''}:{state_key}:{per_page}"
+def _course_cache_key(search_term: str | None) -> str:
+    return f"{_CACHE_KEY}:{search_term or ''}"
 
 
-async def _fetch_and_cache_courses(cache_key: str, params: dict) -> list:
-    """Fetches courses from Canvas API and stores in cache + DB."""
+async def _fetch_all_courses(search_term: str | None = None) -> list:
+    """Obtiene TODOS los cursos de Canvas (todos los estados, con info de término).
+
+    - state[]: todos los estados (creado, reclamado, publicado, completado, eliminado)
+    - include[]: term  — adjunta el objeto de período a cada curso
+    - Sin límite de registros (paginate completo)
+    """
+    cache_key = _course_cache_key(search_term)
     try:
-        result = await canvas.paginate_limited(
-            f"/accounts/{_ACCOUNT}/courses", params, max_records=1000
-        )
+        params: dict = {
+            "per_page": 100,
+            "include[]": "term",
+            "state[]": _ALL_STATES,
+        }
+        if search_term:
+            params["search_term"] = search_term
+
+        result = await canvas.paginate(f"/accounts/{_ACCOUNT}/courses", params)
         await database.upsert_courses(result)
         await database.mark_synced("canvas_courses")
         _cache.set(cache_key, result, ttl=_COURSES_STALE_TTL)
+        logger.info(f"Cursos cargados: {len(result)} (todos los estados)")
         return result
     except Exception as exc:
-        logger.error(f"Error refrescando caché de cursos: {exc}")
+        logger.error(f"Error cargando cursos: {exc}")
         return []
 
 
-@router.get("", summary="Listar cursos de la cuenta")
+@router.get("", summary="Listar todos los cursos de la cuenta (todos los estados)")
 async def list_courses(
     background_tasks: BackgroundTasks,
     search_term: Annotated[str | None, Query()] = None,
+    # Mantenidos por compatibilidad — el filtrado real se hace en el cliente
     state: Annotated[list[str] | None, Query()] = None,
-    per_page: Annotated[int, Query(ge=1, le=100)] = 50,
+    per_page: Annotated[int, Query(ge=1, le=100)] = 100,
 ):
-    state_key = ",".join(sorted(state)) if state else ""
-    cache_key = _courses_cache_key(search_term, state_key, per_page)
+    cache_key = _course_cache_key(search_term)
     cached = _cache.get(cache_key)
 
-    params: dict = {"per_page": per_page}
-    if search_term:
-        params["search_term"] = search_term
-    if state:
-        params["state[]"] = state
-
     if cached is not None:
-        # Stale-while-revalidate: devolver caché inmediatamente y refrescar en background
-        background_tasks.add_task(_fetch_and_cache_courses, cache_key, params)
+        # Stale-while-revalidate: respuesta inmediata, refresco silencioso en background
+        background_tasks.add_task(_fetch_all_courses, search_term)
         return cached
 
-    # Primera carga: esperar la API
-    return await _fetch_and_cache_courses(cache_key, params)
+    return await _fetch_all_courses(search_term)
 
 
 @router.get("/{course_id}", summary="Obtener curso por ID")
@@ -149,7 +159,7 @@ async def delete_course(
     try:
         result = await canvas.delete(f"/courses/{course_id}", {"event": event})
         await database.delete_course(course_id)
-        _cache.invalidate("canvas:courses:")
+        _cache.invalidate(_CACHE_KEY)
         return result
     except StarletteHTTPException:
         raise
