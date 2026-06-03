@@ -17,12 +17,9 @@
   <div class="table-card">
     <div class="card-header gap-2 flex-wrap">
       <label class="form-label mb-0 me-2 fw-semibold">Curso:</label>
-      <div style="position:relative;flex:0 1 380px">
-        <input type="text" id="courseSearch" class="form-control" placeholder="Busca por ID o nombre..." oninput="filterCourseList(this.value)">
-        <select id="courseSelect" class="form-select" style="display:none;margin-top:2px" onchange="onCourseChange()">
-          <option value="">— Selecciona un curso —</option>
-        </select>
-        <div id="courseResults" style="position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--card-border);border-radius:4px;max-height:300px;overflow-y:auto;display:none;z-index:9999;box-shadow:0 8px 16px rgba(0,0,0,0.2);margin-top:2px"></div>
+      <div class="enroll-course-selector">
+        <input type="text" id="courseSearch" class="form-control" placeholder="Busca por ID o nombre..." oninput="filterCourseList(this.value)" autocomplete="off">
+        <div id="courseResults" class="enroll-course-results"></div>
       </div>
       <span class="text-muted small ms-2" id="enrollCount"></span>
       <button type="button" class="btn btn-sm btn-outline-success ms-auto" onclick="exportTableToExcel('tableWrap','canvas_matriculas.xlsx')" title="Exportar a Excel"><i class="bi bi-file-earmark-arrow-down"></i></button>
@@ -46,9 +43,9 @@
 const urlParams = new URLSearchParams(window.location.search);
 const presetCourse = urlParams.get('course_id');
 
-// Mapeo id → nombre para mostrar en el modal
 const _courseNames = {};
 let _allCourses = [];
+let _selectedCourseId = null;  // Fuente de verdad del curso seleccionado
 
 async function loadCourseOptions() {
   const search = document.getElementById('courseSearch');
@@ -58,35 +55,22 @@ async function loadCourseOptions() {
     return;
   }
 
-  console.log('loadCourseOptions(): iniciando carga de cursos...');
   search.disabled = true;
   search.placeholder = 'Cargando cursos…';
 
   try {
-    if (!api || !api.get) {
-      throw new Error('API no está disponible. Verifica que main.js se haya cargado correctamente.');
-    }
-
-    console.log('loadCourseOptions(): llamando a api.get("/canvas/courses?per_page=100")...');
     _allCourses = await api.get('/canvas/courses?per_page=100');
-    console.log(`loadCourseOptions(): ${_allCourses.length} cursos cargados`);
-
     _allCourses.forEach(c => { _courseNames[String(c.id)] = c.name; });
     search.disabled = false;
-    search.placeholder = 'Busca por ID o nombre...';
-    console.log('loadCourseOptions(): interfaz lista');
+    search.placeholder = `Busca entre ${_allCourses.length} cursos...`;
 
     if (presetCourse) {
       const course = _allCourses.find(c => String(c.id) === String(presetCourse));
-      if (course) {
-        document.getElementById('courseSearch').value = `[${course.id}] ${course.name}`;
-        document.getElementById('courseSelect').value = presetCourse;
-        loadEnrollments();
-      }
+      if (course) selectCourse(String(course.id), `[${course.id}] ${course.name}`);
     }
   } catch(e) {
-    console.error('loadCourseOptions() error:', e);
     search.disabled = false;
+    search.placeholder = 'Error cargando cursos';
     toast('Error cargando cursos: ' + e.message, 'danger');
   }
 }
@@ -110,42 +94,28 @@ function filterCourseList(query) {
     return;
   }
 
-  results.innerHTML = filtered.map(c =>
-    `<div style="padding:8px;border-bottom:1px solid var(--card-border);cursor:pointer;color:var(--text-primary)"
-          onclick="selectCourse('${c.id}', '[${c.id}] ${c.name.replace(/'/g, "&apos;")}')"
-          onmouseover="this.style.background='var(--table-hover-bg)'"
-          onmouseout="this.style.background='transparent'">
-      <strong>[${c.id}]</strong> ${c.name}
-    </div>`
-  ).join('');
+  results.innerHTML = filtered.map(c => {
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return `<div class="enroll-course-item" onclick="selectCourse('${esc(String(c.id))}', '[${esc(String(c.id))}] ${esc(c.name)}')">
+      <span class="fw-semibold text-primary">[${esc(String(c.id))}]</span> ${esc(c.name)}
+    </div>`;
+  }).join('');
   results.style.display = 'block';
 }
 
 function selectCourse(courseId, displayText) {
+  _selectedCourseId = courseId;
   document.getElementById('courseSearch').value = displayText;
-  document.getElementById('courseSelect').value = courseId;
   document.getElementById('courseResults').style.display = 'none';
   loadEnrollments();
 }
 
-function onCourseChange() {
-  const id = document.getElementById('courseSelect').value;
-  if (id) loadEnrollments();
-  else document.getElementById('tableWrap').innerHTML = '<div class="text-center py-5 text-muted">Selecciona un curso</div>';
-}
-
 async function loadEnrollments() {
-  const courseId = document.getElementById('courseSelect').value;
-  console.log(`loadEnrollments(): courseId=${courseId}`);
-  if (!courseId) {
-    console.log('loadEnrollments(): sin courseId, abortando');
-    return;
-  }
+  const courseId = _selectedCourseId;
+  if (!courseId) return;
   document.getElementById('tableWrap').innerHTML = '<div class="text-center py-5"><span class="spinner-border"></span></div>';
   try {
-    console.log(`loadEnrollments(): cargando matrículas del curso ${courseId}...`);
     const enrollments = await api.get(`/canvas/courses/${courseId}/enrollments?per_page=100`);
-    console.log(`loadEnrollments(): ${enrollments.length} matrículas cargadas`);
     document.getElementById('enrollCount').textContent = enrollments.length + ' matrículas';
 
     const roleMap = { StudentEnrollment: 'Alumno', TeacherEnrollment: 'Docente', TaEnrollment: 'TA', ObserverEnrollment: 'Observador' };
@@ -210,7 +180,7 @@ async function loadEnrollments() {
 }
 
 async function bulkDelete(containerId) {
-  const courseId = document.getElementById('courseSelect').value;
+  const courseId = _selectedCourseId;
   if (!courseId) { toast('Selecciona un curso primero.', 'warning'); return; }
   const ids = getSelectedIds(containerId || 'tableWrap');
   if (!ids.length) return;
@@ -228,8 +198,7 @@ async function bulkDelete(containerId) {
 }
 
 function openEnrollOne() {
-  const sel = document.getElementById('courseSelect');
-  const courseId = sel.value;
+  const courseId = _selectedCourseId;
   if (!courseId) {
     toast('Primero selecciona un curso de la lista superior.', 'warning');
     return;
@@ -303,7 +272,7 @@ async function doEnrollOne() {
 }
 
 function unenrollOne(enrollId, userId) {
-  const courseId = document.getElementById('courseSelect').value;
+  const courseId = _selectedCourseId;
   confirmAction(`¿Desmatricular el usuario <strong>${userId}</strong>?`, async () => {
     try {
       await api.del(`/canvas/courses/${courseId}/enrollments/${enrollId}?task=conclude`);
@@ -380,9 +349,6 @@ function selectUser(id) {
   document.getElementById('userSearch').value = opt ? opt.text : '';
 }
 
-console.log('[ENROLLMENTS] Script inicializando...');
-console.log('[ENROLLMENTS] Llamando a loadCourseOptions()...');
 loadCourseOptions();
-console.log('[ENROLLMENTS] Script inicializado');
 </script>
 {% endblock %}

@@ -251,64 +251,94 @@ function openAttendanceModal(courseId, courseName) {
 let _currentAttendanceData = null;
 
 async function loadAttendanceData(courseId) {
-  const btn = document.getElementById('loadAttendanceBtn');
+  const btn     = document.getElementById('loadAttendanceBtn');
+  const dlBtn   = document.getElementById('downloadAttendanceBtn');
+  const results = document.getElementById('attendanceResults');
   setLoading(btn, true);
+  dlBtn.style.display = 'none';
+
   try {
     const resp = await fetch(`/canvas/courses/${courseId}/attendance`);
-    if (!resp.ok) throw new Error(`Error ${resp.status}: ${resp.statusText}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
     const data = await resp.json();
-
     _currentAttendanceData = data;
 
-    if (!data.students || data.students.length === 0) {
-      document.getElementById('attendanceResults').innerHTML = '<div class="alert alert-info">No hay estudiantes matriculados en este curso</div>';
-      document.getElementById('downloadAttendanceBtn').style.display = 'none';
+    const students = data.students || [];
+    const dates    = Object.keys(data.dates || {}).sort();
+    const att      = data.attendance || {};
+    const summary  = data.summary   || {};
+
+    if (students.length === 0) {
+      results.innerHTML = `<div class="alert alert-warning py-2 small">
+        <i class="bi bi-exclamation-triangle me-1"></i>No hay estudiantes matriculados en este curso.
+      </div>`;
       return;
     }
 
-    const dates = Object.keys(data.dates || {}).sort();
+    const hasData = summary.has_attendance_data && dates.length > 0;
+
+    const statusCell = (status) => {
+      if (status === 'P') return '<td class="att-p">P</td>';
+      if (status === 'A') return '<td class="att-a">A</td>';
+      if (status === 'L') return '<td class="att-l">L</td>';
+      return '<td class="att-empty">—</td>';
+    };
+
     const tableHtml = `
-      <div class="alert alert-success py-2 small mb-3">
-        <i class="bi bi-check-circle me-1"></i>${data.students.length} estudiantes, ${dates.length} fechas registradas
+      <div class="d-flex gap-2 align-items-center mb-3 flex-wrap">
+        <span class="badge bg-primary">${students.length} estudiantes</span>
+        ${hasData
+          ? `<span class="badge bg-success">${dates.length} fechas registradas</span>`
+          : `<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Sin datos de Roll Call</span>`
+        }
+        ${data.course?.instructor ? `<span class="text-muted small ms-2"><i class="bi bi-person-fill me-1"></i>${data.course.instructor}</span>` : ''}
       </div>
-      <div class="table-responsive" style="max-height:600px;overflow-y:auto;border:1px solid var(--card-border);border-radius:6px">
-        <table class="table table-sm mb-0">
-          <thead style="position:sticky;top:0;background:var(--header-bg);z-index:10">
+      ${!hasData ? `<div class="alert alert-info py-2 small mb-3">
+        <i class="bi bi-info-circle me-1"></i>
+        Este curso no tiene asignaciones de "Roll Call Attendance" en Canvas. Se muestran los estudiantes matriculados sin datos de asistencia.
+      </div>` : ''}
+      <div class="att-table-wrap">
+        <table class="table table-sm att-table mb-0">
+          <thead>
             <tr>
-              <th style="min-width:150px">Estudiante</th>
-              <th style="min-width:60px;text-align:center">Total</th>
-              ${dates.map(date => `<th style="font-size:0.7rem;min-width:35px;text-align:center" title="${date}">${date.substring(5)}</th>`).join('')}
+              <th class="att-th-student">Estudiante</th>
+              ${hasData ? `<th class="att-th-total">Total P</th>
+              ${dates.map(d => `<th class="att-th-date" title="${d}">${d.substring(5)}</th>`).join('')}` : ''}
             </tr>
           </thead>
           <tbody>
-            ${data.students.map(student => {
-              const attendance = (data.attendance || {})[String(student.id)] || {};
-              const total = Object.values(attendance).filter(v => v === 'P').length;
-              return `
-                <tr>
-                  <td style="min-width:150px"><strong>${student.name || 'N/A'}</strong><br><small style="color:var(--text-muted)">#${student.id}</small></td>
-                  <td style="min-width:60px;text-align:center;font-weight:bold;color:#1cc88a">${total}</td>
-                  ${dates.map(date => {
-                    const status = attendance[date];
-                    const symbol = status === 'P' ? '✓' : '✗';
-                    const bgColor = status === 'P' ? '#d4edda' : status === 'A' ? '#f8d7da' : '#e9ecef';
-                    return `<td style="min-width:35px;text-align:center;background-color:${bgColor};font-weight:bold">${symbol}</td>`;
-                  }).join('')}
-                </tr>
-              `;
+            ${students.map(student => {
+              const studentAtt = att[String(student.id)] || {};
+              const total = dates.filter(d => studentAtt[d] === 'P').length;
+              return `<tr>
+                <td class="att-td-student">
+                  <div class="fw-semibold">${student.name || '—'}</div>
+                  <div class="text-muted" style="font-size:.72rem">#${student.id}${student.login ? ' · ' + student.login : ''}</div>
+                </td>
+                ${hasData ? `<td class="att-total">${total}/${dates.length}</td>
+                ${dates.map(d => statusCell(studentAtt[d])).join('')}` : ''}
+              </tr>`;
             }).join('')}
           </tbody>
         </table>
       </div>
-      <div class="text-muted small mt-2"><i class="bi bi-info-circle me-1"></i>✓ = Presente | ✗ = Ausente | – = Sin registro</div>
-    `;
+      ${hasData ? `<div class="att-legend">
+        <span class="att-p-leg">P = Presente</span>
+        <span class="att-a-leg">A = Ausente</span>
+        <span class="att-l-leg">L = Tardanza</span>
+        <span class="text-muted">— = Sin registro</span>
+      </div>` : ''}`;
 
-    document.getElementById('attendanceResults').innerHTML = tableHtml;
-    document.getElementById('downloadAttendanceBtn').style.display = 'inline-block';
+    results.innerHTML = tableHtml;
+    if (hasData) dlBtn.style.display = 'inline-block';
+
   } catch(e) {
-    toast('Error cargando asistencias: ' + e.message, 'danger');
-    document.getElementById('downloadAttendanceBtn').style.display = 'none';
-    console.error(e);
+    results.innerHTML = `<div class="alert alert-danger py-2 small">
+      <i class="bi bi-x-circle me-1"></i>Error: ${e.message}
+    </div>`;
   } finally {
     setLoading(btn, false);
   }
@@ -320,31 +350,32 @@ function downloadAttendanceExcel(courseId, courseName) {
     return;
   }
 
-  const data = _currentAttendanceData;
+  const data  = _currentAttendanceData;
   const dates = Object.keys(data.dates || {}).sort();
+  const att   = data.attendance || {};
 
-  // Formato igual a Canvas Report
   const rows = [
-    [courseName],
-    [`Docente: ${courseName}`],
+    [`Reporte de Asistencias — ${courseName}`],
+    data.course?.instructor ? [`Docente: ${data.course.instructor}`] : [],
+    [`Generado: ${new Date().toLocaleString('es-PY')}`],
     [],
-    ['ID', 'Estudiante', ...dates, 'Total', 'Porcentaje'],
+    ['ID', 'Estudiante', 'Login', ...dates, 'Total P', 'Porcentaje'],
   ];
 
   data.students.forEach(student => {
-    const attendance = (data.attendance || {})[String(student.id)] || {};
-    const total = Object.values(attendance).filter(v => v === 'P').length;
-    const porcentaje = dates.length > 0 ? Math.round((total / dates.length) * 100) : 0;
-
+    const studentAtt = att[String(student.id)] || {};
+    const total = dates.filter(d => studentAtt[d] === 'P').length;
+    const pct   = dates.length > 0 ? Math.round((total / dates.length) * 100) : 0;
     rows.push([
       student.id,
-      student.name || 'N/A',
-      ...dates.map(date => {
-        const status = attendance[date];
-        return status === 'P' ? 'Presente' : status === 'A' ? 'Ausente' : '';
+      student.name || '—',
+      student.login || '—',
+      ...dates.map(d => {
+        const s = studentAtt[d];
+        return s === 'P' ? 'Presente' : s === 'A' ? 'Ausente' : s === 'L' ? 'Tardanza' : '';
       }),
       total,
-      `${porcentaje}%`
+      `${pct}%`
     ]);
   });
 

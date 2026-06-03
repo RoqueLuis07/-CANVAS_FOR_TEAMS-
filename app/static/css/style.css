@@ -712,6 +712,64 @@ html:not(.dark-mode) .sidebar-brand-logo { filter: brightness(0) invert(1); }
   backdrop-filter: blur(4px);
 }
 
+/* ── Attendance table ── */
+.att-table-wrap {
+  max-height: 560px; overflow: auto;
+  border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.att-table { font-size: .82rem; min-width: 400px; }
+.att-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--header-bg); white-space: nowrap;
+}
+.att-th-student { min-width: 160px; }
+.att-th-total   { min-width: 60px; text-align: center; }
+.att-th-date    { min-width: 36px; text-align: center; font-size: .7rem; }
+.att-td-student { min-width: 160px; vertical-align: middle; }
+.att-total      { text-align: center; font-weight: 700; color: #1cc88a; }
+
+/* Attendance cell states */
+.att-p, .att-a, .att-l, .att-empty {
+  text-align: center; font-weight: 700; font-size: .8rem;
+  min-width: 36px;
+}
+.att-p     { background: rgba(28,200,138,.15); color: #198754; }
+.att-a     { background: rgba(220,53,69,.12);  color: #dc3545; }
+.att-l     { background: rgba(255,193,7,.15);  color: #856404; }
+.att-empty { color: var(--text-light); font-weight: 400; }
+
+html.dark-mode .att-p { background: rgba(28,200,138,.2); color: #5fdd9e; }
+html.dark-mode .att-a { background: rgba(220,53,69,.2);  color: #f07070; }
+html.dark-mode .att-l { background: rgba(255,193,7,.2);  color: #ffc107; }
+
+/* Attendance legend */
+.att-legend {
+  display: flex; gap: 16px; font-size: .75rem;
+  color: var(--text-muted); flex-wrap: wrap;
+}
+.att-p-leg { color: #198754; font-weight: 600; }
+.att-a-leg { color: #dc3545; font-weight: 600; }
+.att-l-leg { color: #856404; font-weight: 600; }
+
+/* ── Enrollment course selector ── */
+.enroll-course-selector { position: relative; flex: 0 1 400px; }
+.enroll-course-results {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm); max-height: 320px; overflow-y: auto;
+  display: none; z-index: 9999; box-shadow: var(--shadow-md);
+}
+.enroll-course-item {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--card-border);
+  cursor: pointer; font-size: .855rem;
+  color: var(--text-primary);
+  transition: background .1s;
+}
+.enroll-course-item:last-child { border-bottom: none; }
+.enroll-course-item:hover { background: var(--table-hover-bg); }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   #sidebar {
