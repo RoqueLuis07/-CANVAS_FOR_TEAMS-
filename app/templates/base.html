@@ -6,58 +6,84 @@
   <title>{% block title %}USIL – Gestión TI{% endblock %}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <link href="/static/css/style.css?v=6" rel="stylesheet">
+  <link href="/static/css/style.css?v=7" rel="stylesheet">
 </head>
 <body>
 
 <!-- Sidebar -->
 <nav id="sidebar">
   <a href="/ui/home" style="text-decoration: none; color: inherit;">
-    <div class="sidebar-brand" style="cursor: pointer;">
-      <i class="bi bi-mortarboard-fill me-2"></i>USIL Gestión TI
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">
+        <i class="bi bi-mortarboard-fill"></i>
+      </div>
+      <div class="sidebar-brand-text">
+        <span class="sidebar-brand-title">USIL</span>
+        <span class="sidebar-brand-sub">Gestión TI</span>
+      </div>
     </div>
   </a>
+
   <div class="sidebar-section">Canvas LMS</div>
-  <a href="/ui/canvas/users"       class="sidebar-link {% block nav_cu %}{% endblock %}"><i class="bi bi-people-fill"></i> Usuarios</a>
-  <a href="/ui/canvas/courses"     class="sidebar-link {% block nav_cc %}{% endblock %}"><i class="bi bi-book-fill"></i> Cursos</a>
-  <a href="/ui/canvas/attendance"  class="sidebar-link {% block nav_ca %}{% endblock %}"><i class="bi bi-clipboard-check"></i> Asistencias</a>
-  <a href="/ui/canvas/enrollments" class="sidebar-link {% block nav_ce %}{% endblock %}"><i class="bi bi-pencil-square"></i> Matrículas</a>
+  <a href="/ui/canvas/users"       class="sidebar-link {% block nav_cu %}{% endblock %}"><i class="bi bi-people-fill"></i><span>Usuarios</span></a>
+  <a href="/ui/canvas/courses"     class="sidebar-link {% block nav_cc %}{% endblock %}"><i class="bi bi-book-fill"></i><span>Cursos</span></a>
+  <a href="/ui/canvas/attendance"  class="sidebar-link {% block nav_ca %}{% endblock %}"><i class="bi bi-clipboard-check"></i><span>Asistencias</span></a>
+  <a href="/ui/canvas/enrollments" class="sidebar-link {% block nav_ce %}{% endblock %}"><i class="bi bi-pencil-square"></i><span>Matrículas</span></a>
+
   <div class="sidebar-section">Microsoft Teams</div>
-  <a href="/ui/teams/users"        class="sidebar-link {% block nav_tu %}{% endblock %}"><i class="bi bi-person-badge-fill"></i> Usuarios Azure AD</a>
-  <a href="/ui/teams/teams"        class="sidebar-link {% block nav_tt %}{% endblock %}"><i class="bi bi-microsoft-teams"></i> Teams</a>
+  <a href="/ui/teams/users"        class="sidebar-link {% block nav_tu %}{% endblock %}"><i class="bi bi-person-badge-fill"></i><span>Usuarios Azure AD</span></a>
+  <a href="/ui/teams/teams"        class="sidebar-link {% block nav_tt %}{% endblock %}"><i class="bi bi-microsoft-teams"></i><span>Teams</span></a>
+
   <div class="sidebar-section">Herramientas</div>
-  <a href="/ui/profile"            class="sidebar-link {% block nav_pf %}{% endblock %}"><i class="bi bi-person-circle"></i> Mi perfil</a>
-  <a href="/ui/sync"               class="sidebar-link {% block nav_sy %}{% endblock %}"><i class="bi bi-arrow-left-right"></i> Sincronización</a>
-  <a href="/ui/ingreso"            class="sidebar-link {% block nav_ni %}{% endblock %}"><i class="bi bi-person-fill-add"></i> Nuevo Ingreso</a>
-  <a href="/ui/jobs"               class="sidebar-link {% block nav_jh %}{% endblock %}"><i class="bi bi-clipboard-list"></i> Historial Trabajos</a>
+  <a href="/ui/profile"            class="sidebar-link {% block nav_pf %}{% endblock %}"><i class="bi bi-person-circle"></i><span>Mi perfil</span></a>
+  <a href="/ui/sync"               class="sidebar-link {% block nav_sy %}{% endblock %}"><i class="bi bi-arrow-left-right"></i><span>Sincronización</span></a>
+  <a href="/ui/ingreso"            class="sidebar-link {% block nav_ni %}{% endblock %}"><i class="bi bi-person-fill-add"></i><span>Nuevo Ingreso</span></a>
+  <a href="/ui/jobs"               class="sidebar-link {% block nav_jh %}{% endblock %}"><i class="bi bi-clipboard-list"></i><span>Historial Trabajos</span></a>
+
+  <div class="sidebar-footer">
+    <span>v1.1.0</span>
+  </div>
 </nav>
+
+<!-- Backdrop para mobile -->
+<div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
 <!-- Main -->
 <div id="main-content">
   <div class="topbar">
-    <button type="button" class="btn btn-sm btn-outline-secondary me-3" onclick="toggleSidebar()" title="Menú">
+    <button type="button" class="btn btn-sm btn-icon me-2" onclick="toggleSidebar()" title="Menú" aria-label="Abrir menú">
       <i class="bi bi-list fs-5"></i>
     </button>
 
-    <span class="fw-semibold text-muted d-none d-md-inline">{% block breadcrumb %}{% endblock %}</span>
+    <span class="topbar-breadcrumb d-none d-md-inline">{% block breadcrumb %}{% endblock %}</span>
+
+    <!-- Global search -->
+    <div id="gsearch-wrap" class="mx-3 d-none d-lg-block">
+      <i class="bi bi-search" id="gsearch-icon"></i>
+      <input type="text" id="gsearch-input" placeholder="Buscar usuarios, cursos..." autocomplete="off"
+             oninput="onGlobalSearch(this.value)"
+             onblur="setTimeout(()=>document.getElementById('gsearch-results').style.display='none',200)">
+      <div id="gsearch-results"></div>
+    </div>
 
     <div class="topbar-right ms-auto">
-      <button type="button" class="btn btn-sm btn-outline-secondary" id="themeToggle" title="Cambiar tema">
+      <button type="button" class="btn btn-sm btn-icon" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
         <i class="bi bi-moon-fill"></i>
       </button>
       {% if user %}
-        <a href="/ui/profile" class="d-flex align-items-center gap-2 text-decoration-none" title="Mi perfil">
+        <a href="/ui/profile" class="topbar-user" title="Mi perfil">
           <div class="topbar-avatar">{{ (user.name or '?')[:1].upper() }}</div>
-          <span class="badge bg-primary d-none d-md-inline">{{ user.name.split()[0] if user.name else 'Usuario' }}</span>
+          <span class="topbar-username d-none d-md-inline">{{ user.name.split()[0] if user.name else 'Usuario' }}</span>
         </a>
-        <a href="/auth/logout" class="btn btn-sm btn-outline-secondary" title="Cerrar sesión">
+        <a href="/auth/logout" class="btn btn-sm btn-icon text-danger" title="Cerrar sesión" aria-label="Cerrar sesión">
           <i class="bi bi-box-arrow-right"></i>
         </a>
       {% else %}
-        <a href="/ui/login" class="btn btn-sm btn-primary">Iniciar sesión</a>
+        <a href="/ui/login" class="btn btn-sm btn-primary px-3">Iniciar sesión</a>
       {% endif %}
     </div>
   </div>
+
   <div class="page-body">
     {% block content %}{% endblock %}
   </div>
@@ -66,15 +92,16 @@
 <!-- Toast container -->
 <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999"></div>
 
-<!-- Floating bulk-action bar (shown when rows are selected) -->
+<!-- Floating bulk-action bar -->
 <div id="bulk-bar"
      style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
             z-index:1050;min-width:340px;max-width:600px;
-            background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.18);
-            padding:12px 20px;align-items:center;gap:14px;border:1px solid #dee2e6">
+            background:var(--card-bg);border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.2);
+            padding:12px 20px;align-items:center;gap:14px;border:1px solid var(--card-border)">
   <i class="bi bi-check2-square fs-5 text-primary"></i>
-  <span id="bulk-count" class="fw-semibold text-dark"></span>
-  <button type="button" class="btn btn-danger btn-sm ms-auto" onclick="bulkDelete(document.getElementById('bulk-bar').dataset.container)">
+  <span id="bulk-count" class="fw-semibold"></span>
+  <button type="button" class="btn btn-danger btn-sm ms-auto"
+          onclick="bulkDeleteConfirm(document.getElementById('bulk-bar').dataset.container)">
     <i class="bi bi-trash-fill me-1"></i>Eliminar seleccionados
   </button>
   <button type="button" class="btn btn-outline-secondary btn-sm" title="Cancelar selección" aria-label="Cancelar selección"
@@ -84,15 +111,37 @@
 </div>
 
 <!-- Global modal -->
-<div class="modal fade" id="globalModal" tabindex="-1">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-height: 90vh;">
-    <div class="modal-content" style="max-height: 90vh;">
+<div class="modal fade" id="globalModal" tabindex="-1" aria-modal="true" role="dialog">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="globalModalTitle"></h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
       </div>
-      <div class="modal-body" id="globalModalBody" style="overflow-y: auto;"></div>
+      <div class="modal-body" id="globalModalBody" style="overflow-y:auto;max-height:70vh"></div>
       <div class="modal-footer" id="globalModalFooter"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-modal="true" role="dialog">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body text-center pt-0 px-4 pb-2">
+        <div id="confirmIcon" class="mb-3" style="font-size:3rem;color:#e74a3b">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+        </div>
+        <h5 id="confirmTitle" class="fw-bold mb-2">¿Confirmar acción?</h5>
+        <p id="confirmMsg" class="text-muted mb-0"></p>
+      </div>
+      <div class="modal-footer border-0 justify-content-center gap-2 pt-0">
+        <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger px-4" id="confirmOkBtn">Confirmar</button>
+      </div>
     </div>
   </div>
 </div>

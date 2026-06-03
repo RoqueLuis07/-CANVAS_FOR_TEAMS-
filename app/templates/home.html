@@ -1,120 +1,141 @@
 {% extends "base.html" %}
-
-{% block title %}Inicio - USIL Gestión TI{% endblock %}
+{% block title %}Inicio — USIL Gestión TI{% endblock %}
+{% block breadcrumb %}Inicio{% endblock %}
 
 {% block content %}
-<div class="page-body">
-  <div style="max-width: 1000px;">
-    <!-- Hero Section -->
-    <div style="padding: 60px 40px; text-align: center; background: linear-gradient(135deg, #4e73df 0%, #224abe 100%); border-radius: 16px; color: white; margin-bottom: 40px;">
-      <h1 style="font-size: 2.5rem; margin-bottom: 12px; font-weight: 700;">
-        <i class="bi bi-mortarboard-fill" style="font-size: 2.8rem; margin-right: 12px;"></i>
-        USIL Gestión TI
-      </h1>
-      <p style="font-size: 1.2rem; margin: 0; opacity: 0.95;">
-        Plataforma de gestión integrada para Canvas LMS y Microsoft Teams
-      </p>
+<div class="home-wrap">
+
+  <!-- Hero -->
+  <div class="hero-banner mb-4">
+    <div class="hero-badge">
+      <i class="bi bi-shield-check-fill"></i> Sistema institucional activo
+    </div>
+    <h1><i class="bi bi-mortarboard-fill me-2"></i>USIL Gestión TI</h1>
+    <p>Plataforma de gestión integrada para Canvas LMS y Microsoft Teams</p>
+  </div>
+
+  <!-- Feature cards -->
+  <div class="row g-3 mb-4">
+
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui" class="feature-card">
+        <div class="feature-card-icon fci-blue"><i class="bi bi-speedometer2"></i></div>
+        <h5>Dashboard</h5>
+        <p>Panel de control con estadísticas en tiempo real de usuarios, cursos y matrículas</p>
+      </a>
     </div>
 
-    <!-- Main Features -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-bottom: 40px;">
-
-      <!-- Dashboard -->
-      <a href="/ui" style="text-decoration: none; color: inherit;">
-        <div class="table-card" style="padding: 24px; text-align: center; cursor: pointer; transition: all 0.3s; height: 100%;">
-          <div style="font-size: 3rem; margin-bottom: 16px; color: #4e73df;">
-            <i class="bi bi-speedometer2"></i>
-          </div>
-          <h3 style="margin: 0 0 12px 0; color: var(--text-primary);">Dashboard</h3>
-          <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">
-            Panel de control con estadísticas en tiempo real de usuarios, cursos y matrículas
-          </p>
-        </div>
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/canvas/attendance" class="feature-card">
+        <div class="feature-card-icon fci-green"><i class="bi bi-clipboard-check"></i></div>
+        <h5>Asistencias</h5>
+        <p>Descarga matrices de asistencia en Excel con datos actualizados desde Canvas</p>
       </a>
-
-      <!-- Reportes de Asistencia -->
-      <a href="/ui/canvas/attendance" style="text-decoration: none; color: inherit;">
-        <div class="table-card" style="padding: 24px; text-align: center; cursor: pointer; transition: all 0.3s; height: 100%;">
-          <div style="font-size: 3rem; margin-bottom: 16px; color: #1cc88a;">
-            <i class="bi bi-clipboard-check"></i>
-          </div>
-          <h3 style="margin: 0 0 12px 0; color: var(--text-primary);">Reportes de Asistencia</h3>
-          <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">
-            Descarga matrices de asistencia en Excel con datos actualizados
-          </p>
-        </div>
-      </a>
-
-      <!-- Gestión de Usuarios Canvas -->
-      <a href="/ui/canvas/users" style="text-decoration: none; color: inherit;">
-        <div class="table-card" style="padding: 24px; text-align: center; cursor: pointer; transition: all 0.3s; height: 100%;">
-          <div style="font-size: 3rem; margin-bottom: 16px; color: #36b9cc;">
-            <i class="bi bi-people-fill"></i>
-          </div>
-          <h3 style="margin: 0 0 12px 0; color: var(--text-primary);">Usuarios Canvas</h3>
-          <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">
-            Gestión masiva de usuarios en Canvas LMS
-          </p>
-        </div>
-      </a>
-
-      <!-- Cursos -->
-      <a href="/ui/canvas/courses" style="text-decoration: none; color: inherit;">
-        <div class="table-card" style="padding: 24px; text-align: center; cursor: pointer; transition: all 0.3s; height: 100%;">
-          <div style="font-size: 3rem; margin-bottom: 16px; color: #f6c23e;">
-            <i class="bi bi-book-fill"></i>
-          </div>
-          <h3 style="margin: 0 0 12px 0; color: var(--text-primary);">Cursos</h3>
-          <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">
-            Administra y sincroniza cursos entre Canvas y Teams
-          </p>
-        </div>
-      </a>
-
-      <!-- Matrículas -->
-      <a href="/ui/canvas/enrollments" style="text-decoration: none; color: inherit;">
-        <div class="table-card" style="padding: 24px; text-align: center; cursor: pointer; transition: all 0.3s; height: 100%;">
-          <div style="font-size: 3rem; margin-bottom: 16px; color: #e74a3b;">
-            <i class="bi bi-pencil-square"></i>
-          </div>
-          <h3 style="margin: 0 0 12px 0; color: var(--text-primary);">Matrículas</h3>
-          <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">
-            Gestiona enrolaciones de estudiantes masivamente
-          </p>
-        </div>
-      </a>
-
-      <!-- Auditoría -->
-      <a href="/ui/audit" style="text-decoration: none; color: inherit;">
-        <div class="table-card" style="padding: 24px; text-align: center; cursor: pointer; transition: all 0.3s; height: 100%;">
-          <div style="font-size: 3rem; margin-bottom: 16px; color: #858796;">
-            <i class="bi bi-shield-lock"></i>
-          </div>
-          <h3 style="margin: 0 0 12px 0; color: var(--text-primary);">Auditoría</h3>
-          <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">
-            Registro completo de todas las actividades realizadas
-          </p>
-        </div>
-      </a>
-
     </div>
 
-    <!-- Info Section -->
-    <div class="table-card" style="padding: 24px;">
-      <h3 style="margin-top: 0;">ℹ️ Información del Sistema</h3>
-      <ul style="margin: 0; padding-left: 20px;">
-        <li style="margin: 8px 0;">Versión: 1.1.0</li>
-        <li style="margin: 8px 0;">Última actualización: 29 de mayo de 2026</li>
-        <li style="margin: 8px 0;">Estado: <span style="color: #1cc88a; font-weight: bold;">Operacional</span></li>
-      </ul>
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/canvas/users" class="feature-card">
+        <div class="feature-card-icon fci-teal"><i class="bi bi-people-fill"></i></div>
+        <h5>Usuarios Canvas</h5>
+        <p>Gestión masiva de usuarios, importación por Excel y sincronización con Teams</p>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/canvas/courses" class="feature-card">
+        <div class="feature-card-icon fci-yellow"><i class="bi bi-book-fill"></i></div>
+        <h5>Cursos</h5>
+        <p>Administra y sincroniza cursos entre Canvas LMS y Microsoft Teams</p>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/canvas/enrollments" class="feature-card">
+        <div class="feature-card-icon fci-red"><i class="bi bi-pencil-square"></i></div>
+        <h5>Matrículas</h5>
+        <p>Gestiona enrolaciones de estudiantes de forma masiva desde archivos Excel</p>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/teams/teams" class="feature-card">
+        <div class="feature-card-icon fci-indigo"><i class="bi bi-microsoft-teams"></i></div>
+        <h5>Microsoft Teams</h5>
+        <p>Gestión de equipos, miembros y canales en Microsoft Teams / Azure AD</p>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/sync" class="feature-card">
+        <div class="feature-card-icon fci-green"><i class="bi bi-arrow-left-right"></i></div>
+        <h5>Sincronización</h5>
+        <p>Sincroniza cursos de Canvas con Teams automáticamente, incluyendo matrículas</p>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/ingreso" class="feature-card">
+        <div class="feature-card-icon fci-yellow"><i class="bi bi-person-fill-add"></i></div>
+        <h5>Nuevo Ingreso</h5>
+        <p>Alta masiva de nuevos estudiantes con generación automática de credenciales</p>
+      </a>
+    </div>
+
+    <div class="col-sm-6 col-lg-4">
+      <a href="/ui/audit" class="feature-card">
+        <div class="feature-card-icon fci-gray"><i class="bi bi-shield-lock"></i></div>
+        <h5>Auditoría</h5>
+        <p>Registro completo de todas las operaciones realizadas en el sistema</p>
+      </a>
+    </div>
+
+  </div>
+
+  <!-- System info -->
+  <div class="table-card p-4">
+    <div class="row align-items-center g-3">
+      <div class="col-md-6">
+        <div class="d-flex align-items-center gap-3 mb-2">
+          <div class="sidebar-logo"></div>
+          <div>
+            <div class="sys-brand-title">USIL Gestión TI</div>
+            <div class="sys-brand-sub">Universidad San Ignacio de Loyola — Área TI</div>
+          </div>
+        </div>
+        <p class="sys-desc">
+          Plataforma interna de integración entre Canvas LMS y Microsoft Teams para la gestión académica y administrativa.
+        </p>
+      </div>
+      <div class="col-md-6">
+        <div class="row g-2">
+          <div class="col-6">
+            <div class="sys-meta-item">
+              <i class="bi bi-tag-fill text-primary"></i>
+              <span>Versión <strong class="text-body">1.1.0</strong></span>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="sys-meta-item">
+              <i class="bi bi-calendar3 text-primary"></i>
+              <span>Junio 2026</span>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="sys-meta-item">
+              <span class="status-dot active"></span>
+              <span class="text-success fw-semibold">Sistema operacional</span>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="sys-meta-item">
+              <i class="bi bi-hdd-stack text-primary"></i>
+              <span>Canvas LMS + Azure AD</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-<style>
-.table-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0,0,0,.15);
-}
-</style>
+</div>
 {% endblock %}
