@@ -26,12 +26,13 @@
 }
 
 html.dark-mode {
+  /* App variables */
   --sidebar-bg: #0f1419;
   --body-bg: #0d0f14;
   --card-bg: #1a1f2e;
   --card-border: #2a3141;
   --text-primary: #f0f2f5;
-  --text-muted: #b8c0d0;
+  --text-muted: #c4cad8;
   --text-light: #6b7585;
   --text-inverse: rgba(255,255,255,.95);
   --input-bg: #151b28;
@@ -39,6 +40,27 @@ html.dark-mode {
   --table-hover-bg: #252d3d;
   --header-bg: #151b28;
   --accent-light: rgba(78,115,223,.15);
+
+  /* Override Bootstrap 5.3 internal CSS variables */
+  --bs-body-color: #f0f2f5;
+  --bs-body-color-rgb: 240, 242, 245;
+  --bs-secondary-color: #c4cad8;
+  --bs-secondary-color-rgb: 196, 202, 216;
+  --bs-tertiary-color: #8892a4;
+  --bs-body-bg: #0d0f14;
+  --bs-body-bg-rgb: 13, 15, 20;
+  --bs-secondary-bg: #1a1f2e;
+  --bs-tertiary-bg: #151b28;
+  --bs-border-color: #2a3141;
+  --bs-table-color: #f0f2f5;
+  --bs-table-bg: transparent;
+  --bs-table-striped-color: #f0f2f5;
+  --bs-table-hover-color: #f0f2f5;
+  --bs-table-hover-bg: #252d3d;
+  --bs-table-border-color: #2a3141;
+  --bs-heading-color: #f0f2f5;
+  --bs-link-color: #7da4f5;
+  --bs-emphasis-color: #fff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -48,7 +70,7 @@ html.dark-mode {
     --card-bg: #1a1f2e;
     --card-border: #2a3141;
     --text-primary: #f0f2f5;
-    --text-muted: #b8c0d0;
+    --text-muted: #c4cad8;
     --text-light: #6b7585;
     --text-inverse: rgba(255,255,255,.95);
     --input-bg: #151b28;
@@ -56,6 +78,23 @@ html.dark-mode {
     --table-hover-bg: #252d3d;
     --header-bg: #151b28;
     --accent-light: rgba(78,115,223,.15);
+    --bs-body-color: #f0f2f5;
+    --bs-body-color-rgb: 240, 242, 245;
+    --bs-secondary-color: #c4cad8;
+    --bs-secondary-color-rgb: 196, 202, 216;
+    --bs-body-bg: #0d0f14;
+    --bs-secondary-bg: #1a1f2e;
+    --bs-tertiary-bg: #151b28;
+    --bs-border-color: #2a3141;
+    --bs-table-color: #f0f2f5;
+    --bs-table-bg: transparent;
+    --bs-table-striped-color: #f0f2f5;
+    --bs-table-hover-color: #f0f2f5;
+    --bs-table-hover-bg: #252d3d;
+    --bs-table-border-color: #2a3141;
+    --bs-heading-color: #f0f2f5;
+    --bs-link-color: #7da4f5;
+    --bs-emphasis-color: #fff;
   }
 }
 
@@ -479,30 +518,30 @@ body {
 .small, .text-muted { color: var(--text-muted) !important; }
 .text-secondary { color: var(--text-muted) !important; }
 
-/* Force text colors in tables — overrides Bootstrap */
-.table, .table tbody, .table thead,
-.table tbody tr, .table tbody tr td,
-.table thead tr th { color: var(--text-primary) !important; }
-.table tbody tr:hover { background-color: var(--table-hover-bg) !important; }
+/* ── Table color enforcement — overrides Bootstrap completely ── */
+.table                        { color: var(--text-primary) !important; }
+.table > :not(caption) > * > * { color: var(--text-primary) !important; background-color: transparent !important; }
+.table tbody tr:hover > *     { background-color: var(--table-hover-bg) !important; color: var(--text-primary) !important; }
 
-/* text-muted inside tables must stay legible in dark mode */
-.table .text-muted,
-.table td.text-muted,
-.table td .text-muted,
-.table td small { color: var(--text-muted) !important; }
+/* text-muted inside tables remains legible */
+.table .text-muted            { color: var(--text-muted) !important; }
 
-/* Course name link color — ensure contrast in both themes */
-.table td.td-name,
-.table td .cell-name { color: var(--sidebar-accent); font-weight: 600; }
-html.dark-mode .table td.td-name,
-html.dark-mode .table td .cell-name { color: #7da4f5; }
+/* td-name: course/team name columns */
+.table td.td-name             { color: var(--sidebar-accent); font-weight: 600; }
+html.dark-mode .table td.td-name { color: #7da4f5 !important; }
 
-/* ID chip inside tables */
-.table td .td-id { color: var(--text-muted); font-size: .78rem; }
+/* Dark mode: override Bootstrap's color utilities inside tables */
+html.dark-mode .table .text-muted,
+html.dark-mode .table td small,
+html.dark-mode .table td .small  { color: var(--text-muted) !important; }
 
-/* Inline color overrides must adapt to dark mode */
-html.dark-mode [style*="color:var(--sidebar-accent)"],
-html.dark-mode [style*="color: var(--sidebar-accent)"] { color: #7da4f5 !important; }
+html.dark-mode .table .fw-semibold,
+html.dark-mode .table td strong  { color: var(--text-primary) !important; }
+
+/* Dark mode body overrides */
+html.dark-mode body               { color: var(--text-primary) !important; }
+html.dark-mode .small,
+html.dark-mode small              { color: inherit; }
 
 /* ── Copy ID button ── */
 .btn-copy-id {
