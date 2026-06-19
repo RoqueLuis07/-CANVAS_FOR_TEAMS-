@@ -91,7 +91,7 @@ async def add_member(group_id: str, body: CanvasGroupMemberCreate):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.post("/{group_id}/members/bulk", summary="Añadir miembros de forma masiva al grupo")
+@router.post("/{group_id}/members/bulk", summary="Añadir miembros de forma conjunta al grupo")
 async def add_members(group_id: str, body: CanvasGroupMemberAdd) -> BulkResult:
     result = BulkResult()
 

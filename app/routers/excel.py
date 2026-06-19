@@ -533,7 +533,7 @@ async def template_ingreso():
 
 
 @router.post("/excel/ingreso",
-             summary="Crear cuentas masivas desde lista de alumnos")
+             summary="Crear cuentas conjuntas desde lista de alumnos")
 async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
     rows = _read_excel(file)
     result = BulkResult()
@@ -656,7 +656,7 @@ async def template_sync():
 
 
 @router.post("/excel/sync/canvas-teams",
-             summary="Sincronización masiva Canvas→Teams desde Excel")
+             summary="Sincronización conjunta Canvas→Teams desde Excel")
 async def bulk_sync_canvas_teams(file: UploadFile = File(...)) -> BulkResult:
     rows = _read_excel(file)
     result = BulkResult()

@@ -142,7 +142,7 @@ async def add_member(team_id: str, body: TeamsMemberAdd):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.post("/{team_id}/members/bulk-add", summary="Añadir miembros de forma masiva")
+@router.post("/{team_id}/members/bulk-add", summary="Añadir miembros de forma conjunta")
 async def bulk_add_members(team_id: str, body: BulkTeamsMemberAdd) -> BulkResult:
     # Graph supports up to 20 members per batch via addMembers action
     result = BulkResult()
@@ -183,7 +183,7 @@ async def remove_member(team_id: str, membership_id: str):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.post("/{team_id}/members/bulk-remove", summary="Quitar miembros de forma masiva")
+@router.post("/{team_id}/members/bulk-remove", summary="Quitar miembros de forma conjunta")
 async def bulk_remove_members(team_id: str, body: BulkTeamsMemberRemove) -> BulkResult:
     result = BulkResult()
 

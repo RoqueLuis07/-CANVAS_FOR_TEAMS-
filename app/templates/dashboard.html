@@ -81,7 +81,6 @@
       <div class="canvas-tile-footer">
         <a href="/ui/teams/users" class="tile-link"><i class="bi bi-person-badge me-1"></i>Usuarios AD</a>
         <a href="/ui/teams/teams" class="tile-link"><i class="bi bi-microsoft-teams me-1"></i>Teams</a>
-        <a href="/ui/sync"        class="tile-link"><i class="bi bi-arrow-left-right me-1"></i>Sincronizar</a>
       </div>
     </div>
   </div>
@@ -215,12 +214,6 @@
               <span>Cursos</span>
             </a>
           </div>
-          <div class="col-6 col-md-4 col-lg-2">
-            <a href="/ui/sync" class="quick-action">
-              <i class="bi bi-arrow-left-right text-canvas-red"></i>
-              <span>Sincronizar</span>
-            </a>
-          </div>
         </div>
       </div>
     </div>
@@ -263,8 +256,8 @@ const ACTION_ICONS = {
 };
 const ACTION_LABEL = {
   create: 'Crear', delete: 'Eliminar', update: 'Actualizar',
-  import: 'Importar', import_bulk: 'Importar masivo', cache_clear: 'Caché',
-  login: 'Ingreso', delete_bulk: 'Eliminar masivo',
+  import: 'Importar', import_bulk: 'Importar conjunto', cache_clear: 'Caché',
+  login: 'Ingreso', delete_bulk: 'Eliminar conjunto',
 };
 
 function timeAgo(ts) {
@@ -291,6 +284,10 @@ async function loadStats() {
     // Teams — live API
     api.get('/teams/teams?top=50').then(teams => {
       document.getElementById('cnt-tt').textContent = teams.length >= 50 ? '50+' : teams.length;
+      
+      // Sort by creation date descending
+      teams.sort((a, b) => new Date(b.createdDateTime || 0) - new Date(a.createdDateTime || 0));
+      
       const rows = teams.slice(0, 8).map(t => {
         const initial = (t.displayName || '?')[0].toUpperCase();
         const vis     = t.visibility;
@@ -312,7 +309,10 @@ async function loadStats() {
     });
 
     // Recent courses from DB
-    api.get('/canvas/courses?per_page=8').then(courses => {
+    api.get('/canvas/courses?per_page=50').then(courses => {
+      // Sort by creation date descending
+      courses.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      
       const rows = courses.slice(0, 8).map(c => {
         const state   = c.workflow_state;
         const statCls = state === 'available' ? 'bg-success' : state === 'completed' ? 'bg-secondary' : 'bg-warning text-dark';

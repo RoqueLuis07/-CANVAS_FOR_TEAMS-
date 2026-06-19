@@ -7,7 +7,7 @@
   <div><div class="page-title">Usuarios Azure AD</div><div class="page-subtitle">Gestión de usuarios del directorio Microsoft 365</div></div>
   <div class="ms-auto d-flex gap-2 flex-wrap">
     <button class="btn btn-success" onclick="openCreateUser()"><i class="bi bi-person-plus-fill me-1"></i>Crear usuario</button>
-    <button class="btn btn-primary" onclick="openExcelUsers()"><i class="bi bi-table me-1"></i>Carga Masiva</button>
+    <button class="btn btn-primary" onclick="openExcelUsers()"><i class="bi bi-table me-1"></i>Carga Conjunta</button>
   </div>
 </div>
 
@@ -266,7 +266,7 @@ function deleteUser(id, name) {
 
 function openExcelUsers() {
   showSpreadsheet({
-    title: 'Carga masiva de usuarios Azure AD',
+    title: 'Carga conjunta de usuarios Azure AD',
     columns: [
       { key: 'display_name',        label: 'Nombre completo',   required: true,  width: 170 },
       { key: 'user_principal_name', label: 'UPN (correo AD)',    required: true,  width: 200, placeholder: 'usuario@dominio.com' },

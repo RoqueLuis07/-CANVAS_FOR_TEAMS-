@@ -121,7 +121,7 @@ async def create_course(body: CanvasCourseCreate):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.post("/bulk", summary="Crear cursos de forma masiva")
+@router.post("/bulk", summary="Crear cursos de forma conjunta")
 async def create_courses_bulk(body: BulkCanvasCourseCreate) -> BulkResult:
     result = BulkResult()
 

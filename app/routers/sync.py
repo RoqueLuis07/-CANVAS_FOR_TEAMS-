@@ -184,7 +184,7 @@ async def create_course_and_team(body: UnifiedCreateRequest) -> dict:
         "teams_team_id": team_id,
     }
 
-@router.post("/bulk-create-courses-and-teams", summary="Creación masiva de cursos y equipos")
+@router.post("/bulk-create-courses-and-teams", summary="Creación conjunta de cursos y equipos")
 async def bulk_create_courses_and_teams(body: BulkUnifiedCreateRequest) -> dict:
     from app.models.canvas import BulkResult
     result = BulkResult()
@@ -251,7 +251,7 @@ async def enroll_both(body: UnifiedEnrollRequest) -> dict:
         "teams_enrolled": True
     }
 
-@router.post("/bulk-enroll-both", summary="Matriculación masiva en Canvas y Teams")
+@router.post("/bulk-enroll-both", summary="Matriculación conjunta en Canvas y Teams")
 async def bulk_enroll_both(body: BulkUnifiedEnrollRequest) -> dict:
     from app.models.canvas import BulkResult
     result = BulkResult()

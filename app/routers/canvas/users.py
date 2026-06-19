@@ -117,7 +117,7 @@ async def create_user(body: CanvasUserCreate, request: Request):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.post("/bulk", summary="Crear usuarios de forma masiva")
+@router.post("/bulk", summary="Crear usuarios de forma conjunta")
 async def create_users_bulk(body: BulkCanvasUserCreate, request: Request) -> BulkResult:
     result = BulkResult()
 

@@ -6,7 +6,7 @@
 <div class="d-flex align-items-center mb-4 gap-3 flex-wrap">
   <div><div class="page-title">Creación Unificada</div><div class="page-subtitle">Crear cursos en Canvas y equipos en Teams simultáneamente</div></div>
   <div class="ms-auto d-flex gap-2 flex-wrap">
-    <button class="btn btn-primary" onclick="openExcelUnifiedCreation()"><i class="bi bi-table me-1"></i>Carga Masiva</button>
+    <button class="btn btn-primary" onclick="openExcelUnifiedCreation()"><i class="bi bi-table me-1"></i>Carga Conjunta</button>
     <a href="/excel/template/unified-creation" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>Plantilla Excel</a>
   </div>
 </div>
@@ -76,7 +76,7 @@ async function doCreateUnified() {
 
 function openExcelUnifiedCreation() {
   showSpreadsheet({
-    title: 'Creación masiva de Cursos y Equipos',
+    title: 'Creación conjunta de Cursos y Equipos',
     columns: [
       { key: 'course_name', label: 'Nombre del Curso', required: true, width: 200 },
       { key: 'course_code', label: 'Código del Curso', required: true, width: 150 },

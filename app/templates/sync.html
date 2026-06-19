@@ -64,7 +64,7 @@
 <div class="row g-3 mt-1">
   <div class="col-12">
     <div class="table-card">
-      <div class="card-header"><i class="bi bi-clock-history text-secondary me-2"></i><strong>Sincronización masiva desde Excel</strong></div>
+      <div class="card-header"><i class="bi bi-clock-history text-secondary me-2"></i><strong>Sincronización conjunta desde Excel</strong></div>
       <div class="p-4">
         <p class="text-muted small">Sube un Excel con pares <code>canvas_course_id, owner_id</code> para crear múltiples Teams de una vez.</p>
         <div class="row g-3 align-items-end">
@@ -74,7 +74,7 @@
           </div>
           <div class="col-md-6">
             <div id="previewArea" class="mb-3"></div>
-            <button class="btn btn-primary" id="bulkSyncBtn" onclick="doBulkSync()"><i class="bi bi-upload me-1"></i>Sincronizar masivo</button>
+            <button class="btn btn-primary" id="bulkSyncBtn" onclick="doBulkSync()"><i class="bi bi-upload me-1"></i>Sincronizar conjunto</button>
             <a href="/excel/template/sync" class="btn btn-outline-secondary ms-2"><i class="bi bi-download me-1"></i>Plantilla</a>
             <div id="bulkResult" class="mt-3"></div>
           </div>
@@ -154,7 +154,7 @@ function doBulkSync() {
   setLoading(btn, true);
   uploadExcel('/excel/sync/canvas-teams', 'excelFile').then(res => {
     document.getElementById('bulkResult').innerHTML = renderBulkResult(res);
-    toast(`Sync masivo: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
+    toast(`Sync conjunto: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
   }).catch(e => { toast('Error: ' + e.message, 'danger'); })
   .finally(() => setLoading(btn, false));
 }

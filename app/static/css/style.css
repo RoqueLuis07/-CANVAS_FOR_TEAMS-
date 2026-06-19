@@ -853,7 +853,7 @@ html.dark-mode .att-l { background: rgba(198,138,10,.2); color: #ffc107; }
 .enroll-course-item:hover { background: var(--table-hover-bg); }
 
 /* ══════════════════════════════════════════════
-   Web Spreadsheet  —  planilla de carga masiva
+   Web Spreadsheet  —  planilla de carga conjunta
    ══════════════════════════════════════════════ */
 .ss-wrap { display: flex; flex-direction: column; gap: 10px; }
 

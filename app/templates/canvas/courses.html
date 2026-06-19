@@ -8,7 +8,7 @@
   <div class="ms-auto d-flex gap-2 flex-wrap">
     <button class="btn btn-info" onclick="openBulkAttendanceDownload()" title="Descargar reportes de asistencia de varios cursos a la vez"><i class="bi bi-download me-1"></i>Reportes Asistencias</button>
     <button class="btn btn-success" onclick="openCreateCourse()"><i class="bi bi-plus-circle-fill me-1"></i>Crear curso</button>
-    <button class="btn btn-primary" onclick="openExcelCourses()"><i class="bi bi-table me-1"></i>Carga Masiva</button>
+    <button class="btn btn-primary" onclick="openExcelCourses()"><i class="bi bi-table me-1"></i>Carga Conjunta</button>
   </div>
 </div>
 
@@ -435,7 +435,7 @@ function downloadAttendanceExcel(courseId, courseName) {
 
 function openExcelCourses() {
   showSpreadsheet({
-    title: 'Carga masiva de cursos Canvas',
+    title: 'Carga conjunta de cursos Canvas',
     columns: [
       { key: 'name',          label: 'Nombre del curso',  required: true,  width: 220 },
       { key: 'course_code',   label: 'Código',             required: true,  width: 120 },
@@ -468,7 +468,7 @@ function openBulkAttendanceDownload() {
     </label>`
   ).join('');
 
-  showModal('Descargar reportes de asistencias masivos', `
+  showModal('Descargar reportes de asistencias conjuntos', `
     <p class="text-muted small mb-3">Selecciona los cursos de los cuales deseas obtener el reporte de asistencias. Se descargará un archivo Excel por cada curso.</p>
     <div style="max-height:400px;overflow-y:auto;border:1px solid var(--card-border);padding:12px;border-radius:6px">
       ${courseOptions || '<div class="text-muted text-center py-3">Cargando cursos...</div>'}

@@ -114,7 +114,7 @@ class StudentIn(BaseModel):
 
 
 class BulkStudentsIn(BaseModel):
-    """Lista de usuarios para creación masiva."""
+    """Lista de usuarios para creación conjunta."""
     students: list[StudentIn]
 
 
@@ -157,7 +157,7 @@ class ResendCredentialsIn(BaseModel):
 
 
 class BulkResendIn(BaseModel):
-    """Lista de usuarios para reenvío masivo."""
+    """Lista de usuarios para reenvío conjunto."""
     students: list[ResendCredentialsIn]
 
 
@@ -178,7 +178,7 @@ class AccountCheckIn(BaseModel):
 
 
 class BulkAccountCheckIn(BaseModel):
-    """Lista de usuarios para verificación masiva."""
+    """Lista de usuarios para verificación conjunta."""
     students: list[AccountCheckIn]
 
 
@@ -632,7 +632,7 @@ async def create_student(body: StudentIn):
     return await _create_student(body)
 
 
-@router.post("/bulk", summary="Crear credenciales masivas")
+@router.post("/bulk", summary="Crear credenciales conjuntas")
 async def create_students_bulk(body: BulkStudentsIn) -> BulkResult:
     """Crea múltiples usuarios en paralelo. Errores individuales no detienen el proceso."""
     result = BulkResult()
@@ -654,7 +654,7 @@ async def resend_credentials(body: ResendCredentialsIn) -> dict[str, Any]:
     return await _resend_credentials(body)
 
 
-@router.post("/bulk-resend", summary="Reenviar credenciales masivas")
+@router.post("/bulk-resend", summary="Reenviar credenciales conjuntas")
 async def resend_credentials_bulk(body: BulkResendIn) -> BulkResult:
     """Reenvía credenciales a múltiples usuarios en paralelo."""
     result = BulkResult()
@@ -708,9 +708,9 @@ async def check_accounts_bulk(body: BulkAccountCheckIn) -> dict[str, Any]:
     }
 
 
-@router.get("/template/crear", summary="Descargar plantilla Excel para creación masiva")
+@router.get("/template/crear", summary="Descargar plantilla Excel para creación conjunta")
 async def template_crear():
-    """Genera y descarga una plantilla Excel con el formato requerido para carga masiva."""
+    """Genera y descarga una plantilla Excel con el formato requerido para carga conjunta."""
     import io
     import openpyxl
     from fastapi.responses import StreamingResponse

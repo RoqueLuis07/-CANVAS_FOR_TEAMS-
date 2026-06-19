@@ -18,9 +18,9 @@
       <input type="date" id="dateTo" class="form-control" style="max-width: 150px;" placeholder="Hasta...">
       <select id="jobType" class="form-control" style="max-width: 200px;">
         <option value="">Todos los tipos</option>
-        <option value="bulk_user_create">Crear usuarios (Masivo)</option>
+        <option value="bulk_user_create">Crear usuarios (Conjunto)</option>
         <option value="user_create">Crear usuario (Individual)</option>
-        <option value="enrollment_bulk">Matrículas (Masivo)</option>
+        <option value="enrollment_bulk">Matrículas (Conjunto)</option>
         <option value="enrollment_single">Matrícula (Individual)</option>
         <option value="course_create">Crear curso</option>
       </select>
@@ -199,9 +199,9 @@ function getStatusBadge(status) {
 
 function getJobTypeLabel(type) {
   const labels = {
-    'bulk_user_create': 'Crear Usuarios (Masivo)',
+    'bulk_user_create': 'Crear Usuarios (Conjunto)',
     'user_create': 'Crear Usuario',
-    'enrollment_bulk': 'Matrículas (Masivo)',
+    'enrollment_bulk': 'Matrículas (Conjunto)',
     'enrollment_single': 'Matrícula',
     'course_create': 'Crear Curso',
     'course_update': 'Actualizar Curso',

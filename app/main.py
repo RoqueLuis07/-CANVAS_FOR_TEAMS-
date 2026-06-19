@@ -73,6 +73,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Audit middleware
+from app.middleware.audit import AuditMiddleware
+app.add_middleware(AuditMiddleware)
+
 # Mount static files
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -143,7 +147,6 @@ routers_to_load = [
     ("Ingreso", ingreso.router),
     ("Jobs", jobs.router),
     ("Profile", profile.router),
-    ("Sync", sync.router),
     ("Audit", audit.router),
     ("Teams · Teams", teams_mgmt.router),
     ("Teams · Users", teams_users.router),

@@ -94,7 +94,7 @@ async def create_user(body: TeamsUserCreate):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.post("/bulk", summary="Crear usuarios de forma masiva en Azure AD")
+@router.post("/bulk", summary="Crear usuarios de forma conjunta en Azure AD")
 async def create_users_bulk(body: BulkTeamsUserCreate, request: Request) -> BulkResult:
     result = BulkResult()
 

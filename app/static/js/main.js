@@ -479,7 +479,7 @@ function renderBulkResult(result, containerId) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Web Spreadsheet  —  planilla de carga masiva en el navegador
+   Web Spreadsheet  —  planilla de carga conjunta en el navegador
    Reemplaza la importación por Excel: el usuario escribe o pega
    datos directamente (Ctrl+V desde Excel/Sheets funciona).
    ══════════════════════════════════════════════════════════════ */
@@ -487,7 +487,7 @@ function renderBulkResult(result, containerId) {
 let _ss = null; // estado activo de la planilla
 
 /**
- * Abre la planilla modal de carga masiva.
+ * Abre la planilla modal de carga conjunta.
  *
  * @param {object} cfg
  *   title    {string}   Título del modal

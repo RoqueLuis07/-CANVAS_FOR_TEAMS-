@@ -4,10 +4,10 @@
 {% block nav_ce %}active{% endblock %}
 {% block content %}
 <div class="d-flex align-items-center mb-4 gap-3 flex-wrap">
-  <div><div class="page-title">Matrículas Canvas</div><div class="page-subtitle">Gestión de matrículas masivas e individuales</div></div>
+  <div><div class="page-title">Matrículas Canvas</div><div class="page-subtitle">Gestión de matrículas conjuntas e individuales</div></div>
   <div class="ms-auto d-flex gap-2 flex-wrap">
     <button class="btn btn-success" onclick="openEnrollOne()"><i class="bi bi-person-plus-fill me-1"></i>Matricular</button>
-    <button class="btn btn-primary" onclick="openExcelEnroll()"><i class="bi bi-table me-1"></i>Carga Masiva</button>
+    <button class="btn btn-primary" onclick="openExcelEnroll()"><i class="bi bi-table me-1"></i>Carga Conjunta</button>
   </div>
 </div>
 
@@ -286,7 +286,7 @@ function openExcelEnroll() {
   if (!courseId) {
     // Sin curso seleccionado: planilla con columna course_id
     showSpreadsheet({
-      title: 'Matrículas masivas (múltiples cursos)',
+      title: 'Matrículas conjuntas (múltiples cursos)',
       columns: [
         { key: 'course_id', label: 'ID Curso',   required: true, width: 90 },
         { key: 'user_id',   label: 'ID Usuario', required: true, width: 90 },
@@ -337,7 +337,7 @@ function openExcelEnroll() {
 
   // Con curso ya seleccionado: planilla sin course_id
   showSpreadsheet({
-    title: `Matrículas masivas — [${courseId}] ${courseName}`,
+    title: `Matrículas conjuntas — [${courseId}] ${courseName}`,
     columns: [
       { key: 'user_id', label: 'ID Usuario', required: true, width: 110,
         placeholder: 'Canvas User ID' },

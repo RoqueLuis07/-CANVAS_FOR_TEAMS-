@@ -101,7 +101,7 @@ async def unenroll_user(
 bulk_router = APIRouter(prefix="/canvas/enrollments/bulk", tags=["Canvas · Enrollments"])
 
 
-@bulk_router.post("/enroll", summary="Matricular usuarios de forma masiva en un curso")
+@bulk_router.post("/enroll", summary="Matricular usuarios de forma conjunta en un curso")
 async def bulk_enroll(body: BulkCanvasEnrollmentCreate) -> BulkResult:
     result = BulkResult()
 
@@ -124,7 +124,7 @@ async def bulk_enroll(body: BulkCanvasEnrollmentCreate) -> BulkResult:
     return result
 
 
-@bulk_router.post("/unenroll", summary="Desmatricular usuarios de forma masiva de un curso")
+@bulk_router.post("/unenroll", summary="Desmatricular usuarios de forma conjunta de un curso")
 async def bulk_unenroll(body: BulkCanvasEnrollmentDelete) -> BulkResult:
     result = BulkResult()
 
@@ -143,7 +143,7 @@ async def bulk_unenroll(body: BulkCanvasEnrollmentDelete) -> BulkResult:
     return result
 
 
-@bulk_router.delete("", summary="Eliminación masiva de matrículas seleccionadas")
+@bulk_router.delete("", summary="Eliminación conjunta de matrículas seleccionadas")
 async def bulk_delete_enrollments(body: BulkEnrollDeleteRequest) -> BulkResult:
     result = BulkResult()
     sem = asyncio.Semaphore(8)
