@@ -23,59 +23,76 @@
          class="sidebar-brand-logo">
   </a>
 
-  <!-- Dashboard -->
-  <a href="/ui" class="sidebar-link {% block nav_db %}{% endblock %}">
-    <i class="bi bi-speedometer2"></i><span>Dashboard</span>
+  <!-- Inicio -->
+  <a href="/ui/home" class="sidebar-link {% block nav_db %}{% endblock %}">
+    <i class="bi bi-house-door-fill"></i><span>Inicio</span>
   </a>
 
-  <!-- Gestión Unificada -->
-  <div class="sidebar-section">Gestión Unificada</div>
-  <a href="/ui/unified-users"       class="sidebar-link {% block nav_uu %}{% endblock %}">
-    <i class="bi bi-search"></i><span>Búsqueda Unificada</span>
+  <!-- Gestión de Usuarios -->
+  <a class="sidebar-link" data-bs-toggle="collapse" href="#menuUsuarios" role="button" aria-expanded="false" aria-controls="menuUsuarios">
+    <i class="bi bi-people-fill"></i><span>Gestión de Usuarios</span>
+    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
   </a>
-  <a href="/ui/unified-creation"    class="sidebar-link {% block nav_uc %}{% endblock %}">
-    <i class="bi bi-folder-plus"></i><span>Creación Unificada</span>
-  </a>
-  <a href="/ui/unified-enrollments" class="sidebar-link {% block nav_ue %}{% endblock %}">
-    <i class="bi bi-person-plus-fill"></i><span>Matriculación Unificada</span>
-  </a>
+  <div class="collapse" id="menuUsuarios">
+    <a href="/ui/unified-users" class="sidebar-link ps-5 {% block nav_uu %}{% endblock %}">
+      <i class="bi bi-search"></i><span>Búsqueda Unificada</span>
+    </a>
+    <a href="/ui/ingreso" class="sidebar-link ps-5 {% block nav_ni %}{% endblock %}">
+      <i class="bi bi-person-fill-add"></i><span>Nuevo Ingreso</span>
+    </a>
+    <a href="/ui/unified-creation" class="sidebar-link ps-5 {% block nav_uc %}{% endblock %}">
+      <i class="bi bi-folder-plus"></i><span>Creación Unificada</span>
+    </a>
+    <a href="/ui/canvas/users" class="sidebar-link ps-5 {% block nav_cu %}{% endblock %}">
+      <i class="bi bi-person-lines-fill"></i><span>Usuarios Canvas</span>
+    </a>
+    <a href="/ui/teams/users" class="sidebar-link ps-5 {% block nav_tu %}{% endblock %}">
+      <i class="bi bi-person-badge-fill"></i><span>Usuarios Azure AD</span>
+    </a>
+  </div>
 
-  <!-- Canvas LMS -->
-  <div class="sidebar-section">Canvas LMS</div>
-  <a href="/ui/canvas/users"       class="sidebar-link {% block nav_cu %}{% endblock %}">
-    <i class="bi bi-people-fill"></i><span>Usuarios</span>
+  <!-- Gestión Académica -->
+  <a class="sidebar-link" data-bs-toggle="collapse" href="#menuAcademico" role="button" aria-expanded="false" aria-controls="menuAcademico">
+    <i class="bi bi-mortarboard-fill"></i><span>Gestión Académica</span>
+    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
   </a>
-  <a href="/ui/canvas/courses"     class="sidebar-link {% block nav_cc %}{% endblock %}">
-    <i class="bi bi-book-fill"></i><span>Cursos</span>
-  </a>
-  <a href="/ui/canvas/attendance"  class="sidebar-link {% block nav_ca %}{% endblock %}">
-    <i class="bi bi-clipboard-check-fill"></i><span>Asistencias</span>
-  </a>
-  <a href="/ui/canvas/enrollments" class="sidebar-link {% block nav_ce %}{% endblock %}">
-    <i class="bi bi-pencil-square"></i><span>Matrículas</span>
-  </a>
+  <div class="collapse" id="menuAcademico">
+    <a href="/ui/canvas/courses" class="sidebar-link ps-5 {% block nav_cc %}{% endblock %}">
+      <i class="bi bi-book-fill"></i><span>Cursos (Canvas)</span>
+    </a>
+    <a href="/ui/teams/teams" class="sidebar-link ps-5 {% block nav_tt %}{% endblock %}">
+      <i class="bi bi-microsoft-teams"></i><span>Equipos (Teams)</span>
+    </a>
+    <a href="/ui/unified-enrollments" class="sidebar-link ps-5 {% block nav_ue %}{% endblock %}">
+      <i class="bi bi-person-plus-fill"></i><span>Matriculación Unificada</span>
+    </a>
+    <a href="/ui/canvas/attendance" class="sidebar-link ps-5 {% block nav_ca %}{% endblock %}">
+      <i class="bi bi-clipboard-check-fill"></i><span>Asistencias</span>
+    </a>
+    <a href="/ui/canvas/enrollments" class="sidebar-link ps-5 {% block nav_ce %}{% endblock %}">
+      <i class="bi bi-pencil-square"></i><span>Enrolaciones Masivas</span>
+    </a>
+  </div>
 
-  <!-- Microsoft Teams -->
-  <div class="sidebar-section">Microsoft Teams</div>
-  <a href="/ui/teams/users"        class="sidebar-link {% block nav_tu %}{% endblock %}">
-    <i class="bi bi-person-badge-fill"></i><span>Usuarios Azure AD</span>
+  <!-- Administración -->
+  <a class="sidebar-link" data-bs-toggle="collapse" href="#menuAdmin" role="button" aria-expanded="false" aria-controls="menuAdmin">
+    <i class="bi bi-gear-fill"></i><span>Administración</span>
+    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
   </a>
-  <a href="/ui/teams/teams"        class="sidebar-link {% block nav_tt %}{% endblock %}">
-    <i class="bi bi-microsoft-teams"></i><span>Teams</span>
-  </a>
+  <div class="collapse" id="menuAdmin">
+    <a href="/ui/sync" class="sidebar-link ps-5 {% block nav_sy %}{% endblock %}">
+      <i class="bi bi-arrow-left-right"></i><span>Sincronización</span>
+    </a>
+    <a href="/ui/jobs" class="sidebar-link ps-5 {% block nav_jh %}{% endblock %}">
+      <i class="bi bi-clipboard-list"></i><span>Historial Trabajos</span>
+    </a>
+    <a href="/ui/audit" class="sidebar-link ps-5 {% block nav_au %}{% endblock %}">
+      <i class="bi bi-shield-lock-fill"></i><span>Auditoría</span>
+    </a>
+  </div>
 
-  <!-- Herramientas -->
-  <div class="sidebar-section">Herramientas</div>
-  <a href="/ui/ingreso" target="_self" class="sidebar-link {% block nav_ni %}{% endblock %}">
-    <i class="bi bi-person-fill-add"></i><span>Nuevo Ingreso</span>
-  </a>
-  <a href="/ui/jobs"               class="sidebar-link {% block nav_jh %}{% endblock %}">
-    <i class="bi bi-clipboard-list"></i><span>Historial Trabajos</span>
-  </a>
-  <a href="/ui/audit"              class="sidebar-link {% block nav_au %}{% endblock %}">
-    <i class="bi bi-shield-lock-fill"></i><span>Auditoría</span>
-  </a>
-  <a href="/ui/profile"            class="sidebar-link {% block nav_pf %}{% endblock %}">
+  <div class="sidebar-section mt-3">Personal</div>
+  <a href="/ui/profile" class="sidebar-link {% block nav_pf %}{% endblock %}">
     <i class="bi bi-person-circle"></i><span>Mi Perfil</span>
   </a>
 

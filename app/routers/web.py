@@ -109,7 +109,7 @@ async def sync_page(request: Request):
 
 @router.get("/ui/home", response_class=HTMLResponse)
 async def home_page(request: Request):
-    return _r(request, "home.html")
+    return _r(request, "dashboard.html")
 
 
 @router.get("/ui/audit", response_class=HTMLResponse)
