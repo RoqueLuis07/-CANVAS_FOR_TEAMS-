@@ -47,6 +47,7 @@ INSTITUTIONAL_DOMAIN=tu_dominio
 
 **Opción B: Comando directo**
 ```bash
+cd Backend
 python -m uvicorn app.main:app --host 127.0.0.1 --port 3000 --reload
 ```
 
@@ -56,7 +57,21 @@ El sistema estará disponible en: **http://localhost:3000** o **http://127.0.0.1
 
 - **Health Check:** http://localhost:3000/health
 - **Documentación API:** http://localhost:3000/docs
-- **Base de Datos:** `./app.db` (SQLite local)
+- **Base de Datos:** `Backend/app.db` (SQLite local)
+
+---
+
+## 🏗️ Estructura del Proyecto
+
+El proyecto está organizado en dos carpetas principales para separar responsabilidades:
+
+- **Frontend/**: Contiene la interfaz de usuario.
+  - `templates/`: Plantillas HTML (Jinja2).
+  - `static/`: Archivos estáticos (CSS, JS, imágenes).
+- **Backend/**: Contiene el servidor y la lógica de negocio.
+  - `app/`: Código fuente de la API (FastAPI, routers, modelos).
+  - `data/`: Bases de datos SQLite locales.
+  - Archivos de configuración (`.env`, `requirements.txt`, etc.).
 
 ---
 
@@ -326,6 +341,7 @@ Todos los datos se **persisten automáticamente** aunque cierres la página o re
 ```bash
 # Verifica que las credenciales en .env sean correctas
 # Verifica que Canvas y Azure estén disponibles
+cd Backend
 python -m uvicorn app.main:app --host 127.0.0.1 --port 3000
 ```
 
