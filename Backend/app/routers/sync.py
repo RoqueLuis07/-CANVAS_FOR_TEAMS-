@@ -72,10 +72,33 @@ async def resolve_teams_group(team_ref: str) -> str:
 
     raise ValueError(f"No se encontró el equipo en Teams: {team_ref}")
 
+async def resolve_canvas_user(user_ref: str) -> str:
+    """Returns the internal Canvas user ID."""
+    if user_ref.isdigit():
+        return user_ref
+
+    account_id = settings.canvas_account_id
+    try:
+        users = await canvas.paginate_limited(f"/accounts/{account_id}/users", {"search_term": user_ref, "per_page": 5}, max_records=5)
+        if users:
+            return str(users[0]["id"])
+    except Exception as e:
+        logger.error(f"Error resolving Canvas user {user_ref}: {e}")
+    
+    if "@" in user_ref:
+        return f"sis_login_id:{user_ref}"
+        
+    raise ValueError(f"No se encontró el usuario en Canvas: {user_ref}")
+
 async def _enroll_single(item: UnifiedEnrollment):
     errors = []
     
     # 1. Resolve IDs
+    try:
+        canvas_user_id = await resolve_canvas_user(item.user_identifier)
+    except Exception as e:
+        return {"status": "error", "message": str(e), "item": item.dict()}
+
     try:
         course_id = await resolve_canvas_course(item.canvas_course_id)
     except Exception as e:
@@ -90,7 +113,7 @@ async def _enroll_single(item: UnifiedEnrollment):
     canvas_role = "TeacherEnrollment" if item.role == "teacher" else "StudentEnrollment"
     canvas_payload = {
         "enrollment": {
-            "user_id": str(item.user_identifier),
+            "user_id": canvas_user_id,
             "type": canvas_role,
             "enrollment_state": "active",
             "notify": False
