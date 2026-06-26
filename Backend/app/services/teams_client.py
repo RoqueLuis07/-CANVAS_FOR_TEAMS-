@@ -10,6 +10,9 @@ from fastapi import HTTPException
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
 
 _GRAPH = "https://graph.microsoft.com/v1.0"
 _SCOPE = ["https://graph.microsoft.com/.default"]
@@ -97,10 +100,6 @@ def _raise(r: httpx.Response) -> None:
                 parts.append(graph_msg)
             msg = " ".join(parts)
         raise HTTPException(status_code=r.status_code, detail=msg)
-
-
-import logging as _logging
-_logger = _logging.getLogger(__name__)
 
 
 async def get_sku_id(part_number: str) -> str | None:

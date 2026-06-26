@@ -797,7 +797,7 @@ async def bulk_file_create(file: UploadFile = File(...)) -> BulkResult:
             data = await _create_student(student_data)
             result.succeeded.append(data)
         except Exception as exc:
-            result.failed.append({"student": name, "error": str(exc)[:300]})
+            result.failed.append({"student": name, "error": _err(exc)[:300]})
 
     await asyncio.gather(*[_create_from_row(row) for row in rows])
     return result

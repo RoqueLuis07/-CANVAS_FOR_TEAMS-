@@ -17,6 +17,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
 from app.models.canvas import BulkResult
@@ -25,6 +26,9 @@ from app.services import teams_client as graph
 from app.services.credential_generator import generate_credentials
 from app.services.email_service import send_welcome_email, get_program_attachments
 from app.services.teams_client import create_team_via_group
+
+def _err(exc: Exception) -> str:
+    return getattr(exc, "detail", str(exc))
 
 router = APIRouter(tags=["Excel Import/Export"])
 _ACCOUNT = settings.canvas_account_id
@@ -231,7 +235,7 @@ async def import_canvas_users(file: UploadFile = File(...)) -> BulkResult:
             data = await canvas.post(f"/accounts/{_ACCOUNT}/users", payload)
             result.succeeded.append(data)
         except Exception as exc:
-            result.failed.append({"input": row, "error": str(exc)})
+            result.failed.append({"input": row, "error": _err(exc)})
 
     await asyncio.gather(*[_create(r) for r in rows])
     return result
@@ -282,7 +286,7 @@ async def import_canvas_courses(file: UploadFile = File(...)) -> BulkResult:
             data = await canvas.post(f"/accounts/{_ACCOUNT}/courses", payload)
             result.succeeded.append(data)
         except Exception as exc:
-            result.failed.append({"input": row, "error": str(exc)})
+            result.failed.append({"input": row, "error": _err(exc)})
 
     await asyncio.gather(*[_create(r) for r in rows])
     return result
@@ -334,7 +338,7 @@ async def import_canvas_enrollments(file: UploadFile = File(...)) -> BulkResult:
             data = await canvas.post(f"/courses/{course_id}/enrollments", payload)
             result.succeeded.append(data)
         except Exception as exc:
-            result.failed.append({"input": row, "error": str(exc)})
+            result.failed.append({"input": row, "error": _err(exc)})
 
     await asyncio.gather(*[_enroll(r) for r in rows])
     return result
@@ -361,7 +365,7 @@ async def import_canvas_unenrollments(file: UploadFile = File(...)) -> BulkResul
             )
             result.succeeded.append({"enrollment_id": enrollment_id, **data})
         except Exception as exc:
-            result.failed.append({"input": row, "error": str(exc)})
+            result.failed.append({"input": row, "error": _err(exc)})
 
     await asyncio.gather(*[_unenroll(r) for r in rows])
     return result
@@ -496,7 +500,7 @@ async def import_teams_members(file: UploadFile = File(...)) -> BulkResult:
             data = await graph.post(f"/teams/{team_id}/members", payload)
             result.succeeded.append(data)
         except Exception as exc:
-            result.failed.append({"input": row, "error": str(exc)})
+            result.failed.append({"input": row, "error": _err(exc)})
 
     await asyncio.gather(*[_add(r) for r in rows])
     return result
@@ -687,7 +691,7 @@ async def bulk_sync_canvas_teams(file: UploadFile = File(...)) -> BulkResult:
                 "team_name": team.get("displayName", ""),
             })
         except Exception as exc:
-            result.failed.append({"input": row, "error": str(exc)})
+            result.failed.append({"input": row, "error": _err(exc)})
 
     return result
 
@@ -732,7 +736,7 @@ async def sync_canvas_to_teams(body: SyncMembersRequest) -> BulkResult:
             )
             result.succeeded.append(data)
         except Exception as exc:
-            result.failed.append({"email": email, "error": str(exc)})
+            result.failed.append({"enrollment_id": enrollment.get("id"), "error": _err(exc)})
 
     await asyncio.gather(*[_add(e) for e in enrollments])
     return result

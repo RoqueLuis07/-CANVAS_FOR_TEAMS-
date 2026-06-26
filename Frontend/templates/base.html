@@ -28,26 +28,17 @@
     <i class="bi bi-house-door-fill"></i><span>Inicio</span>
   </a>
 
-  <!-- Gestión de Usuarios -->
+  <!-- Directorio & Ingresos -->
   <a class="sidebar-link" data-bs-toggle="collapse" href="#menuUsuarios" role="button" aria-expanded="false" aria-controls="menuUsuarios">
-    <i class="bi bi-people-fill"></i><span>Gestión de Usuarios</span>
+    <i class="bi bi-people-fill"></i><span>Directorio & Ingresos</span>
     <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
   </a>
   <div class="collapse" id="menuUsuarios">
     <a href="/ui/unified-users" class="sidebar-link ps-5 {% block nav_uu %}{% endblock %}">
-      <i class="bi bi-search"></i><span>Búsqueda Unificada</span>
+      <i class="bi bi-search"></i><span>Buscar Usuarios</span>
     </a>
     <a href="/ui/ingreso" class="sidebar-link ps-5 {% block nav_ni %}{% endblock %}">
-      <i class="bi bi-person-fill-add"></i><span>Nuevo Ingreso</span>
-    </a>
-    <a href="/ui/unified-creation" class="sidebar-link ps-5 {% block nav_uc %}{% endblock %}">
-      <i class="bi bi-folder-plus"></i><span>Creación Unificada</span>
-    </a>
-    <a href="/ui/canvas/users" class="sidebar-link ps-5 {% block nav_cu %}{% endblock %}">
-      <i class="bi bi-person-lines-fill"></i><span>Usuarios Canvas</span>
-    </a>
-    <a href="/ui/teams/users" class="sidebar-link ps-5 {% block nav_tu %}{% endblock %}">
-      <i class="bi bi-person-badge-fill"></i><span>Usuarios Azure AD</span>
+      <i class="bi bi-person-plus-fill"></i><span>Alta Unificada</span>
     </a>
   </div>
 
@@ -64,13 +55,10 @@
       <i class="bi bi-microsoft-teams"></i><span>Equipos (Teams)</span>
     </a>
     <a href="/ui/unified-enrollments" class="sidebar-link ps-5 {% block nav_ue %}{% endblock %}">
-      <i class="bi bi-person-plus-fill"></i><span>Matriculación Unificada</span>
+      <i class="bi bi-person-lines-fill"></i><span>Matriculaciones</span>
     </a>
     <a href="/ui/canvas/attendance" class="sidebar-link ps-5 {% block nav_ca %}{% endblock %}">
       <i class="bi bi-clipboard-check-fill"></i><span>Asistencias</span>
-    </a>
-    <a href="/ui/canvas/enrollments" class="sidebar-link ps-5 {% block nav_ce %}{% endblock %}">
-      <i class="bi bi-pencil-square"></i><span>Enrolaciones Conjuntas</span>
     </a>
   </div>
 

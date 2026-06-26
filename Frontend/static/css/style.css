@@ -14,44 +14,46 @@
   --canvas-yellow:  #C68A0A;
 
   /* Layout */
-  --sidebar-w: 224px;
-  --topbar-h: 56px;
-  --radius: 8px;
-  --radius-sm: 6px;
-  --radius-lg: 14px;
-  --shadow: 0 4px 6px -1px rgba(0,0,0,.06), 0 2px 4px -1px rgba(0,0,0,.04);
-  --shadow-md: 0 10px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.08);
+  --sidebar-w: 240px;
+  --topbar-h: 64px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
+  --shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  --shadow-md: 0 12px 40px 0 rgba(31, 38, 135, 0.12);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
 
-  /* Sidebar (Canvas dark slate) */
-  --sidebar-bg: #394B58;
-  --sidebar-border: rgba(255,255,255,.07);
-  --sidebar-text: rgba(255,255,255,.76);
-  --sidebar-text-hover: #fff;
-  --sidebar-hover-bg: rgba(255,255,255,.08);
-  --sidebar-active-bg: rgba(255,255,255,.13);
+  /* Sidebar (Premium dark) */
+  --sidebar-bg: linear-gradient(180deg, #1A1F2B 0%, #11151D 100%);
+  --sidebar-border: rgba(255,255,255,.05);
+  --sidebar-text: rgba(255,255,255,.65);
+  --sidebar-text-hover: #ffffff;
+  --sidebar-hover-bg: rgba(255,255,255,.06);
+  --sidebar-active-bg: linear-gradient(90deg, rgba(230,96,0,.15) 0%, transparent 100%);
   --sidebar-active-border: #E66000;
 
   /* Topbar */
-  --topbar-bg: #fff;
-  --topbar-border: #E2E6E9;
+  --topbar-bg: rgba(255, 255, 255, 0.8);
+  --topbar-border: rgba(255, 255, 255, 0.4);
 
   /* Body / cards */
-  --body-bg: #F4F5F7;
-  --card-bg: #fff;
-  --card-border: #D8DDE1;
+  --body-bg: #F0F4F8; /* Lighter slightly blueish tint */
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(255, 255, 255, 0.6);
 
   /* Text */
-  --text-primary: #2D3B45;
-  --text-muted: #6C7982;
-  --text-light: #9AAAB4;
-  --text-inverse: #fff;
+  --text-primary: #1E293B;
+  --text-muted: #64748B;
+  --text-light: #94A3B8;
+  --text-inverse: #ffffff;
 
   /* Inputs */
-  --input-bg: #fff;
-  --input-border: #C0C9CF;
-  --table-hover-bg: #EEF6FA;
-  --header-bg: #F7F8F9;
-  --accent-light: rgba(7,112,163,.06);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --input-border: #CBD5E1;
+  --table-hover-bg: rgba(241, 245, 249, 0.8);
+  --header-bg: rgba(248, 250, 252, 0.7);
+  --accent-light: rgba(7,112,163,.08);
 
   /* Aliases kept for backward compat */
   --sidebar-accent: var(--canvas-orange);
@@ -238,14 +240,14 @@ html:not(.dark-mode) .sidebar-brand-logo { filter: brightness(0) invert(1); }
 /* ── 6. Topbar ── */
 .topbar {
   height: var(--topbar-h);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--topbar-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--topbar-border);
   display: flex; align-items: center;
   padding: 0 20px;
   position: sticky; top: 0; z-index: 100;
-  box-shadow: 0 1px 3px rgba(0,0,0,.03);
+  box-shadow: 0 4px 12px rgba(0,0,0,.03);
   gap: 8px;
 }
 html.dark-mode .topbar { background: var(--topbar-bg); }
@@ -401,6 +403,8 @@ html.dark-mode .canvas-tile-footer .tile-link { color: #5BBDE8; }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .table-card .card-header {
   background: var(--card-bg);
