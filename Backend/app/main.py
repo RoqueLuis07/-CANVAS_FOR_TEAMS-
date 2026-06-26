@@ -31,6 +31,7 @@ from app.routers import (
     jobs,
     profile,
     web,
+    sync,
 )
 import asyncio
 from app.routers.teams import teams_mgmt, users as teams_users
@@ -150,6 +151,7 @@ routers_to_load = [
     ("Teams · Teams", teams_mgmt.router),
     ("Teams · Users", teams_users.router),
     ("Web", web.router),
+    ("Sync", sync.router),
 ]
 
 for router_name, router_obj in routers_to_load:
