@@ -319,7 +319,7 @@ function openExcelEnroll() {
                 user_id: r.user_id,
                 type: r.type || 'StudentEnrollment',
                 enrollment_state: r.enrollment_state || 'active',
-                notify: false,
+                notify: true,
               })),
             });
             result.succeeded.push(...(res.succeeded || []));
@@ -361,7 +361,7 @@ function openExcelEnroll() {
           user_id:          r.user_id,
           type:             r.type             || 'StudentEnrollment',
           enrollment_state: r.enrollment_state || 'active',
-          notify: false,
+          notify: true,
         })),
       });
       loadEnrollments();

@@ -116,7 +116,7 @@ async def _enroll_single(item: UnifiedEnrollment):
             "user_id": canvas_user_id,
             "type": canvas_role,
             "enrollment_state": "active",
-            "notify": False
+            "notify": True
         }
     }
     
