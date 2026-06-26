@@ -21,7 +21,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from app.services import auth as auth_service
-from app.services import auto_sync as auto_sync
 from app.core import database, cache as _cache
 from app.core.config import settings
 from app.routers import (
@@ -60,13 +59,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize databases: {e}")
         
-    logger.info("Starting auto_sync background job...")
-    auto_sync.start_auto_sync()
-    
     yield
-    
-    logger.info("Stopping auto_sync background job...")
-    auto_sync.stop_auto_sync()
+
 
 # Create FastAPI app
 app = FastAPI(
