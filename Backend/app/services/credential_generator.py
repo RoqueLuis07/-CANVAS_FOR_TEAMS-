@@ -40,3 +40,14 @@ def generate_credentials(full_name: str, cedula: str, domain: str, collision_suf
         "password":  password,
         "display_name": full_name,
     }
+
+def generate_password(cedula: str, full_name: str) -> str:
+    """Generates a standard password for the given user."""
+    parts = full_name.strip().split()
+    first = parts[0] if parts else "user"
+    last  = parts[-1] if len(parts) > 1 else parts[0] if parts else "user"
+
+    first_init = _normalize(first[0])[0].upper() if first and _normalize(first[0]) else "U"
+    last_init  = _normalize(last[0])[0].lower() if last and _normalize(last[0]) else "S"
+    initials   = f"{first_init}{last_init}"
+    return f"{cedula}-{initials}"

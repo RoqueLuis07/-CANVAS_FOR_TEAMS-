@@ -59,7 +59,7 @@ async def process_sspr(
                 raise ValueError("El correo electrónico proporcionado no coincide con el registrado en nuestro sistema (Canvas o Azure AD).")
 
         # 3. Generar nueva contraseña y actualizar
-        new_password = generate_password()
+        new_password = generate_password(cedula, display_name)
         await teams_client.update_user_password(teams_user["id"], new_password)
         
         # 4. Enviar el correo electrónico
