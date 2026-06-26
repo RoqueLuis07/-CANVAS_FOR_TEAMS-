@@ -441,7 +441,7 @@
     btn.disabled = true;
 
     try {
-      await api.del('/canvas/enrollments/' + enrollment_id + '?course_id=' + course_id + '&task=conclude');
+      await api.del('/canvas/courses/' + course_id + '/enrollments/' + enrollment_id + '?task=conclude');
       toast('Usuario desmatriculado de Canvas', 'success');
 
       const row = btn.closest('.list-group-item');
