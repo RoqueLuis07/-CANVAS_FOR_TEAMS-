@@ -129,12 +129,14 @@ function renderCoursesTable(courses) {
             <td>
               <button class="btn btn-sm btn-outline-info me-1 view-enrollments-btn"
                       title="Ver matrículas"
-                      data-course-id="${row.id}" data-course-name="${esc(row.name)}">
+                      data-course-id="${row.id}" data-course-name="${esc(row.name)}"
+                      ${row.workflow_state === 'deleted' ? 'disabled' : ''}>
                 <i class="bi bi-people"></i>
               </button>
               <button class="btn btn-sm btn-outline-warning me-1 attendance-btn"
                       title="Asistencias"
-                      data-course-id="${row.id}" data-course-name="${esc(row.name)}">
+                      data-course-id="${row.id}" data-course-name="${esc(row.name)}"
+                      ${row.workflow_state === 'deleted' ? 'disabled' : ''}>
                 <i class="bi bi-calendar-check"></i>
               </button>
               <button class="btn btn-sm btn-outline-danger delete-course-btn"

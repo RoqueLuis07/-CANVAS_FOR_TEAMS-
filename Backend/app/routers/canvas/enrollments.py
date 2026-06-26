@@ -46,7 +46,13 @@ async def list_enrollments(
         params["type[]"] = type
     if state:
         params["state[]"] = state
-    result = await canvas.paginate(f"/courses/{course_id}/enrollments", params)
+    try:
+        result = await canvas.paginate(f"/courses/{course_id}/enrollments", params)
+    except StarletteHTTPException as e:
+        if e.status_code == 404:
+            return []
+        raise
+
     _cache.set(cache_key, result, ttl=300)
     return result
 
