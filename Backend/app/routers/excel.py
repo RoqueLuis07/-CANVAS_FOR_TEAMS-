@@ -1279,6 +1279,17 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
 
 @router.post("/excel/egreso", summary="Procesar Egreso Masivo desde OneDrive")
 async def import_egreso_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
+    try:
+        return await _import_egreso_onedrive_inner(req)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(tb)
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)} | Trace: {tb}")
+
+async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
     
