@@ -1091,7 +1091,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if not error or "Creado OK" in str(error):
                 ws.cell(row=r_idx, column=col_usuario, value=login_id)
                 ws.cell(row=r_idx, column=col_contra, value=pwd)
-                result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"]})
+                result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id})
                 
                 if email_sent:
                     ws.cell(row=r_idx, column=col_enviado, value="✅")
@@ -1132,6 +1132,56 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         batch_size = 5
         for i in range(0, len(tasks), batch_size):
             await asyncio.gather(*tasks[i:i+batch_size])
+            
+        # --- NUEVA LÓGICA DE GRUPOS EN TEAMS ---
+        diplomado_name = ""
+        for c in range(1, ws.max_column + 1):
+            val = str(ws.cell(row=1, column=c).value or "").strip()
+            if val:
+                diplomado_name = val
+                break
+        
+        if not diplomado_name:
+            diplomado_name = sheet_name
+            
+        group_id = None
+        try:
+            existing_groups = await graph.get("/groups", params={"$filter": f"displayName eq '{diplomado_name}'", "$select": "id,displayName"})
+            if existing_groups and existing_groups.get("value"):
+                group_id = existing_groups["value"][0]["id"]
+            else:
+                owner_users = await graph.search_users("resteche@usil.edu.py")
+                owner_id = owner_users[0]["id"] if owner_users else None
+                if owner_id:
+                    import re
+                    import time
+                    nickname = re.sub(r'[^a-zA-Z0-9]', '', diplomado_name).lower()
+                    if not nickname:
+                        nickname = f"diplomado{int(time.time())}"
+                    team_data = await graph.create_team_via_group(
+                        display_name=diplomado_name,
+                        mail_nickname=nickname,
+                        description=f"Grupo para {diplomado_name}",
+                        visibility="Private",
+                        owner_ids=[owner_id]
+                    )
+                    group_id = team_data.get("id")
+        except Exception as e:
+            print(f"Error al buscar/crear el grupo: {e}")
+            
+        if group_id:
+            ws.cell(row=header_row_idx - 1, column=col_usuario, value=group_id)
+            login_ids_to_add = [s.get("login_id") for s in result.succeeded if s.get("login_id")]
+            for login_id in login_ids_to_add:
+                try:
+                    user_data = await graph.get("/users", params={"$filter": f"userPrincipalName eq '{login_id}'", "$select": "id"})
+                    if user_data and user_data.get("value"):
+                        uid = user_data["value"][0]["id"]
+                        # Adding user to group
+                        await graph.post(f"/groups/{group_id}/members/$ref", {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{uid}"})
+                except Exception as e:
+                    pass
+        # --- FIN NUEVA LÓGICA ---
 
     output = io.BytesIO()
     wb.save(output)
