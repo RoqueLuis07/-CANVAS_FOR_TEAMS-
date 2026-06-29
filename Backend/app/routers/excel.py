@@ -1043,25 +1043,8 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             pwd = creds["password"]
             error = None
             
-            try:
-                # Verificar si ya existe el usuario por login_id
-                existing = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
-                if existing:
-                    error = "Ya existe en Canvas"
-                else:
-                    await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/users", {
-                        "user": {"name": creds["full_name"]},
-                        "pseudonym": {
-                            "unique_id": login_id, "sis_user_id": cedula,
-                            "password": pwd, "send_confirmation": False,
-                        },
-                        "communication_channel": {
-                            "type": "email", "address": login_id,
-                            "skip_confirmation": True,
-                        },
-                    })
-            except Exception as e:
-                error = str(e)
+            # Diplomados: No se crean en Canvas, solo en Teams/Azure AD
+            pass
             
             if not error:
                 parts = creds["full_name"].strip().split()
@@ -1093,7 +1076,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         institutional_email=login_id,
                         login_id=login_id, 
                         password=pwd, 
-                        platform="both",
+                        platform="teams",
                         program_type="diplomado", 
                         program_name=sheet_name,
                         extra_cc=None,
