@@ -1240,9 +1240,32 @@ async function doUploadDiplomados() {
   
   const btn = document.getElementById('btnUploadDiplomado');
   setLoading(btn, true);
-  toast("Conectando con OneDrive y procesando, esto puede tardar un poco...", "info");
+  toast("Analizando el archivo para pre-visualizar...", "info");
   
   try {
+    const previewRes = await api.post('/excel/diplomados/preview', { url: urlInput, sheet_name: sheetInput });
+    
+    if (previewRes.students_to_process > 50) {
+        toast(`⚠️ LÍMITE EXCEDIDO: Estás intentando procesar ${previewRes.students_to_process} alumnos. El límite de seguridad es 50 por vez. Abortando.`, 'danger');
+        setLoading(btn, false);
+        return;
+    }
+    
+    if (previewRes.students_to_process === 0) {
+        toast("No hay ningún alumno nuevo por procesar en esta pestaña (todos tienen la columna Enviado llena).", "warning");
+        setLoading(btn, false);
+        return;
+    }
+
+    const confMsg = `PRE-VISUALIZACIÓN\n\nPestaña: ${previewRes.sheet_name}\nAlumnos a procesar (Nuevos): ${previewRes.students_to_process}\nAlumnos ignorados (Ya procesados): ${previewRes.students_already_processed}\n\n¿Estás ABSOLUTAMENTE SEGURO de enviar los correos y crear las credenciales para estos ${previewRes.students_to_process} alumnos?`;
+    
+    if (!confirm(confMsg)) {
+        toast("Operación cancelada.", "info");
+        setLoading(btn, false);
+        return;
+    }
+    
+    toast("Iniciando sincronización real, esto puede tardar un poco...", "info");
     const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput });
     toast(`Sincronización exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
     bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
