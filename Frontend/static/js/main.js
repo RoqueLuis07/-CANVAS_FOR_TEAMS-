@@ -1201,49 +1201,47 @@ async function uploadExcelDownloadBlob(url, fileInputId) {
 
 /* 🟢 Modal function for Diplomados */
 function openExcelDiplomados() {
-  document.getElementById('globalModalTitle').innerHTML = '<i class="bi bi-file-earmark-excel me-2"></i>Carga de Diplomados (Excel)';
+  document.getElementById('globalModalTitle').innerHTML = '<i class="bi bi-cloud-arrow-up me-2"></i>Sincronización Directa de Diplomados';
   document.getElementById('globalModalBody').innerHTML = `
     <div class="alert alert-info">
-      Sube aquí tu planilla original de Diplomados de OneDrive. El sistema leerá las columnas <b>Nombre, Cedula y Correo</b>, y te devolverá el archivo idéntico pero con las columnas <b>Usuario, Contraseña y Enviado</b> completadas.
+      Pega el <b>enlace compartido de OneDrive</b> de la planilla de Diplomados. El sistema se conectará a la nube, procesará las cuentas y <b>escribirá las contraseñas directamente en tu archivo original</b>.
     </div>
     <div class="row">
-      <div class="col-md-6 offset-md-3">
-        <div class="drop-zone text-center p-5 border rounded bg-light" id="dz_diplomado" style="cursor: pointer;">
-          <i class="bi bi-cloud-arrow-up display-4 text-secondary mb-3"></i><br>
-          Haz clic o arrastra tu Excel aquí
+      <div class="col-md-8 offset-md-2">
+        <label class="form-label fw-bold">URL Compartida de OneDrive / SharePoint</label>
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+          <input type="url" class="form-control" id="diplomadoUrl" placeholder="https://instituto-my.sharepoint.com/..." required>
         </div>
-        <input type="file" id="excelFileDiplomado" accept=".xlsx,.xls" class="d-none">
-        <div id="previewAreaDiplomado" class="mt-3 text-center text-muted small"></div>
       </div>
     </div>
   `;
   document.getElementById('globalModalFooter').innerHTML = `
     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-    <button type="button" class="btn btn-success" id="btnUploadDiplomado" onclick="doUploadDiplomados()"><i class="bi bi-play-circle me-1"></i>Procesar Planilla</button>
+    <button type="button" class="btn btn-success" id="btnUploadDiplomado" onclick="doUploadDiplomados()"><i class="bi bi-lightning-charge me-1"></i>Sincronizar Ahora</button>
   `;
   
   new bootstrap.Modal(document.getElementById('globalModal')).show();
-  
-  // init dropzone after small delay for DOM
-  setTimeout(() => {
-    initDropZone('dz_diplomado', 'excelFileDiplomado', file => {
-      document.getElementById('previewAreaDiplomado').innerHTML = \`<i class="bi bi-file-earmark-check text-success me-1"></i> Archivo seleccionado: <b>\${file.name}</b>\`;
-    });
-  }, 100);
 }
 
-function doUploadDiplomados() {
+async function doUploadDiplomados() {
+  const urlInput = document.getElementById('diplomadoUrl').value.trim();
+  if (!urlInput) {
+    toast('Por favor, ingresa una URL válida de OneDrive.', 'warning');
+    return;
+  }
+  
   const btn = document.getElementById('btnUploadDiplomado');
   setLoading(btn, true);
-  toast("Procesando usuarios, esto puede tardar unos minutos...", "info");
+  toast("Conectando con OneDrive y procesando, esto puede tardar un poco...", "info");
   
-  uploadExcelDownloadBlob('/excel/diplomados', 'excelFileDiplomado')
-    .then(() => {
-      toast('¡Planilla procesada con éxito! Revisa tus descargas.', 'success');
-      bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
-    })
-    .catch(e => {
-      toast('Error: ' + e.message, 'danger');
-    })
-    .finally(() => setLoading(btn, false));
+  try {
+    const res = await api.post('/excel/diplomados', { url: urlInput });
+    toast(`Sincronización exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
+  } catch (e) {
+    toast('Error: ' + (e.detail || e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
 }

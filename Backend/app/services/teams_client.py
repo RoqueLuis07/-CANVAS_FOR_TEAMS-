@@ -156,10 +156,23 @@ async def get(path: str, params: dict | None = None) -> Any:
     _raise(r)
     return r.json()
 
+@_retry
+async def get_raw(path: str) -> bytes:
+    r = await _client().get(f"{_GRAPH}{path}", headers=_headers())
+    _raise(r)
+    return r.content
 
 @_retry
 async def post(path: str, payload: dict) -> Any:
     r = await _client().post(f"{_GRAPH}{path}", headers=_headers(), json=payload)
+    _raise(r)
+    return r.json() if r.content else {}
+
+@_retry
+async def put_raw(path: str, data: bytes) -> Any:
+    headers = _headers()
+    headers["Content-Type"] = "application/octet-stream"
+    r = await _client().put(f"{_GRAPH}{path}", headers=headers, content=data)
     _raise(r)
     return r.json() if r.content else {}
 

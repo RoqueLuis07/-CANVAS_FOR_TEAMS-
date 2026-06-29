@@ -810,25 +810,40 @@ async def template_unified_enrollment():
 # Diplomados (Lectura y Escritura de Planilla Original)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@router.post("/excel/diplomados", summary="Procesar planilla de Diplomados (retorna el archivo modificado)")
-async def import_diplomados(file: UploadFile = File(...)):
-    _validate_file(file)
-    contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="Archivo demasiado grande.")
+class DiplomadosUrlRequest(BaseModel):
+    url: str
+
+import base64
+
+def _encode_share_url(url: str) -> str:
+    encoded = base64.b64encode(url.encode('utf-8')).decode('utf-8')
+    encoded = encoded.replace('+', '-').replace('/', '_').rstrip('=')
+    return 'u!' + encoded
+
+@router.post("/excel/diplomados", summary="Procesar planilla de Diplomados directo en OneDrive")
+async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    
+    encoded_url = _encode_share_url(req.url)
+    
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. Verifica la URL y los permisos. Detalle: {e}")
 
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Archivo Excel inválido.")
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
 
     _ACCOUNT_LOCAL = settings.canvas_account_id
+    result = BulkResult()
 
     # Buscar en cada hoja
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
         
-        # Encontrar la fila de cabeceras (asumimos que está entre las filas 1 y 5)
         header_row_idx = None
         headers = {}
         for row_idx in range(1, min(6, ws.max_row + 1)):
@@ -840,9 +855,8 @@ async def import_diplomados(file: UploadFile = File(...)):
                 break
         
         if not header_row_idx:
-            continue # No headers found in this sheet, skip to next
+            continue
 
-        # Identificar columnas clave (buscando variaciones)
         def get_col_idx(*keys):
             for k in keys:
                 for h, idx in headers.items():
@@ -854,15 +868,13 @@ async def import_diplomados(file: UploadFile = File(...)):
         col_cedula = get_col_idx("cedula", "cédula", "ci")
         col_correo = get_col_idx("correo")
         
-        # Buscar o crear columnas para resultados
         col_usuario = get_col_idx("usuario")
         col_contra = get_col_idx("contrasena", "contraseña", "clave")
         col_enviado = get_col_idx("enviado", "estado")
 
         if not col_nombre or not col_cedula:
-            continue # Faltan columnas vitales
+            continue
 
-        # Si no existen las columnas de resultado, las creamos al final
         next_col = ws.max_column + 1
         if not col_usuario:
             col_usuario = next_col
@@ -876,7 +888,6 @@ async def import_diplomados(file: UploadFile = File(...)):
             col_enviado = next_col
             ws.cell(row=header_row_idx, column=col_enviado, value="Enviado").font = Font(bold=True)
         
-        # Procesar las filas de datos
         async def process_row(r_idx):
             nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
             cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
@@ -885,18 +896,15 @@ async def import_diplomados(file: UploadFile = File(...)):
             enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
             
             if not nombre or not cedula or cedula == "None":
-                return # Fila vacía
+                return
             if "✅" in enviado or enviado.lower() in ["si", "yes", "true", "enviado"]:
-                return # Ya procesado
+                return
 
-            # 1. Generar credenciales
             creds = generate_credentials(nombre, cedula, settings.institutional_domain)
             login_id = creds["email"]
             pwd = creds["password"]
-            
             error = None
             
-            # 2. Crear en Canvas
             try:
                 await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/users", {
                     "user": {"name": creds["full_name"]},
@@ -912,7 +920,6 @@ async def import_diplomados(file: UploadFile = File(...)):
             except Exception as e:
                 error = str(e)
             
-            # 3. Crear en Teams (si no hubo error grave)
             if not error:
                 parts = creds["full_name"].strip().split()
                 try:
@@ -931,11 +938,9 @@ async def import_diplomados(file: UploadFile = File(...)):
                     })
                     await graph.assign_license(au["id"], settings.azure_sku_students)
                 except Exception as e:
-                    # Ignore user already exists for Teams
                     if "already exists" not in str(e).lower() and "Request_BadRequest" not in str(e):
                         error = str(e)
             
-            # 4. Enviar email (opcional, asume 'diplomado' por defecto)
             if not error and correo and correo != "None":
                 try:
                     await send_welcome_email(
@@ -951,19 +956,19 @@ async def import_diplomados(file: UploadFile = File(...)):
                         attachments=get_program_attachments("diplomado")
                     )
                 except Exception as e:
-                    pass # Ignore email error to not fail the whole row
+                    pass
             
-            # 5. Escribir resultados en el Excel
             if not error:
                 ws.cell(row=r_idx, column=col_usuario, value=login_id)
                 ws.cell(row=r_idx, column=col_contra, value=pwd)
                 ws.cell(row=r_idx, column=col_enviado, value="✅")
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
+                result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"]})
             else:
                 ws.cell(row=r_idx, column=col_enviado, value=f"❌ Error")
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="FF0000")
+                result.failed.append({"input": {"cedula": cedula}, "error": error})
 
-        # Correr en paralelo (batch de a 5)
         tasks = []
         for r_idx in range(header_row_idx + 1, ws.max_row + 1):
             tasks.append(process_row(r_idx))
@@ -972,14 +977,13 @@ async def import_diplomados(file: UploadFile = File(...)):
         for i in range(0, len(tasks), batch_size):
             await asyncio.gather(*tasks[i:i+batch_size])
 
-    # Devolver el archivo modificado
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     
-    filename = file.filename.replace(".xlsx", "_procesado.xlsx") if file.filename else "diplomados_procesado.xlsx"
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+
+    return result
