@@ -1,4 +1,9 @@
-{% extends "base.html" %}
+import sys
+
+with open('Frontend/templates/unified_offboarding.html', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+new_content = """{% extends "base.html" %}
 {% block title %}Desvinculación (Offboarding) | Canvas for Teams{% endblock %}
 
 {% block content %}
@@ -108,97 +113,17 @@
 // Logic for individual offboarding is already in main.js or here.
 // In the original file there was a script tag, we will keep its content if we need to, but it was just initialization for typeahead probably.
 // Wait, let's inject the old script content just in case.
+"""
 
-let searchTimeout;
+# Extract the old script content
+start_idx = content.find('<script>')
+if start_idx != -1:
+    old_script = content[start_idx + 8 : content.find('</script>', start_idx)]
+    new_content += old_script + "\n</script>\n{% endblock %}"
+else:
+    new_content += "</script>\n{% endblock %}"
 
-document.getElementById('searchInput').addEventListener('input', function(e) {
-    const q = e.target.value.trim();
-    clearTimeout(searchTimeout);
-    
-    document.getElementById('btnExecute').disabled = true;
-    document.getElementById('sysInput').value = '';
-    document.getElementById('emailInput').value = '';
+with open('Frontend/templates/unified_offboarding.html', 'w', encoding='utf-8') as f:
+    f.write(new_content)
 
-    if (q.length < 3) return;
-    
-    document.getElementById('searchSpinner').style.display = 'inline-block';
-    searchTimeout = setTimeout(() => fetchUser(q), 500);
-});
-
-async function fetchUser(query) {
-    const spinner = document.getElementById('searchSpinner');
-    const input = document.getElementById('searchInput');
-    const btnExecute = document.getElementById('btnExecute');
-    
-    input.disabled = true;
-    
-    try {
-        const res = await fetch('/ingreso/find_user?query=' + encodeURIComponent(query));
-        if (res.ok) {
-            const data = await res.json();
-            if (data.sis_user_id) {
-                document.getElementById('sysInput').value = data.sis_user_id;
-                document.getElementById('emailInput').value = data.email || '';
-                input.value = data.name;
-                toast("Usuario validado: " + data.name, 'success');
-                btnExecute.disabled = false;
-            } else if (data.detail || data.error) {
-                toast(data.detail || data.error, 'danger');
-            } else {
-                toast("Usuario no encontrado", 'warning');
-            }
-        } else {
-            const err = await res.json();
-            toast(err.detail || 'Error al conectar con Canvas', 'danger');
-        }
-    } catch (err) {
-        toast("Error de red al buscar usuario", 'danger');
-    } finally {
-        spinner.style.display = 'none';
-        input.disabled = false;
-    }
-}
-
-async function executeOffboarding() {
-    const sysId = document.getElementById('sysInput').value;
-    const btn = document.getElementById('btnExecute');
-    
-    if (!sysId) {
-        toast("Busque y seleccione un usuario primero.", "warning");
-        return;
-    }
-    
-    if (!confirm("¿Está absolutamente seguro de suspender este usuario en Teams y Canvas?")) {
-        return;
-    }
-    
-    btn.innerText = "Procesando...";
-    btn.disabled = true;
-    
-    try {
-        const res = await fetch('/egreso/suspend?sys_user_id=' + encodeURIComponent(sysId), {
-            method: 'POST'
-        });
-        const data = await res.json();
-        
-        if (res.ok) {
-            let msg = `Canvas: ${data.canvas} | Teams: ${data.teams}`;
-            toast("Proceso finalizado. " + msg, "success");
-            // Limpiar inputs
-            document.getElementById('searchInput').value = '';
-            document.getElementById('sysInput').value = '';
-            document.getElementById('emailInput').value = '';
-        } else {
-            toast(data.detail || "Error en el servidor", "danger");
-            btn.disabled = false;
-        }
-    } catch (err) {
-        toast("Error de red: " + err.message, "danger");
-        btn.disabled = false;
-    } finally {
-        btn.innerHTML = '<i class="bi bi-person-x-fill me-2"></i>Ejecutar Desvinculación';
-    }
-}
-
-</script>
-{% endblock %}
+print("HTML replaced")
