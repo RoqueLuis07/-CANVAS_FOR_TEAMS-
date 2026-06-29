@@ -819,6 +819,7 @@ class PreviewResponse(BaseModel):
     students_to_process: int
     students_already_processed: int
     total_rows: int
+    student_details: list[dict] = []
 
 import base64
 
@@ -877,6 +878,7 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
 
     to_process = 0
     already_processed = 0
+    details = []
     
     empty_count = 0
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
@@ -898,13 +900,15 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
             already_processed += 1
         else:
             to_process += 1
+            details.append({"nombre": nombre_val, "cedula": cedula_val})
             
     wb.close()
     return PreviewResponse(
         sheet_name=req.sheet_name,
         students_to_process=to_process,
         students_already_processed=already_processed,
-        total_rows=to_process + already_processed
+        total_rows=to_process + already_processed,
+        student_details=details
     )
 
 

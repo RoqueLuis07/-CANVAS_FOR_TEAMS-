@@ -1257,7 +1257,16 @@ async function doUploadDiplomados() {
         return;
     }
 
-    const confMsg = `PRE-VISUALIZACIÓN\n\nPestaña: ${previewRes.sheet_name}\nAlumnos a procesar (Nuevos): ${previewRes.students_to_process}\nAlumnos ignorados (Ya procesados): ${previewRes.students_already_processed}\n\n¿Estás ABSOLUTAMENTE SEGURO de enviar los correos y crear las credenciales para estos ${previewRes.students_to_process} alumnos?`;
+    let detailsStr = "";
+    if (previewRes.student_details && previewRes.student_details.length > 0) {
+        const previewList = previewRes.student_details.slice(0, 10).map(s => `- ${s.nombre} (${s.cedula})`).join('\n');
+        detailsStr = `\n\nAlumnos a procesar:\n${previewList}`;
+        if (previewRes.student_details.length > 10) {
+            detailsStr += `\n... y ${previewRes.student_details.length - 10} alumnos más.`;
+        }
+    }
+
+    const confMsg = `PRE-VISUALIZACIÓN\n\nPestaña: ${previewRes.sheet_name}\nNuevos: ${previewRes.students_to_process}\nIgnorados (Ya procesados): ${previewRes.students_already_processed}${detailsStr}\n\n¿Estás ABSOLUTAMENTE SEGURO de procesar estos alumnos?`;
     
     if (!confirm(confMsg)) {
         toast("Operación cancelada.", "info");
