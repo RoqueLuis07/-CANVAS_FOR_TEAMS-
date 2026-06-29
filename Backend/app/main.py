@@ -60,7 +60,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize databases: {e}")
         
     yield
-
+    from app.services import canvas_client, teams_client
+    from app.core import database as db
+    try:
+        await canvas_client.close_client()
+        await teams_client.close_client()
+        await db.close_db()
+    except Exception as e:
+        logger.error(f"Failed to close connections cleanly: {e}")
 
 # Create FastAPI app
 app = FastAPI(

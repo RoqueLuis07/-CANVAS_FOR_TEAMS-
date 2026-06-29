@@ -37,8 +37,19 @@ _retry = retry(
 )
 
 
+_client_instance: httpx.AsyncClient | None = None
+
 def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(base_url=_BASE, headers=_HEADERS, timeout=_TIMEOUT)
+    global _client_instance
+    if _client_instance is None or _client_instance.is_closed:
+        _client_instance = httpx.AsyncClient(base_url=_BASE, headers=_HEADERS, timeout=_TIMEOUT)
+    return _client_instance
+
+async def close_client() -> None:
+    global _client_instance
+    if _client_instance is not None and not _client_instance.is_closed:
+        await _client_instance.aclose()
+        _client_instance = None
 
 
 def _raise(r: httpx.Response) -> None:
@@ -85,34 +96,30 @@ def _raise(r: httpx.Response) -> None:
 
 @_retry
 async def get(path: str, params: dict | None = None) -> Any:
-    async with _client() as c:
-        r = await c.get(path, params=params)
-        _raise(r)
-        return r.json()
+    r = await _client().get(path, params=params)
+    _raise(r)
+    return r.json()
 
 
 @_retry
 async def post(path: str, payload: dict) -> Any:
-    async with _client() as c:
-        r = await c.post(path, json=payload)
-        _raise(r)
-        return r.json()
+    r = await _client().post(path, json=payload)
+    _raise(r)
+    return r.json()
 
 
 @_retry
 async def put(path: str, payload: dict) -> Any:
-    async with _client() as c:
-        r = await c.put(path, json=payload)
-        _raise(r)
-        return r.json()
+    r = await _client().put(path, json=payload)
+    _raise(r)
+    return r.json()
 
 
 @_retry
 async def delete(path: str, params: dict | None = None) -> Any:
-    async with _client() as c:
-        r = await c.delete(path, params=params)
-        _raise(r)
-        return r.json() if r.content else {}
+    r = await _client().delete(path, params=params)
+    _raise(r)
+    return r.json() if r.content else {}
 
 
 async def paginate(path: str, params: dict | None = None) -> list[Any]:
@@ -122,20 +129,20 @@ async def paginate(path: str, params: dict | None = None) -> list[Any]:
     params.setdefault("per_page", 100)
     next_url: str | None = path
 
-    async with _client() as c:
-        while next_url:
-            if next_url.startswith("http"):
-                r = await c.get(next_url, params=params if next_url == path else None)
-            else:
-                r = await c.get(next_url, params=params)
-            _raise(r)
-            data = r.json()
-            if isinstance(data, list):
-                results.extend(data)
-            else:
-                results.append(data)
-            link = r.headers.get("Link", "")
-            next_url = _parse_next_link(link)
+    c = _client()
+    while next_url:
+        if next_url.startswith("http"):
+            r = await c.get(next_url, params=params if next_url == path else None)
+        else:
+            r = await c.get(next_url, params=params)
+        _raise(r)
+        data = r.json()
+        if isinstance(data, list):
+            results.extend(data)
+        else:
+            results.append(data)
+        link = r.headers.get("Link", "")
+        next_url = _parse_next_link(link)
 
     return results
 
@@ -152,20 +159,20 @@ async def paginate_limited(path: str, params: dict | None = None,
     params.setdefault("per_page", 100)
     next_url: str | None = path
 
-    async with _client() as c:
-        while next_url and len(results) < max_records:
-            if next_url.startswith("http"):
-                r = await c.get(next_url, params=params if next_url == path else None)
-            else:
-                r = await c.get(next_url, params=params)
-            _raise(r)
-            data = r.json()
-            if isinstance(data, list):
-                results.extend(data)
-            else:
-                results.append(data)
-            link = r.headers.get("Link", "")
-            next_url = _parse_next_link(link)
+    c = _client()
+    while next_url and len(results) < max_records:
+        if next_url.startswith("http"):
+            r = await c.get(next_url, params=params if next_url == path else None)
+        else:
+            r = await c.get(next_url, params=params)
+        _raise(r)
+        data = r.json()
+        if isinstance(data, list):
+            results.extend(data)
+        else:
+            results.append(data)
+        link = r.headers.get("Link", "")
+        next_url = _parse_next_link(link)
 
     return results[:max_records]
 

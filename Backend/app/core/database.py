@@ -10,12 +10,28 @@ logger = logging.getLogger(__name__)
 # Database file location
 DB_FILE = Path(__file__).parent.parent.parent / "app.db"
 
+_conn = None
+_db_lock = asyncio.Lock()
+
+def _get_conn():
+    global _conn
+    if _conn is None:
+        _conn = sqlite3.connect(str(DB_FILE), check_same_thread=False, timeout=30.0)
+    return _conn
+
+async def close_db():
+    global _conn
+    if _conn:
+        _conn.close()
+        _conn = None
+
+
 
 async def init_db():
     """Initialize database - create tables if needed."""
     try:
         def _init():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
 
             # Create main tables
@@ -75,10 +91,11 @@ async def init_db():
             """)
 
             conn.commit()
-            conn.close()
+            # conn.close()
             logger.info(f"Database initialized at {DB_FILE}")
 
-        await asyncio.to_thread(_init)
+        async with _db_lock:
+            await asyncio.to_thread(_init)
     except Exception as e:
         logger.error(f"Database initialization error: {e}", exc_info=True)
         raise
@@ -88,14 +105,15 @@ async def count_courses() -> int:
     """Count total courses."""
     try:
         def _count():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM canvas_courses")
             count = cursor.fetchone()[0]
-            conn.close()
+            # conn.close()
             return count
 
-        return await asyncio.to_thread(_count)
+        async with _db_lock:
+            return await asyncio.to_thread(_count)
     except Exception as e:
         logger.error(f"Error counting courses: {e}")
         return 0
@@ -105,14 +123,15 @@ async def count_canvas_users() -> int:
     """Count total Canvas users."""
     try:
         def _count():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM canvas_users")
             count = cursor.fetchone()[0]
-            conn.close()
+            # conn.close()
             return count
 
-        return await asyncio.to_thread(_count)
+        async with _db_lock:
+            return await asyncio.to_thread(_count)
     except Exception as e:
         logger.error(f"Error counting Canvas users: {e}")
         return 0
@@ -122,14 +141,15 @@ async def count_azure_users() -> int:
     """Count total Azure users."""
     try:
         def _count():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM azure_users")
             count = cursor.fetchone()[0]
-            conn.close()
+            # conn.close()
             return count
 
-        return await asyncio.to_thread(_count)
+        async with _db_lock:
+            return await asyncio.to_thread(_count)
     except Exception as e:
         logger.error(f"Error counting Azure users: {e}")
         return 0
@@ -139,17 +159,18 @@ async def mark_synced(sync_type: str) -> bool:
     """Mark a sync as completed."""
     try:
         def _mark():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO sync_metadata (sync_type, last_sync, status)
                 VALUES (?, ?, 'completed')
             """, (sync_type, datetime.utcnow()))
             conn.commit()
-            conn.close()
+            # conn.close()
             return True
 
-        return await asyncio.to_thread(_mark)
+        async with _db_lock:
+            return await asyncio.to_thread(_mark)
     except Exception as e:
         logger.error(f"Error marking sync: {e}")
         return False
@@ -159,16 +180,17 @@ async def get_last_sync(sync_type: str) -> datetime | None:
     """Get the last sync time for a specific type."""
     try:
         def _get():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT last_sync FROM sync_metadata WHERE sync_type = ?
             """, (sync_type,))
             result = cursor.fetchone()
-            conn.close()
+            # conn.close()
             return result[0] if result else None
 
-        result = await asyncio.to_thread(_get)
+        async with _db_lock:
+            result = await asyncio.to_thread(_get)
         return datetime.fromisoformat(result) if result else None
     except Exception as e:
         logger.error(f"Error getting last sync: {e}")
@@ -193,7 +215,7 @@ async def upsert_courses(courses: list) -> int:
     """Upsert courses into database. Returns count of inserted/updated."""
     try:
         def _upsert():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             count = 0
 
@@ -210,10 +232,11 @@ async def upsert_courses(courses: list) -> int:
                 count += 1
 
             conn.commit()
-            conn.close()
+            # conn.close()
             return count
 
-        return await asyncio.to_thread(_upsert)
+        async with _db_lock:
+            return await asyncio.to_thread(_upsert)
     except Exception as e:
         logger.error(f"Error upserting courses: {e}")
         return 0
@@ -223,7 +246,7 @@ async def upsert_canvas_users(users: list) -> int:
     """Upsert Canvas users into database. Returns count of inserted/updated."""
     try:
         def _upsert():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             count = 0
 
@@ -245,10 +268,11 @@ async def upsert_canvas_users(users: list) -> int:
                     continue
 
             conn.commit()
-            conn.close()
+            # conn.close()
             return count
 
-        return await asyncio.to_thread(_upsert)
+        async with _db_lock:
+            return await asyncio.to_thread(_upsert)
     except Exception as e:
         logger.error(f"Error upserting Canvas users: {e}")
         return 0
@@ -258,14 +282,15 @@ async def get_canvas_users() -> list:
     """Return all Canvas users from local DB."""
     try:
         def _get():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT id, name, email, login_id FROM canvas_users ORDER BY name")
             rows = [dict(r) for r in cursor.fetchall()]
-            conn.close()
+            # conn.close()
             return rows
-        return await asyncio.to_thread(_get)
+        async with _db_lock:
+            return await asyncio.to_thread(_get)
     except Exception as e:
         logger.error(f"Error getting Canvas users: {e}")
         return []
@@ -275,7 +300,7 @@ async def search_canvas_users(term: str, limit: int = 1000) -> list:
     """Search Canvas users in local DB by name, email or login_id."""
     try:
         def _search():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             pattern = f"%{term}%"
@@ -285,9 +310,10 @@ async def search_canvas_users(term: str, limit: int = 1000) -> list:
                 ORDER BY name LIMIT ?
             """, (pattern, pattern, pattern, limit))
             rows = [dict(r) for r in cursor.fetchall()]
-            conn.close()
+            # conn.close()
             return rows
-        return await asyncio.to_thread(_search)
+        async with _db_lock:
+            return await asyncio.to_thread(_search)
     except Exception as e:
         logger.error(f"Error searching Canvas users: {e}")
         return []
@@ -297,11 +323,12 @@ async def delete_canvas_user(user_id: str) -> bool:
     """Delete a Canvas user from local DB."""
     try:
         def _del():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.execute("DELETE FROM canvas_users WHERE id = ?", (user_id,))
             conn.commit()
-            conn.close()
-        await asyncio.to_thread(_del)
+            # conn.close()
+        async with _db_lock:
+            await asyncio.to_thread(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting Canvas user {user_id}: {e}")
@@ -312,14 +339,15 @@ async def get_courses() -> list:
     """Return all courses from local DB."""
     try:
         def _get():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT id, name, course_code FROM canvas_courses ORDER BY name")
             rows = [dict(r) for r in cursor.fetchall()]
-            conn.close()
+            # conn.close()
             return rows
-        return await asyncio.to_thread(_get)
+        async with _db_lock:
+            return await asyncio.to_thread(_get)
     except Exception as e:
         logger.error(f"Error getting courses: {e}")
         return []
@@ -329,11 +357,12 @@ async def delete_course(course_id: str) -> bool:
     """Delete a course from local DB."""
     try:
         def _del():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.execute("DELETE FROM canvas_courses WHERE id = ?", (course_id,))
             conn.commit()
-            conn.close()
-        await asyncio.to_thread(_del)
+            # conn.close()
+        async with _db_lock:
+            await asyncio.to_thread(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting course {course_id}: {e}")
@@ -344,7 +373,7 @@ async def upsert_azure_users(users: list) -> int:
     """Upsert Azure AD users into local DB."""
     try:
         def _upsert():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             count = 0
             for user in users:
@@ -364,9 +393,10 @@ async def upsert_azure_users(users: list) -> int:
                 except Exception as ue:
                     logger.warning(f"Skipping Azure user {user.get('id')}: {ue}")
             conn.commit()
-            conn.close()
+            # conn.close()
             return count
-        return await asyncio.to_thread(_upsert)
+        async with _db_lock:
+            return await asyncio.to_thread(_upsert)
     except Exception as e:
         logger.error(f"Error upserting Azure users: {e}")
         return 0
@@ -376,7 +406,7 @@ async def get_azure_users(search: str | None = None) -> list:
     """Return Azure AD users from local DB, optionally filtered by search term."""
     try:
         def _get():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             if search:
@@ -395,9 +425,10 @@ async def get_azure_users(search: str | None = None) -> list:
                     FROM azure_users ORDER BY display_name
                 """)
             rows = [dict(r) for r in cursor.fetchall()]
-            conn.close()
+            # conn.close()
             return rows
-        return await asyncio.to_thread(_get)
+        async with _db_lock:
+            return await asyncio.to_thread(_get)
     except Exception as e:
         logger.error(f"Error getting Azure users: {e}")
         return []
@@ -407,11 +438,12 @@ async def delete_azure_user(user_id: str) -> bool:
     """Delete an Azure AD user from local DB."""
     try:
         def _del():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.execute("DELETE FROM azure_users WHERE id = ?", (user_id,))
             conn.commit()
-            conn.close()
-        await asyncio.to_thread(_del)
+            # conn.close()
+        async with _db_lock:
+            await asyncio.to_thread(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting Azure user {user_id}: {e}")
@@ -422,7 +454,7 @@ async def upsert_enrollments(enrollments: list) -> int:
     """Upsert enrollments into local DB."""
     try:
         def _upsert():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             cursor = conn.cursor()
             count = 0
             for e in enrollments:
@@ -441,9 +473,10 @@ async def upsert_enrollments(enrollments: list) -> int:
                 except Exception as ue:
                     logger.warning(f"Skipping enrollment {e.get('id')}: {ue}")
             conn.commit()
-            conn.close()
+            # conn.close()
             return count
-        return await asyncio.to_thread(_upsert)
+        async with _db_lock:
+            return await asyncio.to_thread(_upsert)
     except Exception as e:
         logger.error(f"Error upserting enrollments: {e}")
         return 0
@@ -453,11 +486,12 @@ async def delete_enrollment(enrollment_id: str) -> bool:
     """Delete an enrollment from local DB."""
     try:
         def _del():
-            conn = sqlite3.connect(str(DB_FILE))
+            conn = _get_conn()
             conn.execute("DELETE FROM canvas_enrollments WHERE id = ?", (enrollment_id,))
             conn.commit()
-            conn.close()
-        await asyncio.to_thread(_del)
+            # conn.close()
+        async with _db_lock:
+            await asyncio.to_thread(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting enrollment {enrollment_id}: {e}")

@@ -132,36 +132,49 @@ async def assign_license(user_id: str, sku_part_number: str) -> Any:
         return None
     return await post(f"/users/{user_id}/assignLicense", {"addLicenses": [{"skuId": sku_id}], "removeLicenses": []})
 
+_client_instance: httpx.AsyncClient | None = None
+
+def _client(timeout: httpx.Timeout | None = None) -> httpx.AsyncClient:
+    global _client_instance
+    if _client_instance is None or _client_instance.is_closed:
+        _client_instance = httpx.AsyncClient(timeout=_TIMEOUT)
+    if timeout is not None:
+        _client_instance.timeout = timeout
+    else:
+        _client_instance.timeout = _TIMEOUT
+    return _client_instance
+
+async def close_client() -> None:
+    global _client_instance
+    if _client_instance is not None and not _client_instance.is_closed:
+        await _client_instance.aclose()
+        _client_instance = None
 
 @_retry
 async def get(path: str, params: dict | None = None) -> Any:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-        r = await c.get(f"{_GRAPH}{path}", headers=_headers(), params=params)
-        _raise(r)
-        return r.json()
+    r = await _client().get(f"{_GRAPH}{path}", headers=_headers(), params=params)
+    _raise(r)
+    return r.json()
 
 
 @_retry
 async def post(path: str, payload: dict) -> Any:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-        r = await c.post(f"{_GRAPH}{path}", headers=_headers(), json=payload)
-        _raise(r)
-        return r.json() if r.content else {}
+    r = await _client().post(f"{_GRAPH}{path}", headers=_headers(), json=payload)
+    _raise(r)
+    return r.json() if r.content else {}
 
 
 @_retry
 async def patch(path: str, payload: dict) -> Any:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-        r = await c.patch(f"{_GRAPH}{path}", headers=_headers(), json=payload)
-        _raise(r)
-        return r.json() if r.content else {}
+    r = await _client().patch(f"{_GRAPH}{path}", headers=_headers(), json=payload)
+    _raise(r)
+    return r.json() if r.content else {}
 
 
 @_retry
 async def delete(path: str) -> None:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-        r = await c.delete(f"{_GRAPH}{path}", headers=_headers())
-        _raise(r)
+    r = await _client().delete(f"{_GRAPH}{path}", headers=_headers())
+    _raise(r)
 
 
 async def paginate(path: str, params: dict | None = None) -> list[Any]:
@@ -169,13 +182,13 @@ async def paginate(path: str, params: dict | None = None) -> list[Any]:
     results: list[Any] = []
     next_url: str | None = f"{_GRAPH}{path}"
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-        while next_url:
-            r = await c.get(next_url, headers=_headers(), params=params if next_url == f"{_GRAPH}{path}" else None)
-            _raise(r)
-            data = r.json()
-            results.extend(data.get("value", []))
-            next_url = data.get("@odata.nextLink")
+    c = _client()
+    while next_url:
+        r = await c.get(next_url, headers=_headers(), params=params if next_url == f"{_GRAPH}{path}" else None)
+        _raise(r)
+        data = r.json()
+        results.extend(data.get("value", []))
+        next_url = data.get("@odata.nextLink")
 
     return results
 
@@ -188,17 +201,20 @@ async def paginate_limited(path: str, params: dict | None = None,
     next_url: str | None = f"{_GRAPH}{path}"
     req_headers = {**_headers(), **(extra_headers or {})}
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as c:
-        while next_url and len(results) < max_records:
-            r = await c.get(
-                next_url,
-                headers=req_headers,
-                params=params if next_url == f"{_GRAPH}{path}" else None,
-            )
-            _raise(r)
-            data = r.json()
-            results.extend(data.get("value", []))
-            next_url = data.get("@odata.nextLink")
+    c = _client(timeout=httpx.Timeout(60.0))
+    while next_url and len(results) < max_records:
+        r = await c.get(
+            next_url,
+            headers=req_headers,
+            params=params if next_url == f"{_GRAPH}{path}" else None,
+        )
+        _raise(r)
+        data = r.json()
+        results.extend(data.get("value", []))
+        next_url = data.get("@odata.nextLink")
+    
+    # reset timeout
+    c.timeout = _TIMEOUT
 
     return results[:max_records]
 
