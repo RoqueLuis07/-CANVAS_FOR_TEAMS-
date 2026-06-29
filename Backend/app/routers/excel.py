@@ -1372,6 +1372,13 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     if len(users_to_process) > 50:
         raise HTTPException(status_code=400, detail=f"Demasiados registros nuevos pendientes ({len(users_to_process)}). Máximo 50 por ejecución.")
 
+    if len(users_to_process) > 0:
+        try:
+            # Verificar si el archivo está bloqueado
+            await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="El archivo Excel está abierto. Por favor, ciérralo completamente en tu navegador o Excel antes de sincronizar.")
+
     for user_data in users_to_process:
         correo = user_data["correo"]
         r_idx = user_data["r_idx"]
