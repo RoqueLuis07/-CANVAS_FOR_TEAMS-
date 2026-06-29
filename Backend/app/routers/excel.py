@@ -1113,6 +1113,13 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         if len(tasks) > 50:
             raise HTTPException(status_code=400, detail=f"Límite de seguridad excedido: Intentas procesar {len(tasks)} alumnos a la vez (Máximo 50 permitidos). Revisa el archivo para evitar accidentes.")
             
+        if len(tasks) > 0:
+            try:
+                # Verificar si el archivo está bloqueado antes de empezar a procesar alumnos
+                await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail="El archivo Excel está abierto. Por favor, ciérralo completamente en tu navegador o Excel antes de sincronizar.")
+
         batch_size = 5
         for i in range(0, len(tasks), batch_size):
             await asyncio.gather(*tasks[i:i+batch_size])
