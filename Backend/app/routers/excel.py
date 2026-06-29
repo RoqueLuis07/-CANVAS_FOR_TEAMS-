@@ -1271,10 +1271,10 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
                 })
 
     return PreviewResponse(
-        total=to_process + already_processed,
-        to_process=to_process,
-        already_processed=already_processed,
-        sample_data=details
+        sheet_name=req.sheet_name,
+        students_to_process=to_process,
+        students_already_processed=already_processed,
+        student_details=details
     )
 
 @router.post("/excel/egreso", summary="Procesar Egreso Masivo desde OneDrive")
