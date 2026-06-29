@@ -1298,30 +1298,68 @@ async function doUploadDiplomados() {
         return;
     }
 
-    let detailsStr = "";
-    if (previewRes.student_details && previewRes.student_details.length > 0) {
-        const previewList = previewRes.student_details.slice(0, 10).map(s => `- ${s.nombre} (${s.cedula})`).join('\n');
-        detailsStr = `\n\nAlumnos a procesar:\n${previewList}`;
-        if (previewRes.student_details.length > 10) {
-            detailsStr += `\n... y ${previewRes.student_details.length - 10} alumnos más.`;
-        }
+    let tableHtml = `<div class="table-responsive mt-3" style="max-height: 300px; overflow-y: auto;">
+      <table class="table table-sm table-bordered table-striped table-hover">
+        <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+          <tr>
+            <th class="text-center" style="width: 50px;">Nº</th>
+            <th>Nombre Completo</th>
+            <th>Cédula</th>
+          </tr>
+        </thead>
+        <tbody>`;
+    
+    if (previewRes.student_details) {
+        previewRes.student_details.forEach((s, idx) => {
+            tableHtml += `<tr>
+                <td class="text-center">${idx + 1}</td>
+                <td>${s.nombre}</td>
+                <td><span class="badge bg-secondary">${s.cedula}</span></td>
+            </tr>`;
+        });
     }
+    tableHtml += `</tbody></table></div>`;
 
-    const confMsg = `PRE-VISUALIZACIÓN\n\nPestaña: ${previewRes.sheet_name}\nNuevos: ${previewRes.students_to_process}\nIgnorados (Ya procesados): ${previewRes.students_already_processed}${detailsStr}\n\n¿Estás ABSOLUTAMENTE SEGURO de procesar estos alumnos?`;
+    document.getElementById('globalModalTitle').innerHTML = '<i class="bi bi-table me-2"></i>Pre-visualización de Datos';
+    document.getElementById('globalModalBody').innerHTML = `
+      <div class="alert alert-warning mb-0">
+        <strong>Revisa los datos cuidadosamente antes de continuar.</strong><br>
+        Se van a procesar <b>${previewRes.students_to_process}</b> alumnos nuevos.<br>
+        <small class="text-muted">Alumnos ignorados (ya enviados previamente): ${previewRes.students_already_processed}</small>
+      </div>
+      ${tableHtml}
+    `;
     
-    if (!confirm(confMsg)) {
-        toast("Operación cancelada.", "info");
-        setLoading(btn, false);
-        return;
-    }
-    
-    toast("Iniciando sincronización real, esto puede tardar un poco...", "info");
-    const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput });
-    toast(`Sincronización exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
-    bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
+    // We need to safely pass the string arguments to the new function
+    // We can just store them in hidden data attributes or pass them directly
+    const safeUrl = urlInput.replace(/'/g, "\\'");
+    const safeSheet = sheetInput.replace(/'/g, "\\'");
+
+    document.getElementById('globalModalFooter').innerHTML = `
+      <button type="button" class="btn btn-outline-secondary" onclick="openExcelDiplomados()">Cancelar y Volver</button>
+      <button type="button" class="btn btn-success" id="btnConfirmUpload" onclick="executeUploadDiplomados('${safeUrl}', '${safeSheet}')">
+        <i class="bi bi-check-circle me-1"></i>Confirmar y Sincronizar
+      </button>
+    `;
+
   } catch (e) {
     toast('Error: ' + (e.detail || e.message || e), 'danger');
-  } finally {
     setLoading(btn, false);
   }
+}
+
+async function executeUploadDiplomados(urlInput, sheetInput) {
+    const btn = document.getElementById('btnConfirmUpload');
+    setLoading(btn, true);
+    toast("Iniciando sincronización real, esto puede tardar un poco...", "info");
+    
+    try {
+        const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput });
+        toast(`Sincronización exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
+        bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
+    } catch (e) {
+        toast('Error: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
 }
