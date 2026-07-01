@@ -77,10 +77,14 @@ def get_redirect_uri(request: Request = None) -> str:
         port = request.headers.get("x-forwarded-port")
         
         # Local development uses the actual request port
-        if host in ("localhost", "127.0.0.1") and request.url.port:
-            return f"{scheme}://{host}:{request.url.port}/auth/callback"
+        if host in ("localhost", "127.0.0.1"):
+            if request.url.port:
+                return f"{scheme}://{host}:{request.url.port}/auth/callback"
+            return f"{scheme}://{host}/auth/callback"
             
-        # Cloud/Proxy with explicit forwarded port
+        # Cloud/Proxy - Force HTTPS for Azure AD security rules
+        scheme = "https"
+            
         if port and port not in ("80", "443"):
             return f"{scheme}://{host}:{port}/auth/callback"
             
