@@ -313,7 +313,7 @@ function _renderTable(containerId) {
   const thead = chkHead
     + cols.map(c =>
         `<th style="cursor:pointer;user-select:none;white-space:nowrap"
-             onclick="sortTable('${containerId}','${c.key}')">${esc(c.label)}${arrow(c.key)}</th>`
+             onclick="sortTable('${containerId}','${c.key}')">${c.label}${arrow(c.key)}</th>`
       ).join('')
     + (actions ? '<th style="width:1%">Acciones</th>' : '');
 
