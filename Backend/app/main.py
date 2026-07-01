@@ -85,12 +85,35 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# --- SlowAPI Rate Limiting ---
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+# -----------------------------
+
+# Security middleware
+from app.middleware.security import SecurityMiddleware
+app.add_middleware(SecurityMiddleware)
+
+# CORS middleware (Strict)
+# En producción, solo permitimos el origen de la propia app. En local, localhost.
+allowed_origins = [
+    settings.site_url.rstrip("/"),
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
