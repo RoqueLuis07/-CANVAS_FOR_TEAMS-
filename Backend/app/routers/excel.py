@@ -1198,6 +1198,286 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     return result
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Cursos Canvas (Lectura y Escritura de Planilla OneDrive)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CoursesPreviewResponse(BaseModel):
+    sheet_name: str
+    courses_to_create: int
+    courses_already_created: int
+    course_details: list[dict]
+
+
+@router.post("/excel/courses/sheets", response_model=list[str])
+async def get_courses_sheets(req: UrlOnlyRequest) -> list[str]:
+    """Lista las pestañas de un archivo Excel de cursos en OneDrive."""
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        sheets = wb.sheetnames
+        wb.close()
+        return sheets
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+
+@router.post("/excel/courses/preview", summary="Pre-visualizar planilla de Cursos")
+async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewResponse:
+    """Lee la planilla de cursos y devuelve un resumen de los que se van a crear."""
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+
+    # Buscar fila de encabezados
+    header_row_idx = None
+    headers = {}
+    for row_idx in range(1, min(6, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
+        if any("nombre" in v or "curso" in v or "canvas" in v for v in row_vals):
+            header_row_idx = row_idx
+            for col_idx, val in enumerate(row_vals, 1):
+                headers[_norm(val)] = col_idx
+            break
+
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados. Asegúrate de tener una columna 'Nombre del Curso' o 'CANVAS'.")
+
+    def get_col(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col("nombre", "curso", "canvas")
+    col_sis = get_col("sis", "sys")
+    col_canvas_id = get_col("canvas id", "id canvas", "course id")
+    col_estado = get_col("estado")
+
+    if not col_nombre:
+        raise HTTPException(status_code=400, detail="No se encontró la columna 'Nombre del Curso' / 'CANVAS'.")
+
+    to_create = 0
+    already_created = 0
+    details = []
+
+    empty_count = 0
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
+
+        if not nombre_val:
+            empty_count += 1
+            if empty_count > 10:
+                break
+            continue
+
+        empty_count = 0
+        sis_val = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
+
+        # Check if already created (Canvas ID column has a value)
+        canvas_id_val = ""
+        if col_canvas_id:
+            canvas_id_val = str(ws.cell(row=r_idx, column=col_canvas_id).value or "").strip()
+
+        estado_val = ""
+        if col_estado:
+            estado_val = str(ws.cell(row=r_idx, column=col_estado).value or "").strip()
+
+        if canvas_id_val and canvas_id_val != "None" and canvas_id_val.isdigit():
+            already_created += 1
+        elif "✅" in estado_val:
+            already_created += 1
+        else:
+            to_create += 1
+            details.append({"nombre": nombre_val, "sis_id": sis_val})
+
+    wb.close()
+    return CoursesPreviewResponse(
+        sheet_name=req.sheet_name,
+        courses_to_create=to_create,
+        courses_already_created=already_created,
+        course_details=details
+    )
+
+
+@router.post("/excel/courses", summary="Crear cursos en Canvas desde planilla OneDrive")
+async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
+    """Crea cursos en Canvas leyendo de una planilla en OneDrive y escribe los IDs de vuelta."""
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    _ACCOUNT_LOCAL = settings.canvas_account_id
+    result = BulkResult()
+    ws = wb[req.sheet_name]
+
+    # Find header row
+    header_row_idx = None
+    headers = {}
+    for row_idx in range(1, min(6, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
+        if any("nombre" in v or "curso" in v or "canvas" in v for v in row_vals):
+            header_row_idx = row_idx
+            for col_idx, val in enumerate(row_vals, 1):
+                headers[_norm(val)] = col_idx
+            break
+
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    def get_col(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col("nombre", "curso", "canvas")
+    col_sis = get_col("sis", "sys")
+    col_canvas_id = get_col("canvas id", "id canvas", "course id")
+    col_estado = get_col("estado")
+
+    if not col_nombre:
+        raise HTTPException(status_code=400, detail="No se encontró la columna de nombre del curso.")
+
+    # Ensure Canvas ID and Estado columns exist
+    next_col = ws.max_column + 1
+    if not col_canvas_id:
+        col_canvas_id = next_col
+        ws.cell(row=header_row_idx, column=col_canvas_id, value="Canvas ID").font = Font(bold=True)
+        next_col += 1
+    if not col_estado:
+        col_estado = next_col
+        ws.cell(row=header_row_idx, column=col_estado, value="Estado").font = Font(bold=True)
+
+    async def create_course_row(r_idx):
+        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
+        sis_id = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
+
+        if not nombre:
+            return
+
+        # Skip already created
+        existing_id = str(ws.cell(row=r_idx, column=col_canvas_id).value or "").strip()
+        if existing_id and existing_id != "None" and existing_id.isdigit():
+            return
+
+        existing_estado = str(ws.cell(row=r_idx, column=col_estado).value or "").strip()
+        if "✅" in existing_estado:
+            return
+
+        error = None
+        canvas_id = None
+
+        try:
+            payload = {
+                "course": {
+                    "name": nombre,
+                    "course_code": nombre,
+                }
+            }
+            if sis_id and sis_id != "None":
+                payload["course"]["sis_course_id"] = sis_id
+
+            data = await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
+            canvas_id = data.get("id")
+        except Exception as e:
+            error = str(e)
+
+        if canvas_id and not error:
+            ws.cell(row=r_idx, column=col_canvas_id, value=canvas_id)
+            ws.cell(row=r_idx, column=col_estado, value="✅")
+            ws.cell(row=r_idx, column=col_estado).font = Font(color="00B050", bold=True)
+            result.succeeded.append({
+                "nombre": nombre,
+                "canvas_id": canvas_id,
+                "sis_course_id": sis_id
+            })
+        else:
+            ws.cell(row=r_idx, column=col_estado, value=f"❌ {error}")
+            ws.cell(row=r_idx, column=col_estado).font = Font(color="FF0000")
+            result.failed.append({"input": {"nombre": nombre, "sis_id": sis_id}, "error": error})
+
+    # Collect rows to process
+    tasks = []
+    empty_count = 0
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
+
+        if not nombre_val:
+            empty_count += 1
+            if empty_count > 10:
+                break
+            continue
+
+        empty_count = 0
+        tasks.append(create_course_row(r_idx))
+
+    if len(tasks) > 100:
+        raise HTTPException(status_code=400, detail=f"Límite de seguridad excedido: {len(tasks)} cursos (Máximo 100 permitidos).")
+
+    if len(tasks) > 0:
+        try:
+            await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"El archivo está abierto o el enlace es de Solo Lectura. {e}")
+
+    # Process in batches of 5 to avoid API rate limits
+    batch_size = 5
+    for i in range(0, len(tasks), batch_size):
+        await asyncio.gather(*tasks[i:i+batch_size])
+
+    # Save updated workbook back to OneDrive
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+
+    return result
+
+
+
 @router.post("/excel/egreso/preview", summary="Pre-visualizar planilla de Egreso Masivo")
 async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     if not req.url or "http" not in req.url:

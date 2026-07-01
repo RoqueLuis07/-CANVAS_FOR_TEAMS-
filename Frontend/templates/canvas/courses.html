@@ -9,6 +9,7 @@
     <button class="btn btn-info" onclick="openBulkAttendanceDownload()" title="Descargar reportes de asistencia de varios cursos a la vez"><i class="bi bi-download me-1"></i>Reportes Asistencias</button>
     <button class="btn btn-success" onclick="openCreateCourse()"><i class="bi bi-plus-circle-fill me-1"></i>Crear curso</button>
     <button class="btn btn-primary" onclick="openExcelCourses()"><i class="bi bi-table me-1"></i>Carga Conjunta</button>
+    <button class="btn btn-warning text-dark" onclick="openCoursesOneDrive()"><i class="bi bi-cloud-arrow-up me-1"></i>Carga desde Planilla</button>
   </div>
 </div>
 
@@ -561,6 +562,197 @@ async function doBulkAttendanceDownload() {
 
   progressText.innerHTML = `<i class="bi bi-check-circle text-success me-1"></i><strong>${completed} reportes descargados exitosamente</strong>`;
   btn.disabled = false;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CARGA DE CURSOS DESDE PLANILLA ONEDRIVE
+   ═══════════════════════════════════════════════════════════════════ */
+
+function openCoursesOneDrive() {
+  document.getElementById('globalModalTitle').innerHTML = '<i class="bi bi-cloud-arrow-up me-2"></i>Crear Cursos desde Planilla OneDrive';
+  document.getElementById('globalModalBody').innerHTML = `
+    <div class="alert alert-info">
+      Pega el <b>enlace compartido de OneDrive</b> de la planilla de cursos.<br>
+      <small class="text-muted">La planilla debe tener columnas: <b>Nombre del Curso</b> y <b>SIS ID</b>.</small>
+    </div>
+    <div class="row">
+      <div class="col-md-10 offset-md-1">
+        <label class="form-label fw-bold">URL Compartida de OneDrive / SharePoint</label>
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+          <input type="url" class="form-control" id="coursesOdUrl" placeholder="https://...sharepoint.com/..." required>
+          <button class="btn btn-primary" type="button" id="btnLoadCoursesSheets" onclick="fetchCoursesSheets()">Cargar Pestañas</button>
+        </div>
+        <label class="form-label fw-bold">Nombre de la Pestaña (Requerido)</label>
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="bi bi-file-spreadsheet"></i></span>
+          <select class="form-select" id="coursesOdSheet" required>
+              <option value="">Primero haz clic en Cargar Pestañas...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('globalModalFooter').innerHTML = `
+    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+    <button type="button" class="btn btn-success" id="btnUploadCourses" onclick="doPreviewCourses()"><i class="bi bi-lightning-charge me-1"></i>Pre-visualizar</button>
+  `;
+  new bootstrap.Modal(document.getElementById('globalModal')).show();
+}
+
+async function fetchCoursesSheets() {
+  const urlInput = document.getElementById('coursesOdUrl').value.trim();
+  if (!urlInput) { toast('Por favor, ingresa la URL primero.', 'warning'); return; }
+
+  const btn = document.getElementById('btnLoadCoursesSheets');
+  const select = document.getElementById('coursesOdSheet');
+  const oldText = btn.innerHTML;
+
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cargando...';
+  btn.disabled = true;
+  select.innerHTML = '<option value="">Cargando pestañas...</option>';
+
+  try {
+    const sheets = await api.post('/excel/courses/sheets', { url: urlInput });
+    if (sheets && sheets.length > 0) {
+      select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
+      sheets.forEach(sheet => {
+        const opt = document.createElement('option');
+        opt.value = sheet; opt.textContent = sheet;
+        select.appendChild(opt);
+      });
+      toast('Pestañas cargadas correctamente.', 'success');
+    } else {
+      select.innerHTML = '<option value="">No se encontraron pestañas.</option>';
+    }
+  } catch (e) {
+    toast('Error al cargar pestañas: ' + (e.detail || e.message || e), 'danger');
+    select.innerHTML = '<option value="">Error al cargar.</option>';
+  } finally {
+    btn.innerHTML = oldText;
+    btn.disabled = false;
+  }
+}
+
+async function doPreviewCourses() {
+  const urlInput = document.getElementById('coursesOdUrl').value.trim();
+  const sheetInput = document.getElementById('coursesOdSheet').value.trim();
+
+  if (!urlInput || !sheetInput) {
+    toast('Por favor, ingresa la URL y selecciona una pestaña.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btnUploadCourses');
+  setLoading(btn, true);
+  toast('Analizando la planilla...', 'info');
+
+  try {
+    const preview = await api.post('/excel/courses/preview', { url: urlInput, sheet_name: sheetInput });
+
+    if (preview.courses_to_create > 100) {
+      toast(`⚠️ LÍMITE EXCEDIDO: ${preview.courses_to_create} cursos. Máximo 100 por vez.`, 'danger');
+      setLoading(btn, false);
+      return;
+    }
+
+    if (preview.courses_to_create === 0) {
+      toast('No hay cursos nuevos por crear en esta pestaña (todos ya tienen Canvas ID).', 'warning');
+      setLoading(btn, false);
+      return;
+    }
+
+    let tableHtml = `<div class="table-responsive mt-3" style="max-height:300px;overflow-y:auto">
+      <table class="table table-sm table-bordered table-striped table-hover">
+        <thead class="table-light" style="position:sticky;top:0;z-index:1">
+          <tr><th class="text-center" style="width:50px">Nº</th><th>Nombre del Curso</th><th>SIS ID</th></tr>
+        </thead>
+        <tbody>`;
+
+    preview.course_details.forEach((c, idx) => {
+      tableHtml += `<tr>
+        <td class="text-center">${idx + 1}</td>
+        <td>${c.nombre}</td>
+        <td><span class="badge bg-secondary">${c.sis_id || '—'}</span></td>
+      </tr>`;
+    });
+    tableHtml += '</tbody></table></div>';
+
+    document.getElementById('globalModalTitle').innerHTML = '<i class="bi bi-table me-2"></i>Pre-visualización de Cursos';
+    document.getElementById('globalModalBody').innerHTML = `
+      <div class="alert alert-warning mb-0">
+        <strong>Revisa los datos cuidadosamente antes de continuar.</strong><br>
+        Se van a crear <b>${preview.courses_to_create}</b> cursos nuevos en Canvas.<br>
+        <small class="text-muted">Cursos ignorados (ya creados): ${preview.courses_already_created}</small>
+      </div>
+      ${tableHtml}
+    `;
+
+    const safeUrl = urlInput.replace(/'/g, "\\'");
+    const safeSheet = sheetInput.replace(/'/g, "\\'");
+
+    document.getElementById('globalModalFooter').innerHTML = `
+      <button type="button" class="btn btn-outline-secondary" onclick="openCoursesOneDrive()">Cancelar y Volver</button>
+      <button type="button" class="btn btn-success" id="btnConfirmCourses" onclick="executeCreateCourses('${safeUrl}', '${safeSheet}')">
+        <i class="bi bi-check-circle me-1"></i>Confirmar y Crear Cursos
+      </button>
+    `;
+  } catch (e) {
+    toast('Error: ' + (e.detail || e.message || e), 'danger');
+    setLoading(btn, false);
+  }
+}
+
+async function executeCreateCourses(urlInput, sheetInput) {
+  const btn = document.getElementById('btnConfirmCourses');
+  setLoading(btn, true);
+  toast('Creando cursos en Canvas, esto puede tardar un momento...', 'info');
+
+  try {
+    const res = await api.post('/excel/courses', { url: urlInput, sheet_name: sheetInput });
+    const successCount = res.succeeded?.length || 0;
+    const failCount = res.failed?.length || 0;
+
+    toast(`✅ ${successCount} cursos creados exitosamente.${failCount > 0 ? ` ❌ ${failCount} fallaron.` : ''}`, successCount > 0 ? 'success' : 'danger');
+
+    // Auto-download report Excel
+    if (res.succeeded && res.succeeded.length > 0) {
+      generateCoursesReport(res.succeeded, res.failed || []);
+    }
+
+    bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
+    loadCourses();
+  } catch (e) {
+    toast('Error: ' + (e.detail || e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function generateCoursesReport(succeeded, failed) {
+  const rows = [
+    ['REPORTE DE CURSOS CREADOS EN CANVAS'],
+    [`Fecha: ${new Date().toLocaleString('es-PY')}`],
+    [`Total creados: ${succeeded.length} | Fallidos: ${failed.length}`],
+    [],
+    ['Nombre del Curso', 'Canvas ID', 'SIS Course ID', 'Estado'],
+  ];
+
+  succeeded.forEach(c => {
+    rows.push([c.nombre, c.canvas_id, c.sis_course_id || '—', '✅ Creado']);
+  });
+
+  failed.forEach(f => {
+    rows.push([f.input?.nombre || '—', '—', f.input?.sis_id || '—', `❌ ${f.error}`]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 50 }, { wch: 12 }, { wch: 18 }, { wch: 30 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Reporte Cursos');
+  XLSX.writeFile(wb, `REPORTE_CURSOS_CANVAS_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('📥 Reporte de IDs descargado automáticamente.', 'info');
 }
 
 loadCourses();
