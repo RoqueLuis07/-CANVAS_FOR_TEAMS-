@@ -7,8 +7,6 @@
   <div><div class="page-title">Cursos Canvas</div><div class="page-subtitle">Gestión de cursos de la plataforma</div></div>
   <div class="ms-auto d-flex gap-2 flex-wrap">
     <button class="btn btn-info" onclick="openBulkAttendanceDownload()" title="Descargar reportes de asistencia de varios cursos a la vez"><i class="bi bi-download me-1"></i>Reportes Asistencias</button>
-    <button class="btn btn-success" onclick="openCreateCourse()"><i class="bi bi-plus-circle-fill me-1"></i>Crear curso</button>
-
     <button class="btn btn-warning text-dark" onclick="openCoursesOneDrive()"><i class="bi bi-cloud-arrow-up me-1"></i>Carga desde Planilla</button>
   </div>
 </div>
@@ -190,39 +188,6 @@ async function loadCourses() {
   } catch(e) { toast('Error cargando cursos: ' + e.message, 'danger'); }
 }
 
-function openCreateCourse() {
-  showModal('Crear Curso Canvas', `
-    <form id="courseForm">
-      <div class="row g-3">
-        <div class="col-md-8"><label class="form-label">Nombre *</label><input class="form-control" name="name" required></div>
-        <div class="col-md-4"><label class="form-label">Código *</label><input class="form-control" name="course_code" required></div>
-        <div class="col-md-6"><label class="form-label">SIS Course ID</label><input class="form-control" name="sis_course_id"></div>
-        <div class="col-md-3"><label class="form-label">Inicio</label><input type="date" class="form-control" name="start_at"></div>
-        <div class="col-md-3"><label class="form-label">Fin</label><input type="date" class="form-control" name="end_at"></div>
-      </div>
-    </form>`,
-    `<button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-     <button class="btn btn-success" id="saveBtn" onclick="saveCourse()"><i class="bi bi-check-lg me-1"></i>Guardar</button>`);
-}
-
-async function saveCourse() {
-  const btn = document.getElementById('saveBtn');
-  const form = document.getElementById('courseForm');
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  const fd = new FormData(form);
-  const data = {
-    name: fd.get('name'), course_code: fd.get('course_code'),
-    sis_course_id: fd.get('sis_course_id') || null,
-    start_at: fd.get('start_at') || null, end_at: fd.get('end_at') || null,
-  };
-  setLoading(btn, true);
-  try {
-    await api.post('/canvas/courses', data);
-    toast('Curso creado correctamente', 'success');
-    closeModal(); loadCourses();
-  } catch(e) { toast('Error: ' + e.message, 'danger'); }
-  finally { setLoading(btn, false); }
-}
 
 function openEditCourse(c) {
   showModal('Editar Curso: ' + c.name, `

@@ -31,9 +31,6 @@ async def root(request: Request):
     return RedirectResponse(url="/ui/home", status_code=302)
 
 
-@router.get("/ui/canvas/users", response_class=HTMLResponse)
-async def canvas_users(request: Request):
-    return _r(request, "canvas/users.html")
 
 
 @router.get("/ui/canvas/courses", response_class=HTMLResponse)
@@ -51,9 +48,6 @@ async def canvas_enrollments(request: Request):
     return _r(request, "canvas/enrollments.html")
 
 
-@router.get("/ui/canvas/groups", response_class=HTMLResponse)
-async def canvas_groups(request: Request):
-    return _r(request, "canvas/groups.html")
 
 
 @router.get("/ui/diagnostico", response_class=HTMLResponse)
@@ -67,9 +61,6 @@ async def teams_root(request: Request):
     return RedirectResponse(url="/ui/teams/teams", status_code=302)
 
 
-@router.get("/ui/teams/users", response_class=HTMLResponse)
-async def teams_users(request: Request):
-    return _r(request, "teams/users.html")
 
 
 @router.get("/ui/teams/teams", response_class=HTMLResponse)

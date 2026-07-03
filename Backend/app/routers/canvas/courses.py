@@ -12,7 +12,7 @@ from app.core import cache as _cache, database
 from app.core.config import settings
 from app.models.canvas import (
     BulkResult,
-    CanvasCourseCreate,
+
     CanvasCourseUpdate,
 )
 from app.services import canvas_client as canvas
@@ -94,30 +94,6 @@ async def get_course(course_id: str):
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-@router.post("", status_code=201, summary="Crear curso individual")
-async def create_course(body: CanvasCourseCreate):
-    payload: dict = {
-        "course": {
-            "name": body.name,
-            "course_code": body.course_code,
-            "sis_course_id": body.sis_course_id,
-            "start_at": body.start_at,
-            "end_at": body.end_at,
-            "license": body.license,
-            "is_public": body.is_public,
-        }
-    }
-    if body.enroll_me:
-        payload["enroll_me"] = True
-    try:
-        data = await canvas.post(f"/accounts/{_ACCOUNT}/courses", payload)
-        await database.upsert_courses([data])
-        _cache.patch_list(_CACHE_KEY, data.get("id"), data, id_field="id", action="create")
-        return data
-    except StarletteHTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
 
 
 

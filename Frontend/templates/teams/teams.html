@@ -6,7 +6,6 @@
 <div class="d-flex align-items-center mb-4 gap-3 flex-wrap">
   <div><div class="page-title">Microsoft Teams</div><div class="page-subtitle">Gestión de equipos y miembros del tenant</div></div>
   <div class="ms-auto d-flex gap-2 flex-wrap">
-    <button class="btn btn-success" onclick="openCreateTeam()"><i class="bi bi-plus-circle-fill me-1"></i>Crear Team</button>
     <button class="btn btn-primary" onclick="openExcelMembers()"><i class="bi bi-file-earmark-excel-fill me-1"></i>Añadir miembros Excel</button>
     <a href="/excel/template/teams-members" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>Plantilla Excel</a>
   </div>
@@ -167,9 +166,6 @@ function _userPicker(type, label, color) {
         <input class="form-control form-control-sm" id="${type}Search"
           placeholder="Buscar por nombre o UPN…"
           oninput="searchTeamUser(this.value,'${type}')">
-        <button type="button" class="btn btn-sm btn-${color}" onclick="addFromSearch('${type}')">
-          <i class="bi bi-plus"></i> Agregar
-        </button>
       </div>
       <select class="form-select form-select-sm" id="${type}SearchResults" size="3" style="display:none"
         onchange="addFromSearch('${type}')"></select>
@@ -177,93 +173,6 @@ function _userPicker(type, label, color) {
     </div>`;
 }
 
-function openCreateTeam() {
-  _picked = { owners: [], members: [] };
-  showModal('Crear Microsoft Team', `
-    <form id="teamForm">
-      <div class="row g-3">
-        <div class="col-md-8">
-          <label class="form-label">Nombre del Team *</label>
-          <input class="form-control" name="display_name" id="teamName" required
-            placeholder="Ej. Matemáticas I – 2025" oninput="autoSlug()">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Visibilidad</label>
-          <select class="form-select" name="visibility">
-            <option value="Private">Privado</option>
-            <option value="Public">Público</option>
-          </select>
-        </div>
-        <div class="col-md-8">
-          <label class="form-label">Mail nickname *
-            <span class="text-muted fw-normal small">(auto, sin espacios)</span>
-          </label>
-          <input class="form-control" name="mail_nickname" id="teamSlug" required
-            placeholder="matematicas-i-2025" pattern="[a-zA-Z0-9._-]+">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Plantilla</label>
-          <select class="form-select" name="template">
-            <option value="educationClass">Clase educativa</option>
-            <option value="standard">Estándar</option>
-            <option value="educationStaff">Personal educativo</option>
-          </select>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Email del grupo <span class="text-muted small fw-normal">(opcional)</span></label>
-          <input class="form-control" name="email" type="email"
-            placeholder="Ej. matematicas@usil.edu.py">
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Descripción</label>
-          <input class="form-control" name="description" placeholder="Opcional">
-        </div>
-      </div>
-      <hr class="my-3">
-      ${_userPicker('owners', '<i class="bi bi-shield-fill-check text-warning me-1"></i>Owners (propietarios) — mínimo 1 *', 'warning')}
-      ${_userPicker('members', '<i class="bi bi-people-fill text-primary me-1"></i>Miembros (opcional)', 'primary')}
-    </form>`,
-    `<button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-     <button class="btn btn-success" id="saveBtn" onclick="saveTeam()">
-       <i class="bi bi-check-lg me-1"></i>Crear Team
-     </button>`);
-}
-
-function autoSlug() {
-  const slug = document.getElementById('teamSlug');
-  if (!slug._touched) slug.value = _slugify(document.getElementById('teamName').value);
-}
-document.addEventListener('input', e => {
-  if (e.target && e.target.id === 'teamSlug') e.target._touched = true;
-});
-
-async function saveTeam() {
-  const btn  = document.getElementById('saveBtn');
-  const form = document.getElementById('teamForm');
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  if (_picked.owners.length === 0) { toast('Agregá al menos un owner', 'warning'); return; }
-
-  const fd = new FormData(form);
-  const data = {
-    display_name:  fd.get('display_name'),
-    mail_nickname: fd.get('mail_nickname'),
-    email:         fd.get('email') || null,
-    description:   fd.get('description') || null,
-    visibility:    fd.get('visibility'),
-    template:      fd.get('template'),
-    owners:        _picked.owners.map(u => u.id),
-    members:       _picked.members.map(u => u.id),
-  };
-  setLoading(btn, true);
-  toast('Creando Team… esto puede tardar hasta 60 segundos', 'info');
-  try {
-    const res = await api.post('/teams/teams', data);
-    closeModal();
-    showTeamReport(res);
-    setTimeout(loadTeams, 4000);
-  } catch(e) { toast('Error: ' + e.message, 'danger'); }
-  finally { setLoading(btn, false); }
-}
 
 function showTeamReport(res) {
   const team = res.team || {};
@@ -312,27 +221,14 @@ function showTeamReport(res) {
 function viewTeamDetail(teamId, name) {
   showModal('Miembros: ' + name, `
     <div class="mb-3 d-flex gap-2 flex-wrap">
-      <div class="autocomplete-container" style="flex:1; max-width:300px">
-        <input type="text" class="form-control" id="search_add_user" placeholder="Buscar usuario..." autocomplete="off">
-        <input type="hidden" id="addUserId">
-        <div class="autocomplete-dropdown" id="add_user_results"></div>
-      </div>
-      <select class="form-select" id="addRole" style="max-width:140px">
-        <option value="member">Miembro</option>
-        <option value="owner">Owner</option>
-      </select>
-      <button class="btn btn-success" onclick="addMember('${teamId}')"><i class="bi bi-plus"></i> Añadir</button>
+
       <button class="btn btn-outline-primary" onclick="openBulkAddModal('${teamId}')"><i class="bi bi-people"></i> Carga Múltiple</button>
       <button class="btn btn-outline-warning text-dark" onclick="openBulkEmailModal('${teamId}', '${name}')"><i class="bi bi-envelope-paper"></i> Carga por Correos</button>
     </div>
     <div id="memberTable"><div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span></div></div>`,
     `<button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>`);
   
-  // Configurar autocompletado para usuarios de Azure AD
-  setupAutocomplete('search_add_user', 'addUserId', 'add_user_results', '/teams/users', 
-    (u) => `<div class="autocomplete-title">${u.displayName}</div><div class="autocomplete-sub">${u.userPrincipalName || 'Sin email'}</div>`,
-    (u, input, hidden) => { input.value = u.displayName; hidden.value = u.id; }
-  );
+
   
   loadMembers(teamId);
 }
@@ -385,15 +281,7 @@ async function loadMembers(teamId) {
   } catch(e) { document.getElementById('memberTable').innerHTML = `<p class="text-danger p-3">${e.message}</p>`; }
 }
 
-async function addMember(teamId) {
-  const userId = document.getElementById('addUserId').value.trim();
-  const role = document.getElementById('addRole').value;
-  if (!userId) return;
-  try {
-    await api.post(`/teams/teams/${teamId}/members`, { user_id: userId, role });
-    toast('Miembro añadido', 'success'); loadMembers(teamId);
-  } catch(e) { toast('Error: ' + e.message, 'danger'); }
-}
+
 
 function removeMember(teamId, membershipId, name) {
   confirmAction(`¿Quitar a <strong>${name}</strong> del Team?`, async () => {

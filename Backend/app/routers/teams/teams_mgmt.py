@@ -11,8 +11,6 @@ from app.models.teams import (
     BulkTeamsEmailAdd,
     BulkTeamsMemberRemove,
     TeamsChannelCreate,
-    TeamsMemberAdd,
-    TeamsTeamCreate,
     TeamsTeamUpdate,
 )
 from app.services import teams_client as graph
@@ -61,50 +59,6 @@ async def get_team(team_id: str):
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-@router.post("", status_code=201, summary="Crear Team con owners y miembros opcionales")
-async def create_team(body: TeamsTeamCreate):
-    try:
-        team = await create_team_via_group(
-            display_name=body.display_name,
-            mail_nickname=body.mail_nickname,
-            description=body.description or "",
-            visibility=body.visibility,
-            owner_ids=body.owners,
-            member_ids=body.members or [],
-            email=body.email,
-        )
-    except StarletteHTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    # Build report: resolve display names for each member
-    report_members = []
-    for uid in body.owners:
-        try:
-            u = await graph.get(f"/users/{uid}", {"$select": "id,displayName,userPrincipalName"})
-            report_members.append({"user_id": uid, "displayName": u.get("displayName"), "upn": u.get("userPrincipalName"), "role": "owner", "status": "ok"})
-        except Exception:
-            report_members.append({"user_id": uid, "displayName": None, "upn": None, "role": "owner", "status": "ok"})
-    for uid in body.members:
-        try:
-            u = await graph.get(f"/users/{uid}", {"$select": "id,displayName,userPrincipalName"})
-            report_members.append({"user_id": uid, "displayName": u.get("displayName"), "upn": u.get("userPrincipalName"), "role": "member", "status": "ok"})
-        except Exception:
-            report_members.append({"user_id": uid, "displayName": None, "upn": None, "role": "member", "status": "ok"})
-
-    return {
-        "team": {
-            "id": team.get("id"),
-            "displayName": team.get("displayName"),
-            "description": team.get("description"),
-            "visibility": team.get("visibility"),
-            "webUrl": team.get("webUrl"),
-        },
-        "members_added": report_members,
-        "total_owners": len(body.owners),
-        "total_members": len(body.members),
-    }
 
 
 @router.patch("/{team_id}", summary="Actualizar Team")
@@ -138,19 +92,6 @@ async def list_members(team_id: str):
     return await graph.paginate(f"/teams/{team_id}/members")
 
 
-@router.post("/{team_id}/members", status_code=201, summary="Añadir miembro individual")
-async def add_member(team_id: str, body: TeamsMemberAdd):
-    payload = {
-        "@odata.type": "#microsoft.graph.aadUserConversationMember",
-        "roles": [body.role] if body.role == "owner" else [],
-        "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{body.user_id}')",
-    }
-    try:
-        return await graph.post(f"/teams/{team_id}/members", payload)
-    except StarletteHTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/{team_id}/members/bulk-add", summary="Añadir miembros de forma conjunta")
