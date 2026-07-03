@@ -92,9 +92,6 @@ class BulkCanvasUserCreate(BaseModel):
     users: list[CanvasUserCreate]
 
 
-class BulkCanvasCourseCreate(BaseModel):
-    courses: list[CanvasCourseCreate]
-
 
 class BulkCanvasEnrollmentCreate(BaseModel):
     course_id: str

@@ -8,7 +8,7 @@
   <div class="ms-auto d-flex gap-2 flex-wrap">
     <button class="btn btn-info" onclick="openBulkAttendanceDownload()" title="Descargar reportes de asistencia de varios cursos a la vez"><i class="bi bi-download me-1"></i>Reportes Asistencias</button>
     <button class="btn btn-success" onclick="openCreateCourse()"><i class="bi bi-plus-circle-fill me-1"></i>Crear curso</button>
-    <button class="btn btn-primary" onclick="openExcelCourses()"><i class="bi bi-table me-1"></i>Carga Conjunta</button>
+
     <button class="btn btn-warning text-dark" onclick="openCoursesOneDrive()"><i class="bi bi-cloud-arrow-up me-1"></i>Carga desde Planilla</button>
   </div>
 </div>
@@ -436,32 +436,6 @@ function downloadAttendanceExcel(courseId, courseName) {
   XLSX.writeFile(wb, `REPORTE_ASISTENCIA_${courseId}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
-function openExcelCourses() {
-  showSpreadsheet({
-    title: 'Carga conjunta de cursos Canvas',
-    columns: [
-      { key: 'name',          label: 'Nombre del curso',  required: true,  width: 220 },
-      { key: 'course_code',   label: 'Código',             required: true,  width: 120 },
-      { key: 'sis_course_id', label: 'SIS Course ID',      required: false, width: 130, placeholder: 'ej. MAT101-2026' },
-      { key: 'start_at',      label: 'Inicio',             required: false, width: 110, placeholder: 'YYYY-MM-DD' },
-      { key: 'end_at',        label: 'Fin',                required: false, width: 110, placeholder: 'YYYY-MM-DD' },
-    ],
-    onImport: async (rows) => {
-      const result = await api.post('/canvas/courses/bulk', {
-        courses: rows.map(r => ({
-          name:          r.name,
-          course_code:   r.course_code,
-          sis_course_id: r.sis_course_id || null,
-          start_at:      r.start_at      || null,
-          end_at:        r.end_at        || null,
-        })),
-      });
-      _cache?.invalidate?.('canvas:courses:');
-      loadCourses();
-      return result;
-    },
-  });
-}
 
 function openBulkAttendanceDownload() {
   const courseOptions = _allCourses.map(c =>

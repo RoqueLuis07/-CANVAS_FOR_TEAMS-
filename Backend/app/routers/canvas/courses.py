@@ -11,7 +11,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core import cache as _cache, database
 from app.core.config import settings
 from app.models.canvas import (
-    BulkCanvasCourseCreate,
     BulkResult,
     CanvasCourseCreate,
     CanvasCourseUpdate,
@@ -120,29 +119,6 @@ async def create_course(body: CanvasCourseCreate):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-
-@router.post("/bulk", summary="Crear cursos de forma conjunta")
-async def create_courses_bulk(body: BulkCanvasCourseCreate) -> BulkResult:
-    result = BulkResult()
-
-    async def _create(course: CanvasCourseCreate):
-        try:
-            data = await canvas.post(
-                f"/accounts/{_ACCOUNT}/courses",
-                {"course": {
-                    "name": course.name,
-                    "course_code": course.course_code,
-                    "sis_course_id": course.sis_course_id,
-                    "start_at": course.start_at,
-                    "end_at": course.end_at,
-                }},
-            )
-            result.succeeded.append(data)
-        except Exception as exc:
-            result.failed.append({"input": course.model_dump(), "error": str(exc)})
-
-    await asyncio.gather(*[_create(c) for c in body.courses])
-    return result
 
 
 @router.put("/{course_id}", summary="Actualizar curso")
