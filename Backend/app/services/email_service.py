@@ -42,7 +42,7 @@ _UBS_CONTACT = """
 </table>
 <p style="color:#4a5568;font-size:.85rem;margin-top:16px;">
   Quedamos atentos a cualquier consulta relacionada con TI y le deseamos mucho éxito en sus estudios.<br><br>
-  <strong>Área de Tecnología de la Información (TI UBS)</strong><br>
+  <strong>Área de Tecnología de la Información</strong><br>
   USIL Business School – Universidad San Ignacio de Loyola<br>
   Correo: lflorentin@usil.edu.py | glezcano@usil.edu.py | resteche@usil.edu.py<br>
   WhatsApp corporativo: 0991 856 488
@@ -270,10 +270,7 @@ async def send_welcome_email(
         "diplomado": program_name or "Diplomado",
     }
     label = program_labels.get(program_type, program_name or program_type)
-    if program_type == "grado":
-        subject = f"Credenciales de acceso – {label}"
-    else:
-        subject = f"Credenciales de acceso – {label} – TI UBS"
+    subject = f"Credenciales de acceso – {label}"
 
     if program_type == "mba":
         html = _html_mba(full_name, usuario, password)
