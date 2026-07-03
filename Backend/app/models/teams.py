@@ -89,3 +89,7 @@ class BulkTeamsMemberRemove(BaseModel):
 class BulkResult(BaseModel):
     succeeded: list[dict] = []
     failed: list[dict] = []
+
+class BulkTeamsEmailAdd(BaseModel):
+    emails: list[str]
+    role: MemberRole = "member"

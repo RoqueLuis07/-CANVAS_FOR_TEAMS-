@@ -8,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.models.teams import (
     BulkResult,
     BulkTeamsMemberAdd,
+    BulkTeamsEmailAdd,
     BulkTeamsMemberRemove,
     TeamsChannelCreate,
     TeamsMemberAdd,
@@ -178,6 +179,66 @@ async def bulk_add_members(team_id: str, body: BulkTeamsMemberAdd) -> BulkResult
         except Exception as exc:
             for m in body.members[i : i + BATCH_SIZE]:
                 result.failed.append({"user_id": m.user_id, "error": str(exc)})
+
+    return result
+
+
+@router.post("/{team_id}/members/bulk-add-emails", summary="Añadir miembros por lista de correos")
+async def bulk_add_members_by_email(team_id: str, body: BulkTeamsEmailAdd) -> BulkResult:
+    result = BulkResult()
+    BATCH_SIZE = 20
+
+    # 1. Lookup emails in Azure AD to get Object IDs
+    user_ids = []
+    
+    async def _lookup(email: str):
+        try:
+            # First try userPrincipalName or mail directly
+            # Often mailNickname is also supported, but upn is safer
+            user = await graph.get(f"/users/{email.strip()}", params={"$select": "id,mail,userPrincipalName"})
+            user_ids.append({"email": email, "id": user["id"]})
+        except Exception as exc:
+            # If not found by direct ID/UPN, try searching by mail
+            try:
+                search_res = await graph.get("/users", params={"$filter": f"mail eq '{email.strip()}'", "$select": "id"})
+                if search_res.get("value") and len(search_res["value"]) > 0:
+                    user_ids.append({"email": email, "id": search_res["value"][0]["id"]})
+                else:
+                    result.failed.append({"input": email, "error": "Usuario no encontrado en Azure AD"})
+            except Exception as e:
+                result.failed.append({"input": email, "error": "Usuario no encontrado en Azure AD"})
+
+    # Run lookups concurrently
+    await asyncio.gather(*[_lookup(email) for email in set(body.emails) if email.strip()])
+
+    if not user_ids:
+        return result
+
+    # 2. Add them in batches
+    members_payload = [
+        {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "roles": [body.role] if body.role == "owner" else [],
+            "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{u['id']}')",
+        }
+        for u in user_ids
+    ]
+
+    for i in range(0, len(members_payload), BATCH_SIZE):
+        batch = members_payload[i : i + BATCH_SIZE]
+        try:
+            resp = await graph.post(f"/teams/{team_id}/members/add", {"values": batch})
+            added = resp.get("value", [])
+            errors = resp.get("error", [])
+            
+            # Map back to email if possible for better frontend reporting
+            for success in added:
+                result.succeeded.append(success)
+            for err in errors:
+                result.failed.append({"input": "Lote", "error": str(err)})
+        except Exception as exc:
+            for u in user_ids[i : i + BATCH_SIZE]:
+                result.failed.append({"input": u["email"], "error": str(exc)})
 
     return result
 
