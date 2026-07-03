@@ -1152,7 +1152,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if existing_groups and existing_groups.get("value"):
                 group_id = existing_groups["value"][0]["id"]
             else:
-                owner_users = await graph.search_users("resteche@usil.edu.py")
+                owner_users = await graph.search_users("it@usil.edu.py")
                 owner_id = owner_users[0]["id"] if owner_users else None
                 if owner_id:
                     import re

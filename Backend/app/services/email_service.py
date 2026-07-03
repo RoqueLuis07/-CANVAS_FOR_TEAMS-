@@ -25,7 +25,7 @@ _TEAMS_URL  = "https://teams.cloud.microsoft/"
 _IT_CONTACT = """
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;font-size:.82rem;color:#4a5568;">
   <tr><td colspan="2" style="font-weight:700;padding-bottom:6px;color:#2d3748;">Contacto – Dpto. IT</td></tr>
-  <tr><td style="padding:2px 0;">✉ Correo</td><td style="padding:2px 8px;"><a href="mailto:it@usil.edu.py">it@usil.edu.py</a> | <a href="mailto:resteche@usil.edu.py">resteche@usil.edu.py</a></td></tr>
+  <tr><td style="padding:2px 0;">✉ Correo</td><td style="padding:2px 8px;"><a href="mailto:it@usil.edu.py">it@usil.edu.py</a></td></tr>
   <tr><td style="padding:2px 0;">📱 WhatsApp</td><td style="padding:2px 8px;">+595 991 856 488 | +595 992 298 599</td></tr>
   <tr><td style="padding:2px 0;">☎ Teléfono</td><td style="padding:2px 8px;">+595 21 282 801 | 282 806 | 297 085</td></tr>
   <tr><td style="padding:2px 0;">📍 Dirección</td><td style="padding:2px 8px;">Av. Venezuela Nro. 2087 c/ Av. Artigas – Asunción</td></tr>
@@ -37,14 +37,14 @@ _UBS_CONTACT = """
   <tr><td colspan="2" style="padding-bottom:6px;color:#2d3748;">En caso de inconvenientes con el acceso a Teams, puede contactar al área de Tecnología de la Información (TI):</td></tr>
   <tr><td style="padding:2px 0;">✉ Correo</td><td style="padding:2px 8px;"><a href="mailto:lflorentin@usil.edu.py">lflorentin@usil.edu.py</a></td></tr>
   <tr><td style="padding:2px 0;">✉ Correo</td><td style="padding:2px 8px;"><a href="mailto:glezcano@usil.edu.py">glezcano@usil.edu.py</a></td></tr>
-  <tr><td style="padding:2px 0;">✉ Correo</td><td style="padding:2px 8px;"><a href="mailto:resteche@usil.edu.py">resteche@usil.edu.py</a></td></tr>
+  <tr><td style="padding:2px 0;">✉ Correo</td><td style="padding:2px 8px;"><a href="mailto:it@usil.edu.py">it@usil.edu.py</a></td></tr>
   <tr><td style="padding:2px 0;">📱 WhatsApp corporativo</td><td style="padding:2px 8px;"><a href="https://wa.me/595991856488" style="color:#4e73df;text-decoration:none;font-weight:bold;">0991 856 488</a></td></tr>
 </table>
 <p style="color:#4a5568;font-size:.85rem;margin-top:16px;">
   Quedamos atentos a cualquier consulta relacionada con TI y le deseamos mucho éxito en sus estudios.<br><br>
   <strong>Área de Tecnología de la Información</strong><br>
   USIL Business School – Universidad San Ignacio de Loyola<br>
-  Correo: lflorentin@usil.edu.py | glezcano@usil.edu.py | resteche@usil.edu.py<br>
+  Correo: lflorentin@usil.edu.py | glezcano@usil.edu.py | it@usil.edu.py<br>
   WhatsApp corporativo: 0991 856 488
 </p>
 """
