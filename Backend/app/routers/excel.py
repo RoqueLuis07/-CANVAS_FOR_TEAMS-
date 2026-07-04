@@ -14,7 +14,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import pandas as pd
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -1796,7 +1796,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> PreviewRespons
     )
 
 @router.post("/excel/docentes-onedrive", summary="Alta Docentes OneDrive")
-async def import_docentes_onedrive(req: DiplomadosUrlRequest, background_tasks: BackgroundTasks, auth: dict = Depends(require_auth)) -> BulkResult:
+async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL invlida.")
     
