@@ -1,6 +1,6 @@
 # 📚 USIL Gestión TI - Guía de Uso
 
-Sistema integral de gestión para Canvas LMS y Microsoft Teams con control de asistencias, usuarios, matrículas y auditoría completa.
+Sistema integral de automatización y gestión para Canvas LMS y Microsoft Teams. Permite el alta unificada de usuarios, matrículas, control de asistencias, gestión de equipos y auditoría completa de forma masiva y automatizada.
 
 🔗 **Producción (Live):** [https://canvasforteams-production.up.railway.app/](https://canvasforteams-production.up.railway.app/)
 
@@ -10,8 +10,8 @@ Sistema integral de gestión para Canvas LMS y Microsoft Teams con control de as
 
 ### Requisitos Previos
 - Python 3.10+
-- Credenciales de Canvas LMS
-- Credenciales de Microsoft Teams/Azure AD
+- Credenciales de Canvas LMS (Token de Administrador)
+- Credenciales de Microsoft Teams/Azure AD (App Registration con permisos Graph API)
 
 ### 1. Instalación
 
@@ -37,7 +37,13 @@ CANVAS_ACCOUNT_ID=1
 AZURE_TENANT_ID=tu_tenant_id
 AZURE_CLIENT_ID=tu_client_id
 AZURE_CLIENT_SECRET=tu_client_secret
-INSTITUTIONAL_DOMAIN=tu_dominio
+INSTITUTIONAL_DOMAIN=tu_dominio.edu.py
+
+SMTP_SERVER=smtp.office365.com
+SMTP_PORT=587
+SMTP_USER=it@usil.edu.py
+SMTP_PASSWORD=tu_password
+SMTP_FROM=it@usil.edu.py
 ```
 
 ### 3. Ejecutar el Servidor
@@ -55,399 +61,171 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 3000 --reload
 
 El sistema estará disponible en: **http://localhost:3000** o **http://127.0.0.1:3000**
 
-### Endpoints Útiles
-
-- **Health Check:** http://localhost:3000/health
-- **Documentación API:** http://localhost:3000/docs
-- **Base de Datos:** `Backend/app.db` (SQLite local)
-
 ---
 
 ## 🏗️ Estructura del Proyecto
-
-El proyecto está organizado en dos carpetas principales para separar responsabilidades:
 
 - **Frontend/**: Contiene la interfaz de usuario.
   - `templates/`: Plantillas HTML (Jinja2).
   - `static/`: Archivos estáticos (CSS, JS, imágenes).
 - **Backend/**: Contiene el servidor y la lógica de negocio.
   - `app/`: Código fuente de la API (FastAPI, routers, modelos).
-  - `data/`: Bases de datos SQLite locales.
+  - `data/`: Bases de datos SQLite locales (persistencia).
   - Archivos de configuración (`.env`, `requirements.txt`, etc.).
 
 ---
 
 ## 📖 Guía Completa de Uso
 
-### 🏠 Página Principal (Home)
+La plataforma ha sido optimizada para enfocarse **exclusivamente en procesos masivos y automatizados**, eliminando las funciones redundantes que Canvas o Teams ya ofrecen de forma nativa.
+
+### 🏠 Página Principal (Dashboard)
 
 **URL**: http://localhost:3000/ui/home
 
-Es tu portal de entrada con acceso rápido a todas las funcionalidades:
-- 📊 Reportes de Asistencia
-- 👥 Usuarios Canvas
-- 📚 Cursos
-- 📋 Matrículas
-- 🔐 Auditoría
-- 📋 Historial de Trabajos
+Es tu portal de entrada con acceso rápido a las funcionalidades principales:
+- 🧑‍🎓 **Nuevo Ingreso (Alta Unificada)**
+- 🎓 **Matriculaciones (Unificadas)**
+- 📚 **Cursos (Canvas)**
+- 🤝 **Equipos (Teams)**
+- 📊 **Asistencias**
+- 📋 **Historial de Trabajos**
+
+---
+
+## 🧑‍🎓 Nuevo Ingreso (Alta Unificada)
+
+### ¿Para qué sirve?
+Proceso masivo para dar de alta a nuevos alumnos y docentes simultáneamente en **Azure AD/Teams** y **Canvas LMS**, con generación automática de contraseñas y envío de credenciales por correo electrónico.
+
+### Pasos para Usar:
+1. Accede a **Directorio & Ingresos → Alta Unificada** (`/ui/ingreso`).
+2. Descarga la plantilla Excel provista en la vista.
+3. Completa el Excel con los datos: Nombre, Apellidos, Correo Personal, Cédula/DNI, Tipo (student/teacher), Sede, y Programa.
+4. Sube el Excel al sistema.
+5. Selecciona a qué correo enviar el reporte de ejecución (opcional) y si deseas enviar los correos de bienvenida a los usuarios automáticamente.
+6. Haz clic en procesar. El sistema creará las cuentas en ambas plataformas y enviará los correos desde `it@usil.edu.py`.
+
+---
+
+## 🚫 Desvinculación Unificada (Egreso)
+
+### ¿Para qué sirve?
+Desactivar o eliminar cuentas de alumnos retirados o egresados de forma masiva en ambas plataformas para liberar licencias y mantener la seguridad.
+
+### Pasos para Usar:
+1. Accede a **Directorio & Ingresos → Egreso / Desvinculación** (`/egreso`).
+2. Descarga la plantilla y llénala con los correos institucionales de los usuarios a desvincular.
+3. Sube el Excel y el sistema procederá a suspender las cuentas en Azure AD y eliminarlas/desactivarlas en Canvas.
+
+---
+
+## 🎓 Matriculación Unificada
+
+### ¿Para qué sirve?
+Enrolar listas masivas de alumnos a sus respectivos **Cursos en Canvas** y añadirlos como miembros en sus **Equipos de Teams** de forma simultánea.
+
+### Pasos para Usar:
+1. Accede a **Matriculaciones** (`/ui/unified-enrollments`).
+2. Descarga la plantilla Excel.
+3. Llena el Excel especificando el ID de Canvas, el ID de Teams, y el correo institucional del usuario.
+4. Carga el Excel y procesa.
+
+---
+
+## 🤝 Gestión de Equipos (Teams)
+
+### ¿Para qué sirve?
+Administrar de forma eficiente los Equipos de Microsoft Teams, con herramientas enfocadas en la adición masiva de miembros.
+
+### Pasos para Usar:
+1. Accede a **Equipos (Teams)** (`/ui/teams/teams`).
+2. Selecciona un Equipo de la lista para ver sus detalles.
+3. Puedes añadir miembros usando **Carga Múltiple (Excel)** o **Carga por Correos (Pegar lista de correos)**.
+4. La adición individual y creación individual de Teams se han retirado para enfocarnos en procesos masivos (puedes crear Teams individuales directamente desde la app nativa de Teams).
+
+---
+
+## 📚 Gestión de Cursos (Canvas)
+
+### ¿Para qué sirve?
+Ver el listado de todos los cursos de Canvas, actualizar configuraciones de forma ágil y sincronizarlos con Teams.
+
+### Pasos para Usar:
+1. Accede a **Cursos (Canvas)** (`/ui/canvas/courses`).
+2. Puedes buscar cursos y ver cuántos estudiantes tienen.
+3. Usa la opción **Añadir miembros Excel** para procesar listas masivas.
 
 ---
 
 ## 📊 Reportes de Asistencia
 
 ### ¿Para qué sirve?
-Descargar matrices de asistencia de todos los cursos en Excel, sin descargar archivos manualmente del email de Canvas.
+Descargar matrices de asistencia de todos los cursos de Canvas en Excel de forma organizada, sin tener que descargar archivos manualmente desde el correo que envía Canvas.
 
-### Pasos para Usar
-
-#### Opción 1: Descargar reportes existentes (Recomendado)
-
-1. **Accede a la página de Asistencias**
-   - URL: http://localhost:3000/ui/canvas/attendance
-   - O desde Home → Asistencias
-
-2. **Busca tu curso**
-   - Usa la barra de búsqueda por nombre del curso o docente
-   - Haz clic en "Refrescar" para actualizar la lista
-
-3. **Descarga el Excel**
-   - Haz clic en el botón "Descargar" del curso
-   - Se descargará automáticamente con el formato Canvas
-
-4. **Ver matriz completa (Opcional)**
-   - Haz clic en "Ver" para ver la matriz de asistencias en pantalla
-   - Muestra estudiantes y su asistencia por fecha
-
-#### Opción 2: Actualizar con nuevos datos (Mensualmente)
-
-**Cada mes, cuando tengas nuevos datos de Canvas:**
-
-1. **Descarga CSV de Canvas**
-   - Entra a Canvas → Attendance Tool
-   - Para cada curso, descarga el CSV de asistencia
-   - Guarda en: `Carpeta de plantillas/` con nombre `{course_id}.csv`
-   - Ejemplo: `1723.csv` para el curso 1723
-
-2. **Actualiza en el sistema**
-   - Entra a http://localhost:3000/ui/canvas/attendance
-   - Haz clic en "Refrescar"
-   - El sistema detecta automáticamente los nuevos archivos
-
-3. **Descarga los reportes**
-   - Los reportes ahora incluyen datos del mes actual
-   - Distribuye a docentes o directivos
+### Pasos para Usar:
+1. Cada mes, descarga los reportes CSV crudos desde la herramienta "Attendance" de Canvas.
+2. Guárdalos en la carpeta correspondiente (`Carpeta de plantillas/`).
+3. Entra a **Asistencias** (`/ui/canvas/attendance`) y presiona "Refrescar".
+4. El sistema compilará y formateará los datos, permitiéndote descargar un reporte en Excel limpio y listo para enviar a directivos.
 
 ---
 
-## 👥 Gestión de Usuarios Canvas
+## 📋 Historial de Trabajos (Jobs) - ⭐ Control Total
 
 ### ¿Para qué sirve?
-Crear, editar o eliminar usuarios en Canvas de forma masiva o individual.
+Ver el resultado detallado de **TODAS** las operaciones masivas realizadas (altas, matrículas, desvinculaciones). Todo queda guardado de forma persistente.
 
-### Pasos para Usar
-
-1. **Accede a Usuarios Canvas**
-   - URL: http://localhost:3000/ui/canvas/users
-   - O desde Home → Usuarios
-
-2. **Crear usuarios individuales**
-   - Haz clic en "Crear usuario"
-   - Completa los datos (nombre, email, etc.)
-   - Haz clic en "Guardar"
-
-3. **Crear usuarios masivos (Excel)**
-   - Prepara un archivo Excel con columnas:
-     ```
-     nombre, email, login, tipo
-     Juan Pérez, juan@usil.edu.py, juan.perez, student
-     María García, maria@usil.edu.py, maria.garcia, instructor
-     ```
-   - Haz clic en "Cargar Excel"
-   - Selecciona tu archivo
-   - El sistema mostrará un reporte de cuáles se crearon y cuáles fallaron
-
-4. **Ver historial de creación**
-   - Entra a http://localhost:3000/ui/jobs
-   - Filtrar por "Crear Usuarios"
-   - Verás qué se hizo, cuántos éxito, cuántos errores
+### ¿Cómo usarlo?
+1. Entra a **Historial Trabajos** (`/ui/jobs`).
+2. Filtra por "Hoy", "Esta semana" o por operación específica (ej. "Alta Unificada").
+3. Si subiste un Excel con 100 alumnos, aquí verás cuántos se crearon con **Éxito (✓)** y cuántos tuvieron **Errores (✗)**.
+4. Puedes leer el mensaje de error exacto (ej. "El correo ya existe en Azure") para corregir el archivo y volver a intentarlo.
 
 ---
 
-## 📚 Gestión de Cursos
+## 🔒 Auditoría y Logs
 
 ### ¿Para qué sirve?
-Sincronizar y gestionar cursos entre Canvas y Teams.
+Ver un registro completo (log) de quién hizo qué en el sistema. Registra todas las solicitudes HTTP, endpoints accedidos y usuarios responsables, ideal para control de seguridad y trazabilidad.
 
-### Pasos para Usar
-
-1. **Accede a Cursos**
-   - URL: http://localhost:3000/ui/canvas/courses
-   - O desde Home → Cursos
-
-2. **Listar cursos**
-   - La página muestra automáticamente todos los cursos disponibles
-   - Usa búsqueda para encontrar un curso específico
-
-3. **Ver detalles**
-   - Haz clic en un curso para ver:
-     - Nombre y descripción
-     - Docente asignado
-     - Cantidad de estudiantes
-     - Información de sincronización
-
-4. **Actualizar información**
-   - Haz clic en "Editar"
-   - Modifica los campos necesarios
-   - Haz clic en "Guardar"
-
----
-
-## 📋 Gestión de Matrículas (Enrollments)
-
-### ¿Para qué sirve?
-Asignar estudiantes a cursos de forma masiva o individual.
-
-### Pasos para Usar
-
-1. **Accede a Matrículas**
-   - URL: http://localhost:3000/ui/canvas/enrollments
-   - O desde Home → Matrículas
-
-2. **Matrícula individual**
-   - Selecciona un curso
-   - Selecciona estudiante(s)
-   - Haz clic en "Matricular"
-   - El sistema confirmará cuántos se matricularon
-
-3. **Matrícula masiva (Excel)**
-   - Prepara un archivo Excel:
-     ```
-     course_id, student_id, tipo_rol
-     1723, 2294, student
-     1723, 2295, student
-     1724, 2296, instructor
-     ```
-   - Haz clic en "Cargar Matrículas"
-   - Carga el archivo
-   - Verifica el reporte de resultados
-
-4. **Consultar historial**
-   - Entra a http://localhost:3000/ui/jobs
-   - Filtrar por "Matrículas"
-   - Ver qué estudiantes se asignaron correctamente y cuáles fallaron
-
----
-
-## 📋 Historial de Trabajos (Jobs) - ⭐ Funcionalidad Principal
-
-### ¿Para qué sirve?
-Ver TODAS las operaciones realizadas (crear usuarios, matrículas, etc.) con detalles completos de qué funcionó y qué no.
-
-**Los datos PERSISTEN aunque cierres la página o reinicies el servidor.**
-
-### Pasos para Usar
-
-1. **Accede al Historial**
-   - URL: http://localhost:3000/ui/jobs
-   - O desde Home → Historial de Trabajos
-
-2. **Ver trabajos de hoy**
-   - Haz clic en "Hoy"
-   - Verás todas las operaciones del día
-
-3. **Ver trabajos por período**
-   - Haz clic en "Esta semana" o "Este mes"
-   - O selecciona fechas personalizadas
-
-4. **Filtrar por usuario**
-   - Completa "Usuario" con el nombre
-   - Haz clic en "Buscar"
-   - Ver qué hizo ese usuario específico
-
-5. **Filtrar por tipo de trabajo**
-   - Selecciona en "Tipo de trabajo"
-   - Opciones: Crear usuarios, Matrículas, Cursos, etc.
-
-6. **Interpretar los resultados**
-   - **Estado Completado**: Todo fue exitoso ✓
-   - **Con Errores**: Algunos éxito, algunos fallidos ⚠
-   - **Fallido**: La operación completa falló ✗
-   - **Pendiente**: Aún se está procesando ⏳
-
-### Información que se Guarda por Operación
-- ✓ Fecha y hora exacta de inicio y fin
-- ✓ Usuario que realizó la acción
-- ✓ Tipo de trabajo (qué se intentó)
-- ✓ Operación específica (detalles)
-- ✓ Estado: Pendiente, Procesando, Completado, Con Errores, Fallido
-- ✓ Cantidad de éxitos
-- ✓ Cantidad de errores
-- ✓ Mensaje de error detallado (si aplica)
-
-### Ejemplo: Verificar si 100 usuarios se crearon correctamente
-
-1. Entra a Historial de Trabajos
-2. Filtrar por "Crear Usuarios (Masivo)"
-3. Ver la fecha cuando se hizo
-4. Verás:
-   - Cantidad de éxitos
-   - Cantidad de errores
-   - Mensaje de error (si aplica)
-5. Si hay errores, puedes reintentar solo los que fallaron
-
----
-
-## 🔒 Auditoría
-
-### ¿Para qué sirve?
-Ver TODAS las solicitudes HTTP realizadas en el sistema, con información de quién las hizo, cuándo y desde dónde.
-
-### Pasos para Usar
-
-1. **Accede a Auditoría**
-   - URL: http://localhost:3000/ui/audit
-   - O desde Home → Auditoría
-
-2. **Ver registro completo**
-   - La página muestra automáticamente las últimas solicitudes
-   - Navega con "Anterior/Siguiente" para ver más
-
-3. **Filtrar por usuario**
-   - Completa "Usuario"
-   - Verás todas las acciones que ese usuario realizó
-
-4. **Ver estadísticas**
-   - En la parte superior se muestran:
-     - Total de solicitudes
-     - Usuarios únicos
-     - Endpoints accedidos
-     - Solicitudes por método (GET, POST, etc.)
+- Accede desde **Auditoría** (`/ui/audit`).
 
 ---
 
 ## 💾 Bases de Datos
 
-El sistema crea automáticamente 3 bases de datos en `data/`:
+El sistema crea automáticamente 3 bases de datos locales en la carpeta `data/` usando SQLite:
 
-1. **app.db** - Datos principales (cursos, usuarios, matrículas, etc.)
-2. **audit.db** - Log de todas las solicitudes HTTP
-3. **jobs.db** - Historial de operaciones (crear usuarios, matrículas, etc.)
+1. **app.db** - Caché y datos rápidos de la app.
+2. **audit.db** - Log de auditoría de solicitudes.
+3. **jobs.db** - Historial detallado de operaciones (Jobs).
 
-Todos los datos se **persisten automáticamente** aunque cierres la página o reinicies el servidor.
-
----
-
-## ⚠️ Solución de Problemas
-
-### El servidor no inicia
-```bash
-# Verifica que las credenciales en .env sean correctas
-# Verifica que Canvas y Azure estén disponibles
-cd Backend
-python -m uvicorn app.main:app --host 127.0.0.1 --port 3000
-```
-
-### Los reportes de asistencia están vacíos
-- **Solución**: Descarga el CSV del course desde Canvas y guárdalo en `Carpeta de plantillas/`
-- Los datos se actualizan automáticamente cuando detecta archivos nuevos
-
-### No veo los usuarios creados en Canvas
-- **Solución**: Ve al Historial de Trabajos para ver si hubo errores
-- Verifica que el token de Canvas tenga permisos de administrador
-
-### ¿Por qué falló una operación?
-- **Solución**: Ve a http://localhost:3000/ui/jobs
-- Filtra por usuario y tipo de trabajo
-- Lee el mensaje de error detallado
-- Soluciona el problema (ej: datos incorrectos, usuario duplicado)
-- Reintenta la operación
+Todos los datos se **persisten automáticamente** aunque el servidor se reinicie.
 
 ---
 
-## 📊 Flujo Típico de Trabajo
-
-### Inicio de Semestre
-1. **Crear cursos** → Cursos
-2. **Crear usuarios** → Usuarios (cargar Excel)
-3. **Asignar estudiantes** → Matrículas (cargar Excel)
-4. **Verificar** → Historial de Trabajos (ver cuántos éxito/error)
-
-### Monitoreo Semanal
-1. **Descargar asistencias** → Reportes de Asistencia
-2. **Verificar trabajos pendientes** → Historial de Trabajos
-3. **Auditar cambios** → Auditoría (opcional)
-
-### Fin de Mes
-1. **Descargar reportes finales** → Reportes de Asistencia
-2. **Ver resumen de todo lo hecho** → Historial de Trabajos (filtrar por mes)
-3. **Exportar para directivos** → Descargar Excels
-
----
-
-## 🆘 Contacto y Soporte
-
-- **API Documentation**: http://localhost:3000/docs
-- **Logs**: Revisa la consola donde ejecutaste el servidor
-- **Historial de Trabajos**: http://localhost:3000/ui/jobs (para ver qué pasó)
-
----
-
-## 📝 Notas Importantes
-
-✅ **Qué SÍ puedes hacer**:
-- Crear usuarios sin límite
-- Asignar estudiantes a cursos
-- Descargar reportes de asistencia
-- Ver historial completo de operaciones
-- Auditar quién hizo qué y cuándo
-- **Cerrar la página sin perder los datos** (se guardan en BD)
-
-❌ **Qué NO puedes hacer directamente**:
-- Cambiar contraseñas (hacerlo en Canvas/Azure)
-- Eliminar usuarios (solo en Canvas)
-- Modificar calificaciones (solo en Canvas)
-
----
-
-## 🎓 Ejemplos Prácticos
-
-### Crear 50 estudiantes nuevos
-1. Prepara Excel con 50 filas (nombre, email, login)
-2. Entra a http://localhost:3000/ui/canvas/users
-3. Haz clic en "Cargar Excel"
-4. Carga el archivo
-5. Sistema procesa automáticamente
-6. Ver reporte: 45 éxito, 5 fallidos (duplicados/emails inválidos)
-7. Corrige los 5 y reintentar
-
-### Descargar asistencias de fin de mes
-1. Descarga CSVs de Canvas para cada curso
-2. Guarda en `Carpeta de plantillas/` (ej: 1723.csv)
-3. Entra a http://localhost:3000/ui/canvas/attendance
-4. Haz clic en "Refrescar"
-5. Haz clic en "Descargar" de cada curso
-6. Envía Excels a docentes
-
-### Verificar qué salió mal en una matrícula masiva
-1. Entra a http://localhost:3000/ui/jobs
-2. Filtrar por "Matrículas (Masivo)" y fecha
-3. Ver: 450 éxito, 10 errores
-4. Lee el mensaje de error para cada uno
-5. Corrige los datos y reintenta
-
----
-
-## Stack Técnico (Para Administradores)
+## 🛠️ Stack Técnico (Para Administradores)
 
 | Capa | Tecnología |
 |------|-----------|
-| Backend | Python 3.12 + FastAPI |
-| Servidor | Uvicorn (ASGI) |
-| APIs externas | Canvas LMS REST API v1, Microsoft Graph API |
-| Base de Datos | SQLite (3 BD: app, audit, jobs) |
-| Frontend | Jinja2 + Bootstrap 5.3 |
-| Caché | In-memory TTL con persistencia en disco |
+| **Backend** | Python 3.12 + FastAPI |
+| **Servidor** | Uvicorn (ASGI) |
+| **Integraciones** | Canvas LMS REST API v1, Microsoft Graph API |
+| **Autenticación** | OAuth2, Graph API Tokens, SMTP para correos |
+| **Base de Datos** | SQLite3 (Manejo concurrente de 3 bases: app, audit, jobs) |
+| **Frontend** | Jinja2 Templates + Vanilla JS + Bootstrap 5.3 |
+| **Despliegue** | Dockerizado para Railway (`railway up`) |
 
 ---
 
-**¡Listo! Ahora puedes usar el sistema completamente.** Si tienes dudas, consulta el Historial de Trabajos (jobs) para ver exactamente qué pasó en cada operación. 🚀
+## ⚠️ Solución de Problemas Frecuentes
+
+**1. "Error 403 al subir código a GitHub"**
+Si usaste una cuenta diferente a la configurada en Windows, ve al "Administrador de Credenciales" de Windows, borra la credencial antigua de GitHub y vuelve a hacer `git push`.
+
+**2. "Los correos de bienvenida no llegan"**
+Verifica que las variables `SMTP_USER` y `SMTP_PASSWORD` en tu `.env` correspondan a la cuenta institucional correcta (ej. `it@usil.edu.py`) y que el tenant permita el envío SMTP (Basic Auth o App Passwords).
+
+**3. "No aparecen datos al subir el Excel de Nuevo Ingreso"**
+Asegúrate de haber descargado la plantilla oficial desde el botón "Plantilla Excel" y no alterar los nombres de las cabeceras (columnas). Si falla, revisa el **Historial de Trabajos** para leer el error exacto.
