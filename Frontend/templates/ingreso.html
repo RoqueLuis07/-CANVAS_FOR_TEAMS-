@@ -598,6 +598,10 @@ async function doPreview() {
 
 /* CARGA EN CONJUNTO CON EXCEL SPREADSHEET */
 
+
+let pendingStudents = [];
+let previewModal;
+
 function openExcelCrear() {
   showSpreadsheet({
     title: 'Creación en Conjunto (Excel)',
@@ -622,9 +626,56 @@ function openExcelCrear() {
         send_email: true,
         cc: []
       }));
-      return await api.post('/ingreso/bulk', { students });
+      
+      // Llamar a preview
+      toast('Analizando y generando credenciales...', 'info');
+      const previewRes = await api.post('/ingreso/bulk-preview', { students });
+      
+      // Renderizar en el modal de preview
+      pendingStudents = students;
+      const tbody = document.getElementById('ingresoPreviewTbody');
+      tbody.innerHTML = previewRes.sample.map(r => {
+         const cvBadge = r.status_canvas === 'exists' ? '<span class="badge bg-warning">Ya existe</span>' : (r.status_canvas === '-' ? '-' : '<span class="badge bg-success">Nuevo</span>');
+         const tmBadge = r.status_teams === 'exists' ? '<span class="badge bg-warning">Ya existe</span>' : (r.status_teams === '-' ? '-' : '<span class="badge bg-success">Nuevo</span>');
+         return `
+            <tr>
+               <td>${r.nombre}</td>
+               <td>${r.cedula}</td>
+               <td class="text-primary font-monospace">${r.login_id}</td>
+               <td>${cvBadge}</td>
+               <td>${tmBadge}</td>
+            </tr>
+         `;
+      }).join('');
+      
+      if (!previewModal) previewModal = new bootstrap.Modal(document.getElementById('modalIngresoPreview'));
+      previewModal.show();
+      
+      // Devolvemos false para indicar que showSpreadsheet debe cerrarse silenciosamente sin toast de éxito aún
+      // ya que el éxito final vendrá desde el modal.
+      return { success: true, silent: true }; 
     }
   });
+}
+
+async function confirmIngresoPreview() {
+    if (!pendingStudents || pendingStudents.length === 0) return;
+    const btn = document.getElementById('btnConfirmIngreso');
+    setLoading(btn, true);
+    try {
+        const res = await api.post('/ingreso/bulk', { students: pendingStudents });
+        previewModal.hide();
+        // Mostrar resultados como antes
+        let successHtml = `<ul>${res.succeeded.map(s => `<li>${s.student}: OK</li>`).join('')}</ul>`;
+        let errHtml = res.failed.length > 0 ? `<div class="text-danger">Fallos:</div><ul>${res.failed.map(f => `<li>${f.student}: ${f.error}</li>`).join('')}</ul>` : '';
+        document.getElementById('previewResult').innerHTML = `<div class="alert alert-success">Completado!</div>${successHtml}${errHtml}`;
+        document.getElementById('previewResult').style.display = 'block';
+        toast('Proceso finalizado.', 'success');
+    } catch (err) {
+        toast('Error: ' + err.message, 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
 }
 
 function openExcelReenviar() {
@@ -757,3 +808,41 @@ async function importDocentes() {
 
 </script>
 {% endblock %}
+
+<!-- Modal Ingreso Preview -->
+<div class="modal fade" id="modalIngresoPreview" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header border-0 bg-light">
+        <h5 class="modal-title fw-bold">Revisión de Credenciales</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="alert alert-info border-0 shadow-sm mb-4">
+            <i class="bi bi-info-circle me-2"></i> Verifica las credenciales que se van a generar. A los usuarios marcados como "Nuevo" se les creará la cuenta y se les enviará el correo de bienvenida. A los que "Ya existen" no se les enviará correo.
+        </div>
+        <div class="table-responsive bg-white rounded shadow-sm border">
+            <table class="table table-hover table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Cédula</th>
+                        <th>Usuario (Email Generado)</th>
+                        <th>Canvas</th>
+                        <th>Teams (Azure)</th>
+                    </tr>
+                </thead>
+                <tbody id="ingresoPreviewTbody">
+                </tbody>
+            </table>
+        </div>
+      </div>
+      <div class="modal-footer bg-light border-0">
+        <button type="button" class="btn btn-secondary text-white fw-medium rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary shadow-sm rounded-pill px-4 fw-medium" id="btnConfirmIngreso" onclick="confirmIngresoPreview()">
+            <i class="bi bi-send-check me-2"></i>Autorizar y Ejecutar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
