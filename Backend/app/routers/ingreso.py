@@ -381,7 +381,17 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
                 results["teams"] = {"status": "error", "error": error_str}
 
     # ── Email ─────────────────────────────────────────────────
-    if student.send_email:
+    # Solo enviar email si realmente se creó en todas las plataformas solicitadas
+    is_existing_canvas = results.get("canvas", {}).get("status") == "exists"
+    is_existing_teams = results.get("teams", {}).get("status") == "exists"
+    
+    skip_email = False
+    if student.platform in ("canvas", "both") and is_existing_canvas:
+        skip_email = True
+    if student.platform in ("teams", "both") and is_existing_teams:
+        skip_email = True
+
+    if student.send_email and not skip_email:
         try:
             attachments = get_program_attachments(student.program_type)
             await send_welcome_email(
@@ -444,6 +454,8 @@ async def _resend_credentials(body: ResendCredentialsIn) -> dict[str, Any]:
         "action": "resend",
     }
 
+    # En el reenvío de correo desde la UI, enviamos las credenciales base. 
+    # Idealmente, deberíamos alertar si el usuario ya cambió su clave, pero como es un reenvío manual asumimos que el admin sabe lo que hace.
     try:
         attachments = get_program_attachments(body.program_type)
         await send_welcome_email(

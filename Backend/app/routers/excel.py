@@ -618,7 +618,16 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                     else:
                         entry["teams"] = {"status": "error", "error": exc.detail if isinstance(exc, HTTPException) else str(exc)}
 
-            if do_email and p_email:
+            is_existing_canvas = entry.get("canvas", {}).get("msg") == "Ya existía en Canvas"
+            is_existing_teams = entry.get("teams", {}).get("msg") == "Ya existía en Azure AD"
+            
+            skip_email = False
+            if platform in ("canvas", "both") and is_existing_canvas:
+                skip_email = True
+            if platform in ("teams", "both") and is_existing_teams:
+                skip_email = True
+
+            if do_email and p_email and not skip_email:
                 try:
                     await send_welcome_email(
                         to_email=p_email, 
