@@ -307,16 +307,21 @@
           </p>
         </div>
         
-        <div class="row g-3 mb-4">
-          <div class="col-md-8">
-            <label class="form-label fw-bold text-secondary">Enlace de Compartir (OneDrive) <span class="text-danger">*</span></label>
-            <input type="url" id="doc_url" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/..." required>
+                  <div class="row g-3 mb-4">
+            <div class="col-md-8">
+              <label class="form-label fw-bold text-secondary">Enlace de Compartir (OneDrive) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="url" id="doc_url" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/..." required>
+                <button class="btn btn-warning text-dark fw-bold" type="button" id="btnLoadDocSheets" onclick="fetchDocSheets()"><i class="bi bi-cloud-arrow-down me-1"></i>Cargar Pestañas</button>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-bold text-secondary">Seleccionar Pestaña <span class="text-danger">*</span></label>
+              <select id="doc_sheet" class="form-select" required>
+                <option value="">Carga las pestañas primero...</option>
+              </select>
+            </div>
           </div>
-          <div class="col-md-4">
-            <label class="form-label fw-bold text-secondary">Nombre de la Pestaña <span class="text-danger">*</span></label>
-            <input type="text" id="doc_sheet" class="form-control" placeholder="Ej: Hoja 1" value="Hoja 1" required>
-          </div>
-        </div>
         
         <div class="d-flex justify-content-end gap-2 mb-4">
           <button type="button" class="btn btn-outline-secondary" onclick="previewDocentes()" id="btnPreviewDocentes">
