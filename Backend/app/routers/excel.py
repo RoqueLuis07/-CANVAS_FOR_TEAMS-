@@ -836,6 +836,11 @@ class DiplomadosUrlRequest(BaseModel):
 
 class UrlOnlyRequest(BaseModel):
     url: str
+class DocentesPreviewResponse(BaseModel):
+    total_rows: int
+    valid_rows: int
+    sample: list[dict]
+
 class PreviewResponse(BaseModel):
     sheet_name: str
     students_to_process: int
@@ -1733,7 +1738,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
 
 
 @router.post("/excel/docentes-onedrive/preview", summary="Previsualizar Docentes desde OneDrive")
-async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
+async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPreviewResponse:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL invlida.")
     
@@ -1810,7 +1815,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> PreviewRespons
         if len(rows) >= 10:
             break
 
-    return PreviewResponse(
+    return DocentesPreviewResponse(
         total_rows=ws.max_row - header_row_idx,
         valid_rows=len(rows),
         sample=rows
