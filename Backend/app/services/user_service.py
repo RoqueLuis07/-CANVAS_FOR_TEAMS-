@@ -4,7 +4,7 @@ from typing import Any
 from app.core.config import settings
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
-from app.services.credential_generator import generate_credentials
+from app.services.credential_generator import generate_credentials, parse_name
 
 logger = logging.getLogger(__name__)
 
@@ -103,14 +103,22 @@ async def generate_unique_credentials(full_name: str, cedula: str, platform: str
     except Exception as exc:
         logger.warning(f"Error checking Canvas for {cedula}: {exc}")
 
-    # Lista de sufijos a intentar: "" (vacío), inicial del 2do apellido, 1, 2, ..., 99
+    # Lista de sufijos a intentar: "" (vacío), y progresivamente letras de los nombres/apellidos adicionales
     suffixes = [""]
-    parts = full_name.strip().split()
-    if len(parts) >= 3 and parts[-1]:
-        suffixes.append(parts[-1][0].lower())
+    first, last, extra_words = parse_name(full_name)
     
-    for i in range(1, 100):
-        suffixes.append(str(i))
+    for word in extra_words:
+        for i in range(1, len(word) + 1):
+            cand = word[:i].lower()
+            if cand not in suffixes:
+                suffixes.append(cand)
+                
+    # Fallback sin usar números: usar letras del primer nombre si no hay nombres adicionales
+    for word in [first, last]:
+        for i in range(1, len(word) + 1):
+            cand = word[:i].lower()
+            if cand not in suffixes:
+                suffixes.append(cand)
 
     for suffix in suffixes:
         creds = generate_credentials(full_name, cedula, domain, collision_suffix=suffix)

@@ -9,16 +9,38 @@ def _normalize(text: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]", "", ascii_text).lower()
 
 
+def parse_name(full_name: str) -> tuple[str, str, list[str]]:
+    """Returns (first_name, primary_surname, list_of_extra_words)
+    
+    Uses heuristics for Spanish names to correctly identify the primary surname.
+    """
+    parts = full_name.strip().split()
+    if not parts:
+        return "user", "user", []
+    if len(parts) == 1:
+        return parts[0], parts[0], []
+    if len(parts) == 2:
+        return parts[0], parts[1], []
+    if len(parts) == 3:
+        # e.g., Juan Perez Gomez -> Juan, Perez, [Gomez]
+        return parts[0], parts[1], [parts[2]]
+    if len(parts) == 4:
+        # e.g., Roque Luis Esteche Cantero -> Roque, Esteche, [Cantero, Luis]
+        return parts[0], parts[2], [parts[3], parts[1]]
+    
+    # >= 5 words (e.g. Maria de los Angeles Perez Gomez)
+    # Heuristic: First word is name, second to last is primary surname.
+    return parts[0], parts[-2], [parts[-1]]
+
+
 def generate_credentials(full_name: str, cedula: str, domain: str, collision_suffix: str = "") -> dict:
     """
-    Karen Gonzalez + 6868066 →
+    Karen Gonzalez + 6868066 ->
       email:    karen.gonzalez@usil.edu.py
       password: 6868066-Kg
       login_id: karen.gonzalez
     """
-    parts = full_name.strip().split()
-    first = parts[0] if parts else "user"
-    last  = parts[-1] if len(parts) > 1 else parts[0] if parts else "user"
+    first, last, _ = parse_name(full_name)
 
     first_norm = _normalize(first) or "user"
     last_norm  = _normalize(last) or "user"
@@ -43,9 +65,7 @@ def generate_credentials(full_name: str, cedula: str, domain: str, collision_suf
 
 def generate_password(cedula: str, full_name: str) -> str:
     """Generates a standard password for the given user."""
-    parts = full_name.strip().split()
-    first = parts[0] if parts else "user"
-    last  = parts[-1] if len(parts) > 1 else parts[0] if parts else "user"
+    first, last, _ = parse_name(full_name)
 
     first_init = _normalize(first[0])[0].upper() if first and _normalize(first[0]) else "U"
     last_init  = _normalize(last[0])[0].lower() if last and _normalize(last[0]) else "S"
