@@ -29,7 +29,7 @@ from app.core.config import settings
 from app.models.canvas import BulkResult
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
-from app.services.credential_generator import generate_credentials
+from app.services import user_service
 from app.services.email_service import send_welcome_email, get_program_attachments
 
 router = APIRouter(prefix="/ingreso", tags=["Nuevo Ingreso"])
@@ -212,74 +212,6 @@ def _resolve_login(creds: dict, role: str) -> tuple[str, str]:
     return creds["email"], creds["cedula"]
 
 
-async def _canvas_user_exists(cedula: str, login_id: str) -> tuple[bool, dict]:
-    """Verifica si un usuario existe en Canvas por SIS ID (cédula) o login_id.
-
-    Busca primero por SIS user ID (cédula) — encuentra al usuario aunque haya
-    cambiado de nombre. Si no lo encuentra, hace fallback por login_id (email
-    institucional generado).
-
-    Returns:
-        (exists: bool, user_info: dict)
-    """
-    try:
-        user = await canvas.get(f"/users/sis_user_id:{cedula}")
-        return True, {
-            "found_by": "cedula",
-            "canvas_id": user.get("id"),
-            "name": user.get("name", ""),
-            "login_id": user.get("login_id", ""),
-            "email": user.get("email", ""),
-        }
-    except Exception:
-        pass
-
-    try:
-        search = await canvas.get(f"/accounts/{_ACCOUNT}/users", {"search_term": login_id})
-        if isinstance(search, list):
-            for u in search:
-                if u.get("login_id", "").lower() == login_id.lower():
-                    return True, {
-                        "found_by": "login_id",
-                        "canvas_id": u.get("id"),
-                        "name": u.get("name", ""),
-                        "login_id": u.get("login_id", ""),
-                        "email": u.get("email", ""),
-                    }
-    except Exception:
-        pass
-
-    return False, {}
-
-
-async def _teams_user_exists(upn: str) -> tuple[bool, dict]:
-    """Verifica si un usuario existe en Azure AD por userPrincipalName.
-
-    Returns:
-        (exists: bool, user_info: dict)
-
-    Raises:
-        Exception si el error no es 404 (problema real de conexión o permisos).
-    """
-    try:
-        user = await graph.get(
-            f"/users/{upn}?$select=id,displayName,userPrincipalName,mail,accountEnabled,createdDateTime"
-        )
-        return True, {
-            "found_by": "upn",
-            "azure_id": user.get("id"),
-            "name": user.get("displayName", ""),
-            "upn": user.get("userPrincipalName", ""),
-            "mail": user.get("mail", ""),
-            "account_enabled": user.get("accountEnabled"),
-            "created": user.get("createdDateTime", ""),
-        }
-    except Exception as exc:
-        err = str(exc)
-        if "404" in err or "Request_ResourceNotFound" in err or "does not exist" in err.lower():
-            return False, {}
-        raise
-
 
 async def _check_account(body: AccountCheckIn) -> dict[str, Any]:
     """Verifica si un usuario existe en Canvas y/o Teams.
@@ -296,7 +228,7 @@ async def _check_account(body: AccountCheckIn) -> dict[str, Any]:
     }
 
     if body.full_name.strip():
-        creds = generate_credentials(body.full_name, body.cedula, settings.institutional_domain)
+        creds, status = await user_service.generate_unique_credentials(body.full_name, body.cedula, platform=body.platform)
         login_id = creds["email"]
         upn = creds["email"]
         result["generated_email"] = creds["email"]
@@ -306,7 +238,7 @@ async def _check_account(body: AccountCheckIn) -> dict[str, Any]:
 
     if body.platform in ("canvas", "both"):
         try:
-            exists, info = await _canvas_user_exists(body.cedula, login_id)
+            exists, info = await user_service._canvas_user_exists(body.cedula, login_id)
             result["canvas"] = {"exists": exists, **(info if exists else {})}
         except Exception as exc:
             result["canvas"] = {"exists": None, "error": _err(exc)}
@@ -338,36 +270,6 @@ async def _generate_unique_credentials(full_name: str, cedula: str, platform: st
                 return creds
     except Exception:
         pass
-
-    login_id = creds["email"]
-    email_taken = False
-    
-    # 2. Verificar colisión de correo en Teams
-    if platform in ("teams", "both"):
-        try:
-            exists_teams, _ = await _teams_user_exists(login_id)
-            if exists_teams: email_taken = True
-        except Exception:
-            pass
-            
-    # 3. Verificar colisión de correo en Canvas
-    if platform in ("canvas", "both") and not email_taken:
-        try:
-            exists_canvas, info = await _canvas_user_exists(cedula, login_id)
-            if exists_canvas and info.get("found_by") == "login_id":
-                email_taken = True
-        except Exception:
-            pass
-            
-    if not email_taken:
-        return creds
-        
-    # Colisión detectada: Agregar inicial del segundo apellido (si existe)
-    parts = full_name.strip().split()
-    suffix = parts[-1][0].lower() if len(parts) >= 3 and parts[-1] else "x"
-    return generate_credentials(full_name, cedula, settings.institutional_domain, collision_suffix=suffix)
-
-
 async def _create_student(student: StudentIn) -> dict[str, Any]:
     """Crea un usuario en Canvas y/o Teams según la plataforma indicada.
 
@@ -382,7 +284,7 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
     Returns:
         Diccionario con estado de cada plataforma y las credenciales generadas.
     """
-    creds = await _generate_unique_credentials(student.full_name, student.cedula, student.platform)
+    creds, _ = await user_service.generate_unique_credentials(student.full_name, student.cedula, platform=student.platform)
     login_id, sis_user_id = _resolve_login(creds, student.role)
     results: dict[str, Any] = {
         "student": student.full_name,
@@ -393,7 +295,7 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
     # ── Canvas ────────────────────────────────────────────────
     if student.platform in ("canvas", "both"):
         try:
-            exists, info = await _canvas_user_exists(sis_user_id, login_id)
+            exists, info = await user_service._canvas_user_exists(sis_user_id, login_id)
             if exists:
                 results["canvas"] = {
                     "status": "exists",
@@ -437,7 +339,7 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
         parts = student.full_name.strip().split()
         sku = settings.azure_sku_teachers if student.role == "teacher" else settings.azure_sku_students
         try:
-            exists, info = await _teams_user_exists(creds["email"])
+            exists, info = await user_service._teams_user_exists(creds["email"])
             if exists:
                 results["teams"] = {
                     "status": "exists",
@@ -583,7 +485,7 @@ async def get_courses(search: str = ""):
 @router.post("/preview", response_model=CredentialPreview, summary="Previsualizar credenciales")
 async def preview_credentials(body: StudentIn):
     """Genera y muestra las credenciales que se asignarían al usuario, sin crear nada."""
-    creds = await _generate_unique_credentials(body.full_name, body.cedula, body.platform)
+    creds, _ = await user_service.generate_unique_credentials(body.full_name, body.cedula, body.platform)
     login_id, _ = _resolve_login(creds, body.role)
     return CredentialPreview(
         full_name=body.full_name,

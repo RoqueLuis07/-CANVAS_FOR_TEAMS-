@@ -23,7 +23,7 @@ from app.core.config import settings
 from app.models.canvas import BulkResult
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
-from app.services.credential_generator import generate_credentials
+from app.services import user_service
 from app.services.email_service import send_welcome_email, get_program_attachments
 from app.services.teams_client import create_team_via_group
 
@@ -552,7 +552,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
             if not full_name or not cedula:
                 raise ValueError("Nombre Completo y Cédula son obligatorios")
 
-            creds        = generate_credentials(full_name, cedula, settings.institutional_domain)
+            creds, status = await user_service.generate_unique_credentials(full_name, cedula, platform)
             role         = (_get(row, "rol_student_teacher", "rol", "role") or "student").lower()
             platform     = (_get(row, "plataforma_both_canvas_teams", "plataforma", "platform") or "both").lower()
             program_type = (_get(row, "tipo_programa_grado_mba_diplomado", "tipo_programa", "program_type") or "grado").lower()
@@ -570,21 +570,27 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
             }
 
             if platform in ("canvas", "both"):
-                try:
-                    cu = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/users", {
-                        "user": {"name": creds["full_name"]},
-                        "pseudonym": {
-                            "unique_id": login_id, "sis_user_id": cedula,
-                            "password": creds["password"], "send_confirmation": False,
-                        },
-                        "communication_channel": {
-                            "type": "email", "address": creds["email"],
-                            "skip_confirmation": True,
-                        },
-                    })
-                    entry["canvas"] = {"status": "ok", "id": cu.get("id")}
-                except Exception as exc:
-                    entry["canvas"] = {"status": "error", "error": exc.detail if isinstance(exc, HTTPException) else str(exc)}
+                if status == "existing_cedula":
+                    entry["canvas"] = {"status": "ok", "msg": "Ya existía en Canvas"}
+                else:
+                    try:
+                        cu = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/users", {
+                            "user": {"name": creds["full_name"]},
+                            "pseudonym": {
+                                "unique_id": login_id, "sis_user_id": cedula,
+                                "password": creds["password"], "send_confirmation": False,
+                            },
+                            "communication_channel": {
+                                "type": "email", "address": creds["email"],
+                                "skip_confirmation": True,
+                            },
+                        })
+                        entry["canvas"] = {"status": "ok", "id": cu.get("id")}
+                    except Exception as exc:
+                        if "sis_id_in_use" in str(exc).lower() or "unique_id_in_use" in str(exc).lower():
+                            entry["canvas"] = {"status": "ok", "msg": "Ya existía en Canvas"}
+                        else:
+                            entry["canvas"] = {"status": "error", "error": exc.detail if isinstance(exc, HTTPException) else str(exc)}
 
             if platform in ("teams", "both"):
                 parts = full_name.strip().split()
@@ -606,7 +612,11 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                     await graph.assign_license(au["id"], sku)
                     entry["teams"] = {"status": "ok", "id": au.get("id")}
                 except Exception as exc:
-                    entry["teams"] = {"status": "error", "error": exc.detail if isinstance(exc, HTTPException) else str(exc)}
+                    err_str = str(exc).lower()
+                    if "already exists" in err_str or "request_badrequest" in err_str:
+                        entry["teams"] = {"status": "ok", "msg": "Ya existía en Azure AD"}
+                    else:
+                        entry["teams"] = {"status": "error", "error": exc.detail if isinstance(exc, HTTPException) else str(exc)}
 
             if do_email and p_email:
                 try:
@@ -1038,7 +1048,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if "✅" in enviado or enviado.lower() in ["si", "yes", "true", "enviado"]:
                 return
 
-            creds = generate_credentials(nombre, cedula, settings.institutional_domain)
+            creds, status = await user_service.generate_unique_credentials(nombre, cedula, "teams")
             login_id = creds["email"]
             pwd = creds["password"]
             error = None
@@ -1880,7 +1890,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
         id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
 
-        creds = generate_credentials(nombre, cedula, settings.institutional_domain)
+        creds, status = await user_service.generate_unique_credentials(nombre, cedula, plat)
         login_id = creds["email"]
         pwd = creds["password"]
         
