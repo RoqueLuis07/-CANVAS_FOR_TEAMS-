@@ -779,6 +779,44 @@ function openExcelDocentes() {
     modalDocentes.show();
 }
 
+
+async function fetchDocSheets() {
+    const urlInput = document.getElementById('doc_url').value.trim();
+    if (!urlInput) {
+        return toast('Por favor, ingresa la URL primero.', 'warning');
+    }
+    
+    const btn = document.getElementById('btnLoadDocSheets');
+    const select = document.getElementById('doc_sheet');
+    const oldText = btn.innerHTML;
+    
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+    btn.disabled = true;
+    select.innerHTML = '<option value="">Cargando...</option>';
+    
+    try {
+        const sheets = await api.post('/excel/docentes-onedrive/sheets', { url: urlInput });
+        if (sheets && sheets.length > 0) {
+            select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
+            sheets.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                select.appendChild(opt);
+            });
+            toast('Pestañas cargadas exitosamente.', 'success');
+        } else {
+            select.innerHTML = '<option value="">No se encontraron pestañas</option>';
+        }
+    } catch (e) {
+        toast('Error al cargar pestañas: ' + (e.detail || e.message || e), 'danger');
+        select.innerHTML = '<option value="">Error al cargar</option>';
+    } finally {
+        btn.innerHTML = oldText;
+        btn.disabled = false;
+    }
+}
+
 async function previewDocentes() {
     const url = document.getElementById('doc_url').value;
     const sheet = document.getElementById('doc_sheet').value;
