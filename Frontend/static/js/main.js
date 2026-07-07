@@ -1359,10 +1359,17 @@ async function doUploadDiplomados() {
     // We can just store them in hidden data attributes or pass them directly
     const safeUrl = urlInput.replace(/'/g, "\\'");
     const safeSheet = sheetInput.replace(/'/g, "\\'");
+    
+    let ccList = Array.from(document.querySelectorAll('.cc-check-dip:checked')).map(cb => cb.value);
+    let otros = document.getElementById('otros_cc_dip').value;
+    if (otros) {
+        ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
+    }
+    const ccString = JSON.stringify(ccList).replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
     document.getElementById('globalModalFooter').innerHTML = `
       <button type="button" class="btn btn-outline-secondary" onclick="openExcelDiplomados()">Cancelar y Volver</button>
-      <button type="button" class="btn btn-success" id="btnConfirmUpload" onclick="executeUploadDiplomados('${safeUrl}', '${safeSheet}')">
+      <button type="button" class="btn btn-success" id="btnConfirmUpload" onclick="executeUploadDiplomados('${safeUrl}', '${safeSheet}', ${ccString})">
         <i class="bi bi-check-circle me-1"></i>Confirmar y Sincronizar
       </button>
     `;
@@ -1373,18 +1380,12 @@ async function doUploadDiplomados() {
   }
 }
 
-async function executeUploadDiplomados(urlInput, sheetInput) {
+async function executeUploadDiplomados(urlInput, sheetInput, ccList = []) {
     const btn = document.getElementById('btnConfirmUpload');
     setLoading(btn, true);
     toast("Iniciando sincronización real, esto puede tardar un poco...", "info");
     
     try {
-        
-        let ccList = Array.from(document.querySelectorAll('.cc-check-dip:checked')).map(cb => cb.value);
-        let otros = document.getElementById('otros_cc_dip').value;
-        if (otros) {
-            ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
-        }
         const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput, cc: ccList });
         toast(`Sincronización exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
         bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
@@ -1705,18 +1706,12 @@ async function doUploadMasivo() {
   }
 }
 
-async function executeUploadMasivo(urlInput, sheetInput) {
+async function executeUploadMasivo(urlInput, sheetInput, ccList = []) {
   const btn = document.getElementById('btnConfirmUploadMasivo');
   setLoading(btn, true);
   toast("Iniciando creación masiva, esto puede tardar unos minutos...", "info");
   
   try {
-      
-      let ccList = Array.from(document.querySelectorAll('.cc-check-mas:checked')).map(cb => cb.value);
-      let otros = document.getElementById('otros_cc_mas').value;
-      if (otros) {
-          ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
-      }
       const res = await api.post('/excel/masivo', { url: urlInput, sheet_name: sheetInput, cc: ccList });
       toast(`Proceso exitoso. ${res.succeeded?.length || 0} usuarios procesados.`, 'success');
       bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
