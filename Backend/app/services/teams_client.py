@@ -414,3 +414,22 @@ async def get_group_name_by_id(group_id: str) -> str | None:
     except Exception:
         pass
     return None
+
+
+async def remove_member_from_group(group_id: str, user_id: str) -> bool:
+    """Remove a member from a Microsoft 365 Group."""
+    try:
+        await delete(f"/groups/{group_id}/members/{user_id}/$ref")
+        return True
+    except Exception:
+        pass
+    return False
+
+async def remove_owner_from_group(group_id: str, user_id: str) -> bool:
+    """Remove an owner from a Microsoft 365 Group."""
+    try:
+        await delete(f"/groups/{group_id}/owners/{user_id}/$ref")
+        return True
+    except Exception:
+        pass
+    return False

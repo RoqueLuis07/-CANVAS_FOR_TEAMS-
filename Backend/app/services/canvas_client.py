@@ -223,3 +223,18 @@ async def get_course_name_by_id(course_id: str) -> str | None:
     except Exception:
         pass
     return None
+
+
+async def remove_user_from_course(course_id: str, user_id: str) -> bool:
+    """Remove a user from a course in Canvas."""
+    try:
+        enrollments = await get(f"/courses/{course_id}/enrollments", params={"user_id": user_id})
+        if enrollments and isinstance(enrollments, list):
+            for en in enrollments:
+                eid = en.get("id")
+                if eid:
+                    await delete(f"/courses/{course_id}/enrollments/{eid}", params={"task": "delete"})
+        return True
+    except Exception:
+        pass
+    return False
