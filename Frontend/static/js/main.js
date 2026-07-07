@@ -1221,6 +1221,31 @@ function openExcelDiplomados() {
               <option value="">Primero haz clic en Cargar Pestañas...</option>
           </select>
         </div>
+          <label class="form-label fw-bold mt-2">Copias de correo (CC)</label>
+          <div class="d-flex flex-wrap gap-3 mb-2">
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="ubs@usil.edu.py" id="cc_ubs_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_ubs_mas">UBS</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="lflorentin@usil.edu.py" id="cc_lf_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_lf_mas">L. Florentín</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="comercialcredenciales@usil.edu.py" id="cc_com_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_com_mas">Comercial</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="resteche@usil.edu.py" id="cc_re_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_re_mas">R. Esteche</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="glezcano@usil.edu.py" id="cc_gl_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_gl_mas">G. Lezcano</label>
+            </div>
+          </div>
+          <input type="text" id="otros_cc_mas" class="form-control form-control-sm mb-3" placeholder="Otros CC (separar por coma)">
+
       </div>
     </div>
   `;
@@ -1354,7 +1379,13 @@ async function executeUploadDiplomados(urlInput, sheetInput) {
     toast("Iniciando sincronización real, esto puede tardar un poco...", "info");
     
     try {
-        const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput });
+        
+        let ccList = Array.from(document.querySelectorAll('.cc-check-dip:checked')).map(cb => cb.value);
+        let otros = document.getElementById('otros_cc_dip').value;
+        if (otros) {
+            ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
+        }
+        const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput, cc: ccList });
         toast(`Sincronización exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
         bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
     } catch (e) {
@@ -1524,6 +1555,31 @@ function openExcelMasivo() {
               <option value="">Primero haz clic en Cargar Pestañas...</option>
           </select>
         </div>
+          <label class="form-label fw-bold mt-2">Copias de correo (CC)</label>
+          <div class="d-flex flex-wrap gap-3 mb-2">
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="ubs@usil.edu.py" id="cc_ubs_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_ubs_mas">UBS</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="lflorentin@usil.edu.py" id="cc_lf_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_lf_mas">L. Florentín</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="comercialcredenciales@usil.edu.py" id="cc_com_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_com_mas">Comercial</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="resteche@usil.edu.py" id="cc_re_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_re_mas">R. Esteche</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input cc-check-mas" type="checkbox" value="glezcano@usil.edu.py" id="cc_gl_mas" checked>
+              <label class="form-check-label text-secondary" for="cc_gl_mas">G. Lezcano</label>
+            </div>
+          </div>
+          <input type="text" id="otros_cc_mas" class="form-control form-control-sm mb-3" placeholder="Otros CC (separar por coma)">
+
       </div>
     </div>
   `;
@@ -1655,7 +1711,13 @@ async function executeUploadMasivo(urlInput, sheetInput) {
   toast("Iniciando creación masiva, esto puede tardar unos minutos...", "info");
   
   try {
-      const res = await api.post('/excel/masivo', { url: urlInput, sheet_name: sheetInput });
+      
+      let ccList = Array.from(document.querySelectorAll('.cc-check-mas:checked')).map(cb => cb.value);
+      let otros = document.getElementById('otros_cc_mas').value;
+      if (otros) {
+          ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
+      }
+      const res = await api.post('/excel/masivo', { url: urlInput, sheet_name: sheetInput, cc: ccList });
       toast(`Proceso exitoso. ${res.succeeded?.length || 0} usuarios procesados.`, 'success');
       bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
       

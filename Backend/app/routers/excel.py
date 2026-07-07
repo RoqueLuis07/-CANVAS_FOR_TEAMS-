@@ -2673,7 +2673,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     platform=plat,
                     program_type="grado",
                     program_name="Programa",
-                    extra_cc=None
+                    extra_cc=req.cc
                 )
                 email_sent = True
             except Exception as e:
