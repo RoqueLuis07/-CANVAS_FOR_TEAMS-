@@ -1067,10 +1067,6 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             continue
 
         next_col = ws.max_column + 1
-        if not col_curso_nombre:
-            col_curso_nombre = next_col
-            ws.cell(row=header_row_idx, column=col_curso_nombre, value="Nombre del Curso").font = Font(bold=True)
-            next_col += 1
             
         if not col_usuario:
             col_usuario = next_col
@@ -1429,7 +1425,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
 
 @router.post("/excel/courses", summary="Crear cursos en Canvas desde planilla OneDrive")
 async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
-    """Crea cursos en Canvas leyendo de una planilla en OneDrive y escribe los IDs de vuelta."""
+    """Crea cursos simultáneamente en Canvas y equipos en Teams leyendo de OneDrive."""
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
 
@@ -1451,9 +1447,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     result = BulkResult()
     ws = wb[req.sheet_name]
 
-    # Find header row
     header_row_idx = None
-    title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1473,48 +1467,64 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     return idx
         return None
 
+    col_fecha = get_col("fecha")
     col_nombre = get_col("nombre", "curso", "canvas")
     col_sis = get_col("sis", "sys")
-    col_canvas_id = get_col("canvas id", "id canvas", "course id")
+    col_periodo = get_col("periodo")
+    col_canvas_id = get_col("canvas id", "id canvas")
+    col_teams_id = get_col("teams id", "id teams")
     col_estado = get_col("estado")
 
     if not col_nombre:
         raise HTTPException(status_code=400, detail="No se encontró la columna de nombre del curso.")
 
-    # Ensure Canvas ID and Estado columns exist
     next_col = ws.max_column + 1
+    if not col_fecha:
+        col_fecha = next_col
+        ws.cell(row=header_row_idx, column=col_fecha, value="Fecha de Creación").font = Font(bold=True)
+        next_col += 1
     if not col_canvas_id:
         col_canvas_id = next_col
-        ws.cell(row=header_row_idx, column=col_canvas_id, value="Canvas ID").font = Font(bold=True)
+        ws.cell(row=header_row_idx, column=col_canvas_id, value="CANVAS ID").font = Font(bold=True)
+        next_col += 1
+    if not col_teams_id:
+        col_teams_id = next_col
+        ws.cell(row=header_row_idx, column=col_teams_id, value="TEAMS ID").font = Font(bold=True)
         next_col += 1
     if not col_estado:
         col_estado = next_col
-        ws.cell(row=header_row_idx, column=col_estado, value="Estado").font = Font(bold=True)
+        ws.cell(row=header_row_idx, column=col_estado, value="ESTADO").font = Font(bold=True)
+        next_col += 1
+
+    from datetime import datetime
+    import time
+    from app.services.teams_client import create_team_via_group
 
     async def create_course_row(r_idx):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         sis_id = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
+        periodo = str(ws.cell(row=r_idx, column=col_periodo).value or "").strip() if col_periodo else ""
 
         if not nombre:
-            return
-
-        # Skip already created
-        existing_id = str(ws.cell(row=r_idx, column=col_canvas_id).value or "").strip()
-        if existing_id and existing_id != "None" and existing_id.isdigit():
             return
 
         existing_estado = str(ws.cell(row=r_idx, column=col_estado).value or "").strip()
         if "✅" in existing_estado:
             return
 
-        error = None
+        error_canvas = None
+        error_teams = None
         canvas_id = None
+        teams_id = None
 
+        course_code_str = f"{nombre} {periodo}".strip()
+
+        # 1. Canvas Creation
         try:
             payload = {
                 "course": {
                     "name": nombre,
-                    "course_code": nombre,
+                    "course_code": course_code_str,
                 }
             }
             if sis_id and sis_id != "None":
@@ -1523,160 +1533,80 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             data = await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
             canvas_id = data.get("id")
         except Exception as e:
-            error = str(e)
+            error_canvas = str(e)
 
-        if canvas_id and not error:
+        # 2. Teams Creation
+        try:
+            nickname = re.sub(r'[^a-zA-Z0-9]', '', course_code_str).lower()
+            if not nickname: nickname = f"grupo{int(time.time())}"
+            
+            owner_ids = []
+            try:
+                admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
+                if admin_user and admin_user.get("id"):
+                    owner_ids.append(admin_user["id"])
+            except: pass
+
+            new_team = await create_team_via_group(
+                display_name=nombre,
+                mail_nickname=nickname,
+                description=f"Grupo para {nombre}",
+                visibility="Private",
+                owner_ids=owner_ids
+            )
+            teams_id = new_team.get("id")
+        except Exception as e:
+            error_teams = str(e)
+
+        # Update Excel
+        ws.cell(row=r_idx, column=col_fecha, value=datetime.now().strftime("%d/%m/%Y"))
+        
+        if canvas_id:
             ws.cell(row=r_idx, column=col_canvas_id, value=canvas_id)
-            ws.cell(row=r_idx, column=col_estado, value="✅")
+        if teams_id:
+            ws.cell(row=r_idx, column=col_teams_id, value=teams_id)
+            
+        final_errors = []
+        if error_canvas: final_errors.append(f"Canvas: {error_canvas}")
+        if error_teams: final_errors.append(f"Teams: {error_teams}")
+        
+        if not final_errors:
+            ws.cell(row=r_idx, column=col_estado, value="✅ OK")
             ws.cell(row=r_idx, column=col_estado).font = Font(color="00B050", bold=True)
             result.succeeded.append({
                 "nombre": nombre,
                 "canvas_id": canvas_id,
+                "teams_id": teams_id,
                 "sis_course_id": sis_id
             })
         else:
-            ws.cell(row=r_idx, column=col_estado, value=f"❌ {error}")
-            ws.cell(row=r_idx, column=col_estado).font = Font(color="FF0000")
-            result.failed.append({"input": {"nombre": nombre, "sis_id": sis_id}, "error": error})
+            error_msg = " | ".join(final_errors)
+            ws.cell(row=r_idx, column=col_estado, value=f"⚠️ {error_msg}")
+            ws.cell(row=r_idx, column=col_estado).font = Font(color="FF0000", bold=True)
+            result.failed.append({"input": {"nombre": nombre}, "error": error_msg})
 
-    # Collect rows to process
     tasks = []
-    empty_count = 0
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-
-        if not nombre_val:
-            empty_count += 1
-            if empty_count > 10:
-                break
-            continue
-
-        empty_count = 0
         tasks.append(create_course_row(r_idx))
-
-    if len(tasks) > 100:
-        raise HTTPException(status_code=400, detail=f"Límite de seguridad excedido: {len(tasks)} cursos (Máximo 100 permitidos).")
-
-    if len(tasks) > 0:
-        try:
-            await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"El archivo está abierto o el enlace es de Solo Lectura. {e}")
-
-    # Process in batches of 5 to avoid API rate limits
-    batch_size = 5
+    
+    batch_size = 3
     for i in range(0, len(tasks), batch_size):
         await asyncio.gather(*tasks[i:i+batch_size])
 
-    # Save updated workbook back to OneDrive
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-
+    out_io = io.BytesIO()
+    wb.save(out_io)
+    out_io.seek(0)
+    
     try:
-        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read(), 
+                            headers={"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+        raise HTTPException(status_code=400, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
 
     return result
 
 
 
-@router.post("/excel/egreso/preview", summary="Pre-visualizar planilla de Egreso Masivo")
-async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
-    if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL inválida.")
-    
-    encoded_url = _encode_share_url(req.url)
-    try:
-        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
-
-    try:
-        import io
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
-
-    if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
-
-    ws = wb[req.sheet_name]
-    
-    header_row_idx = None
-    title_val = str(ws.cell(row=1, column=1).value or "").strip()
-    headers = {}
-    for row_idx in range(1, min(6, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v for v in row_vals) and any("correo" in v or "email" in v for v in row_vals):
-            header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
-            break
-            
-    if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontraron las columnas 'Nombre' y 'Correo'.")
-
-    def get_col_idx(*keys):
-        for k in keys:
-            for h, idx in headers.items():
-                if _norm(k) in h:
-                    return idx
-        return None
-
-    col_nombre = get_col_idx("nombre")
-    col_correo = get_col_idx("correo", "email")
-    col_cedula = get_col_idx("cedula", "cédula", "ci")
-    col_enviado = get_col_idx("enviado", "estado")
-    
-    col_cc = get_col_idx("cc", "copia")
-    sheet_cc_list = []
-    if col_cc:
-        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
-            if cc_val:
-                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
-                    email = email.strip()
-                    if "@" in email and email not in sheet_cc_list:
-                        sheet_cc_list.append(email)
-    
-    if not col_nombre or not col_correo:
-        raise HTTPException(status_code=400, detail="Columnas requeridas no encontradas.")
-
-    to_process = 0
-    already_processed = 0
-    details = []
-    
-    for row_idx in range(header_row_idx + 1, ws.max_row + 1):
-        nombre = str(ws.cell(row=row_idx, column=col_nombre).value or "").strip()
-        correo = str(ws.cell(row=row_idx, column=col_correo).value or "").strip()
-        
-        if not nombre or not correo:
-            continue
-            
-        enviado = str(ws.cell(row=row_idx, column=col_enviado).value or "").strip().lower() if col_enviado else ""
-        
-        if "ok" in enviado or "enviado" in enviado or "eliminado" in enviado or "baja" in enviado:
-            already_processed += 1
-        else:
-            to_process += 1
-            if len(details) < 5:
-                details.append({
-                    "nombre": nombre,
-                    "correo": correo,
-                    "cedula": str(ws.cell(row=row_idx, column=col_cedula).value or "").strip() if col_cedula else ""
-                })
-
-    return PreviewResponse(
-        sheet_name=req.sheet_name,
-        students_to_process=to_process,
-        students_already_processed=already_processed,
-        student_details=details
-    )
-
-@router.post("/excel/egreso", summary="Procesar Egreso Masivo desde OneDrive")
 async def import_egreso_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     try:
         return await _import_egreso_onedrive_inner(req)
