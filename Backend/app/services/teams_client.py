@@ -33,7 +33,7 @@ _TRANSIENT = (
 def _should_retry(e: Exception) -> bool:
     if isinstance(e, _TRANSIENT):
         return True
-    if isinstance(e, HTTPException) and e.status_code in (429, 502, 503, 504):
+    if isinstance(e, HTTPException) and e.status_code in (423, 429, 502, 503, 504):
         return True
     return False
 
