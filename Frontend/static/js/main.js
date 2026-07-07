@@ -1499,3 +1499,176 @@ async function fetchSheetsEgreso() {
         btn.innerHTML = oldText;
     }
 }
+\n
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Carga Masiva (General)
+═══════════════════════════════════════════════════════════════════════════════ */
+function openExcelMasivo() {
+  document.getElementById('globalModalTitle').innerHTML = '<i class="bi bi-people-fill me-2"></i>Carga Masiva de Usuarios';
+  document.getElementById('globalModalBody').innerHTML = `
+    <div class="alert alert-info">
+      Pega el <b>enlace compartido de OneDrive</b> de tu planilla genérica. Se detectarán automáticamente las columnas <i>Nombre, Cédula, y Correo</i>.<br>
+      Los usuarios creados <b>NO</b> serán matriculados en ningún curso ni equipo.
+    </div>
+    <div class="row">
+      <div class="col-md-10 offset-md-1">
+        <label class="form-label fw-bold">URL Compartida de OneDrive / SharePoint</label>
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+          <input type="url" class="form-control" id="masivoUrl" value="" placeholder="https://usilparaguay-my.sharepoint.com/..." required>
+          <button class="btn btn-primary" type="button" id="btnLoadSheetsMasivo" onclick="fetchSheetsMasivo()">Cargar Pestañas</button>
+        </div>
+        <label class="form-label fw-bold">Nombre de la Pestaña (Requerido)</label>
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="bi bi-file-spreadsheet"></i></span>
+          <select class="form-select" id="masivoSheet" required>
+              <option value="">Primero haz clic en Cargar Pestañas...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('globalModalFooter').innerHTML = `
+    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+    <button type="button" class="btn btn-success" id="btnUploadMasivo" onclick="doUploadMasivo()"><i class="bi bi-lightning-charge me-1"></i>Previsualizar e Importar</button>
+  `;
+  
+  new bootstrap.Modal(document.getElementById('globalModal')).show();
+}
+
+async function fetchSheetsMasivo() {
+    const urlInput = document.getElementById('masivoUrl').value.trim();
+    if (!urlInput) {
+        toast('Por favor, ingresa la URL primero.', 'warning');
+        return;
+    }
+    
+    const btn = document.getElementById('btnLoadSheetsMasivo');
+    const select = document.getElementById('masivoSheet');
+    const oldText = btn.innerHTML;
+    
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+    btn.disabled = true;
+    
+    try {
+        const res = await api.post('/excel/sheets', { url: urlInput });
+        
+        if (res && res.length > 0) {
+            select.innerHTML = '';
+            res.forEach(sheet => {
+                const option = document.createElement('option');
+                option.value = sheet;
+                option.textContent = sheet;
+                select.appendChild(option);
+            });
+            toast("Pestañas cargadas correctamente.", "success");
+        } else {
+            select.innerHTML = '<option value="">No se encontraron pestañas.</option>';
+            toast("No se encontraron pestañas en este archivo.", "warning");
+        }
+    } catch (e) {
+        toast('Error al cargar pestañas: ' + (e.detail || e.message || e), 'danger');
+        select.innerHTML = '<option value="">Error al cargar pestañas</option>';
+    } finally {
+        setLoading(btn, false);
+        btn.innerHTML = oldText;
+    }
+}
+
+async function doUploadMasivo() {
+  const urlInput = document.getElementById('masivoUrl').value.trim();
+  const sheetInput = document.getElementById('masivoSheet').value.trim();
+  
+  if (!urlInput || !sheetInput) {
+    toast('Por favor, ingresa la URL y el nombre de la pestaña.', 'warning');
+    return;
+  }
+  
+  const btn = document.getElementById('btnUploadMasivo');
+  setLoading(btn, true);
+  toast("Analizando el archivo para pre-visualizar...", "info");
+  
+  try {
+    const previewRes = await api.post('/excel/masivo/preview', { url: urlInput, sheet_name: sheetInput });
+    
+    if (previewRes.students_to_process > 100) {
+        toast(`🛑 LÍMITE EXCEDIDO: Estás intentando procesar ${previewRes.students_to_process} usuarios. El límite de seguridad es 100 por vez. Abortando.`, 'danger');
+        setLoading(btn, false);
+        return;
+    }
+    
+    if (previewRes.students_to_process === 0) {
+        toast("No hay ningún usuario nuevo por procesar en esta pestaña (todos tienen la columna Enviado llena).", "warning");
+        setLoading(btn, false);
+        return;
+    }
+
+    let tableHtml = `<div class="table-responsive mt-3" style="max-height: 300px; overflow-y: auto;">
+      <table class="table table-sm table-bordered table-striped table-hover">
+        <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+          <tr>
+            <th class="text-center" style="width: 50px;">N°</th>
+            <th>Nombre Completo</th>
+            <th>Cédula</th>
+          </tr>
+        </thead>
+        <tbody>`;
+    
+    if (previewRes.student_details) {
+        previewRes.student_details.forEach((s, idx) => {
+            tableHtml += `<tr>
+                <td class="text-center">${idx + 1}</td>
+                <td>${s.nombre}</td>
+                <td><span class="badge bg-secondary">${s.cedula}</span></td>
+            </tr>`;
+        });
+    }
+    tableHtml += `</tbody></table></div>`;
+
+    document.getElementById('globalModalTitle').innerHTML = '<i class="bi bi-table me-2"></i>Pre-visualización de Datos';
+    document.getElementById('globalModalBody').innerHTML = `
+      <div class="alert alert-warning mb-3">
+        Se han detectado <b>${previewRes.students_to_process}</b> usuarios listos para ser creados.<br>
+        Revisa la lista a continuación antes de proceder.
+      </div>
+      ${tableHtml}
+    `;
+
+    const safeUrl = urlInput.replace(/'/g, "\'");
+    const safeSheet = sheetInput.replace(/'/g, "\'");
+
+    document.getElementById('globalModalFooter').innerHTML = `
+      <button type="button" class="btn btn-outline-secondary" onclick="openExcelMasivo()">Cancelar y Volver</button>
+      <button type="button" class="btn btn-success" id="btnConfirmUploadMasivo" onclick="executeUploadMasivo('${safeUrl}', '${safeSheet}')">
+        <i class="bi bi-check-circle me-1"></i>Confirmar y Procesar
+      </button>
+    `;
+
+  } catch (e) {
+    toast('Error: ' + (e.detail || e.message || e), 'danger');
+    setLoading(btn, false);
+  }
+}
+
+async function executeUploadMasivo(urlInput, sheetInput) {
+  const btn = document.getElementById('btnConfirmUploadMasivo');
+  setLoading(btn, true);
+  toast("Iniciando creación masiva, esto puede tardar unos minutos...", "info");
+  
+  try {
+      const res = await api.post('/excel/masivo', { url: urlInput, sheet_name: sheetInput });
+      toast(`Proceso exitoso. ${res.succeeded?.length || 0} usuarios procesados.`, 'success');
+      bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
+      
+      let msg = `Se procesaron exitosamente ${res.succeeded?.length || 0} registros.`;
+      if (res.failed && res.failed.length > 0) {
+          msg += `\n\nHubo errores en ${res.failed.length} registros. Verifica la columna 'Enviado' del Excel para más detalles.`;
+      }
+      setTimeout(() => alert(msg), 500);
+      
+  } catch (e) {
+      toast('Error al importar masivamente: ' + (e.detail || e.message || e), 'danger');
+  } finally {
+      setLoading(btn, false);
+  }
+}

@@ -2439,3 +2439,288 @@ async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:
     # We will just not log history for rollback for simplicity, or we can add it safely.
     
     return result
+# ═══════════════════════════════════════════════════════════════════════════════
+# Carga Masiva Genérica (OneDrive)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/excel/masivo/preview", summary="Previsualizar Carga Masiva de Usuarios")
+async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> dict:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    
+    header_row_idx = None
+    headers = {}
+    for row_idx in range(1, min(10, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
+        if any("nombre" in v for v in row_vals) and any("cedula" in v or "cédula" in v or "ci" in v for v in row_vals):
+            header_row_idx = row_idx
+            for col_idx, val in enumerate(row_vals, 1):
+                headers[_norm(val)] = col_idx
+            break
+    
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontraron las columnas 'Nombre' y 'Cedula'.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col_idx("nombre")
+    col_cedula = get_col_idx("cedula", "cédula", "ci")
+    col_enviado = get_col_idx("enviado", "estado")
+    col_usuario = get_col_idx("usuario")
+
+    students_to_process = 0
+    student_details = []
+
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
+        cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+        enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip().lower() if col_enviado else ""
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
+
+        if not nombre or not cedula or cedula == "None":
+            continue
+
+        if "✅" in enviado or enviado in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado or "ya exist" in enviado or (usuario_val and "@" in usuario_val):
+            continue
+
+        students_to_process += 1
+        if len(student_details) < 100:
+            student_details.append({
+                "nombre": nombre,
+                "cedula": cedula
+            })
+
+    return {
+        "students_to_process": students_to_process,
+        "student_details": student_details
+    }
+
+
+@router.post("/excel/masivo", summary="Importar Masivamente desde OneDrive (Sin Matriculación)", response_model=BulkResult)
+async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    _ACCOUNT_LOCAL = settings.canvas_account_id
+    result = BulkResult()
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    
+    header_row_idx = None
+    headers = {}
+    for row_idx in range(1, min(10, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
+        if any("nombre" in v for v in row_vals) and any("cedula" in v or "cédula" in v or "ci" in v for v in row_vals):
+            header_row_idx = row_idx
+            for col_idx, val in enumerate(row_vals, 1):
+                headers[_norm(val)] = col_idx
+            break
+    
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontraron las columnas requeridas (Nombre, Cedula).")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col_idx("nombre")
+    col_cedula = get_col_idx("cedula", "cédula", "ci")
+    col_correo = get_col_idx("correo", "email")
+    col_plataforma = get_col_idx("plataforma", "platform")
+    
+    col_usuario = get_col_idx("usuario")
+    col_contra = get_col_idx("contrasena", "contraseña", "clave")
+    col_enviado = get_col_idx("enviado", "estado")
+
+    next_col = ws.max_column + 1
+    if not col_usuario:
+        col_usuario = next_col
+        ws.cell(row=header_row_idx, column=col_usuario, value="Usuario").font = Font(bold=True)
+        next_col += 1
+    if not col_contra:
+        col_contra = next_col
+        ws.cell(row=header_row_idx, column=col_contra, value="Contraseña").font = Font(bold=True)
+        next_col += 1
+    if not col_enviado:
+        col_enviado = next_col
+        ws.cell(row=header_row_idx, column=col_enviado, value="Enviado").font = Font(bold=True)
+    
+    async def process_row(r_idx):
+        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
+        cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+        correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
+        plat_val = str(ws.cell(row=r_idx, column=col_plataforma).value or "both").strip().lower() if col_plataforma else "both"
+        
+        enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
+        
+        if not nombre or not cedula or cedula == "None":
+            return
+            
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
+        enviado_lower = enviado.lower()
+        if "✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado_lower or "ya exist" in enviado_lower or (usuario_val and "@" in usuario_val):
+            return
+
+        if "canvas" in plat_val and "teams" in plat_val:
+            plat = "both"
+        elif "canvas" in plat_val:
+            plat = "canvas"
+        elif "teams" in plat_val:
+            plat = "teams"
+        else:
+            plat = "both"
+
+        creds, status = await user_service.generate_unique_credentials(nombre, cedula, plat)
+        login_id = creds["email"]
+        pwd = creds["password"]
+        error_teams = ""
+        error_canvas = ""
+        
+        # 1. Teams Creation
+        if plat in ("teams", "both"):
+            parts = creds["full_name"].strip().split()
+            try:
+                au = await graph.post("/users", {
+                    "displayName": creds["full_name"],
+                    "givenName": parts[0],
+                    "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
+                    "userPrincipalName": login_id,
+                    "mailNickname": login_id.replace(".", "_").replace("@", "_"),
+                    "usageLocation": settings.usage_location,
+                    "accountEnabled": True,
+                    "passwordProfile": {
+                        "forceChangePasswordNextSignIn": True,
+                        "password": pwd,
+                    },
+                })
+                await graph.assign_license(au["id"], settings.azure_sku_students)
+            except Exception as e:
+                if "already exists" not in str(e).lower() and "Request_BadRequest" not in str(e):
+                    error_teams = f"Teams Error: {str(e)}"
+                else:
+                    error_teams = "Ya existía en Azure AD"
+        
+        # 2. Canvas Creation
+        if plat in ("canvas", "both"):
+            payload = {
+                "user": {"name": creds["full_name"], "short_name": creds["full_name"]},
+                "pseudonym": {"unique_id": login_id, "password": pwd, "sis_user_id": cedula, "send_confirmation": False},
+                "communication_channel": {"type": "email", "address": login_id, "skip_confirmation": True},
+            }
+            try:
+                await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/users", payload)
+            except Exception as e:
+                err_str = str(e).lower()
+                if "already in use" not in err_str and "taken" not in err_str:
+                    error_canvas = f"Canvas Error: {str(e)}"
+                else:
+                    error_canvas = "Ya existía en Canvas"
+
+        final_error = []
+        if error_teams: final_error.append(error_teams)
+        if error_canvas: final_error.append(error_canvas)
+        
+        error_msg = " | ".join(final_error)
+
+        email_sent = False
+        if not error_msg and correo and correo != "None":
+            try:
+                from app.services.email_service import send_welcome_email
+                await send_welcome_email(
+                    to_email=correo, 
+                    full_name=creds["full_name"], 
+                    institutional_email=login_id,
+                    login_id=login_id, 
+                    password=pwd, 
+                    platform=plat,
+                    program_type="grado",
+                    program_name="Programa",
+                    extra_cc=None
+                )
+                email_sent = True
+            except Exception as e:
+                error_msg = f"Creado OK, pero falló el correo: {e}"
+        elif not error_msg and (not correo or correo == "None"):
+            error_msg = "Creado OK (Sin correo personal)"
+
+        if not error_msg or "Creado OK" in error_msg or "Ya existía" in error_msg:
+            ws.cell(row=r_idx, column=col_usuario, value=login_id)
+            ws.cell(row=r_idx, column=col_contra, value=pwd)
+            
+            if error_msg and "falló el correo" in error_msg:
+                ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error_msg}")
+                ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
+                result.succeeded.append({"correo": login_id, "mensaje": "Creado sin correo"})
+            elif error_msg and "Ya existía" in error_msg:
+                ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error_msg}")
+                ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
+                result.succeeded.append({"correo": login_id, "mensaje": "Ya existía"})
+            elif error_msg and "Sin correo personal" in error_msg:
+                ws.cell(row=r_idx, column=col_enviado, value="✅ OK (Sin correo)")
+                ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
+                result.succeeded.append({"correo": login_id, "mensaje": "OK"})
+            else:
+                ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
+                ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
+                result.succeeded.append({"correo": login_id, "mensaje": "OK"})
+        else:
+            ws.cell(row=r_idx, column=col_enviado, value=f"❌ Error: {error_msg}")
+            ws.cell(row=r_idx, column=col_enviado).font = Font(color="FF0000", bold=True)
+            result.failed.append({"correo": login_id, "error": error_msg})
+
+    tasks = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        tasks.append(process_row(r_idx))
+    
+    batch_size = 5
+    for i in range(0, len(tasks), batch_size):
+        await asyncio.gather(*tasks[i:i+batch_size])
+
+    out_io = io.BytesIO()
+    wb.save(out_io)
+    out_io.seek(0)
+    
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo en OneDrive: {e}")
+
+    return result
