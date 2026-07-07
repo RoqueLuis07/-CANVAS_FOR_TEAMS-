@@ -833,6 +833,7 @@ class DiplomadosUrlRequest(BaseModel):
     url: str
     sheet_name: str
     delete_account: bool = False
+    cc: list[str] = []
 
 
 class UrlOnlyRequest(BaseModel):
