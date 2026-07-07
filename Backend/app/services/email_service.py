@@ -251,6 +251,8 @@ async def send_welcome_email(
     extra_cc: list[str] | None = None,
     attachments: list[str] | None = None,
 ):
+    return True  # [BYPASS] Email sending disabled per user request
+
     """Send welcome email via Microsoft Graph API using the template for program_type.
 
     program_type: "grado" | "mba" | "diplomado"
