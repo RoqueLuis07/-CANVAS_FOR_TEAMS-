@@ -1532,7 +1532,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if sis_id and sis_id != "None":
                 payload["course"]["sis_course_id"] = sis_id
 
-            data = await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
+            data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
             canvas_id = data.get("id")
         except Exception as e:
             error_canvas = str(e)
@@ -1540,7 +1540,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         # 2. Teams Creation
         try:
             nickname = re.sub(r'[^a-zA-Z0-9]', '', course_code_str).lower()
-            if not nickname: nickname = f"grupo{int(time.time())}"
+            nickname = f"{nickname}{int(time.time() * 1000) % 100000}" if nickname else f"grupo{int(time.time())}"
             
             owner_ids = []
             try:
