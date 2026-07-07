@@ -183,3 +183,43 @@ def _parse_next_link(link_header: str) -> str | None:
         if len(segments) == 2 and 'rel="next"' in segments[1]:
             return segments[0].strip().strip("<>")
     return None
+
+
+async def search_course_by_name(account_id: str, course_name: str) -> str | None:
+    """Search for a Canvas course by name in the given account. Returns course ID if found."""
+    try:
+        results = await get(f"/accounts/{account_id}/courses", params={"search_term": course_name, "include[]": "total_students"})
+        if results and isinstance(results, list):
+            for c in results:
+                if c.get("name") == course_name:
+                    return str(c.get("id"))
+    except Exception:
+        pass
+    return None
+
+async def create_course(account_id: str, course_name: str) -> str | None:
+    """Create a Canvas course in the given account."""
+    try:
+        res = await post(f"/accounts/{account_id}/courses", {
+            "course": {
+                "name": course_name,
+                "course_code": course_name[:15],
+                "enrollment_term_id": 1,
+                "workflow_state": "available"
+            }
+        })
+        if res and "id" in res:
+            return str(res["id"])
+    except Exception:
+        pass
+    return None
+
+async def get_course_name_by_id(course_id: str) -> str | None:
+    """Get Canvas course name by ID."""
+    try:
+        res = await get(f"/courses/{course_id}")
+        if res and "name" in res:
+            return res["name"]
+    except Exception:
+        pass
+    return None

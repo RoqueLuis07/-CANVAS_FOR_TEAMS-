@@ -1038,6 +1038,11 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             continue
 
         next_col = ws.max_column + 1
+        if not col_curso_nombre:
+            col_curso_nombre = next_col
+            ws.cell(row=header_row_idx, column=col_curso_nombre, value="Nombre del Curso").font = Font(bold=True)
+            next_col += 1
+            
         if not col_usuario:
             col_usuario = next_col
             ws.cell(row=header_row_idx, column=col_usuario, value="Usuario").font = Font(bold=True)
@@ -1106,6 +1111,12 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                             id_equipo = existing_tid
                             if col_equipo:
                                 ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
+                    elif id_equipo and id_equipo != "None" and not curso_nombre:
+                        gn = await graph.get_group_name_by_id(id_equipo)
+                        if gn:
+                            curso_nombre = gn
+                            if col_curso_nombre:
+                                ws.cell(row=r_idx, column=col_curso_nombre, value=gn)
                     
                     if id_equipo and id_equipo != "None":
                         user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
@@ -1922,42 +1933,62 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 else:
                     error += f"Teams: {str(e)} | "
 
-        # Dynamic Canvas Course Search/Create
-        if plat in ("canvas", "both") and not id_curso and curso_nombre:
-            try:
-                existing_cid = await canvas_client.search_course_by_name(_ACCOUNT_LOCAL, curso_nombre)
-                if existing_cid:
-                    id_curso = existing_cid
-                else:
-                    id_curso = await canvas_client.create_course(_ACCOUNT_LOCAL, curso_nombre)
-                if id_curso and col_curso:
-                    ws.cell(row=r_idx, column=col_curso, value=id_curso)
-            except Exception as e:
-                error += f"CanvasCourseLogic: {str(e)} | "
+        # Bidirectional Canvas Logic (Name <-> ID)
+        if plat in ("canvas", "both"):
+            if not id_curso and curso_nombre:
+                try:
+                    existing_cid = await canvas_client.search_course_by_name(_ACCOUNT_LOCAL, curso_nombre)
+                    if existing_cid:
+                        id_curso = existing_cid
+                    else:
+                        id_curso = await canvas_client.create_course(_ACCOUNT_LOCAL, curso_nombre)
+                    if id_curso and col_curso:
+                        ws.cell(row=r_idx, column=col_curso, value=id_curso)
+                except Exception as e:
+                    error += f"CanvasCourseLogic: {str(e)} | "
+            elif id_curso and id_curso != "None" and not curso_nombre:
+                try:
+                    cn = await canvas_client.get_course_name_by_id(id_curso)
+                    if cn:
+                        curso_nombre = cn
+                        if col_curso_nombre:
+                            ws.cell(row=r_idx, column=col_curso_nombre, value=cn)
+                except Exception as e:
+                    pass
 
-        # Dynamic Teams Group Search/Create
-        if plat in ("teams", "both") and not id_equipo and curso_nombre:
-            try:
-                existing_tid = await graph.search_group_by_name(curso_nombre)
-                if existing_tid:
-                    id_equipo = existing_tid
-                else:
-                    import re, time
-                    nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
-                    if not nickname: nickname = f"grupo{int(time.time())}"
-                    owner_ids = [azure_id] if azure_id else []
-                    new_team = await graph.create_team_via_group(
-                        display_name=curso_nombre,
-                        mail_nickname=nickname,
-                        description=f"Grupo para {curso_nombre}",
-                        visibility="Private",
-                        owner_ids=owner_ids
-                    )
-                    id_equipo = new_team.get("id")
-                if id_equipo and col_equipo:
-                    ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
-            except Exception as e:
-                error += f"TeamsGroupLogic: {str(e)} | "
+        # Bidirectional Teams Logic (Name <-> ID)
+        if plat in ("teams", "both"):
+            if not id_equipo and curso_nombre:
+                try:
+                    existing_tid = await graph.search_group_by_name(curso_nombre)
+                    if existing_tid:
+                        id_equipo = existing_tid
+                    else:
+                        import re, time
+                        nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
+                        if not nickname: nickname = f"grupo{int(time.time())}"
+                        owner_ids = [azure_id] if azure_id else []
+                        new_team = await graph.create_team_via_group(
+                            display_name=curso_nombre,
+                            mail_nickname=nickname,
+                            description=f"Grupo para {curso_nombre}",
+                            visibility="Private",
+                            owner_ids=owner_ids
+                        )
+                        id_equipo = new_team.get("id")
+                    if id_equipo and col_equipo:
+                        ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
+                except Exception as e:
+                    error += f"TeamsGroupLogic: {str(e)} | "
+            elif id_equipo and id_equipo != "None" and not curso_nombre:
+                try:
+                    gn = await graph.get_group_name_by_id(id_equipo)
+                    if gn:
+                        curso_nombre = gn
+                        if col_curso_nombre:
+                            ws.cell(row=r_idx, column=col_curso_nombre, value=gn)
+                except Exception as e:
+                    pass
 
         # Azure Teams Enrollment
         if id_equipo and azure_id and id_equipo != "None":

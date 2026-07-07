@@ -403,3 +403,14 @@ async def get_subscribed_skus() -> list:
         r = await c.get(f"{_GRAPH}/subscribedSkus", headers=_headers())
         _raise(r)
         return r.json().get("value", [])
+
+
+async def get_group_name_by_id(group_id: str) -> str | None:
+    """Get Microsoft 365 Group name by ID."""
+    try:
+        res = await get(f"/groups/{group_id}", params={"$select": "displayName"})
+        if res and "displayName" in res:
+            return res["displayName"]
+    except Exception:
+        pass
+    return None
