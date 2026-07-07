@@ -1116,6 +1116,20 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                             id_equipo = existing_tid
                             if col_equipo:
                                 ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
+                        else:
+                            import re, time
+                            nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
+                            if not nickname: nickname = f"grupo{int(time.time())}"
+                            new_team = await create_team_via_group(
+                                display_name=curso_nombre,
+                                mail_nickname=nickname,
+                                description=f"Grupo para {curso_nombre}",
+                                visibility="Private",
+                                owner_ids=[]
+                            )
+                            id_equipo = new_team.get("id")
+                            if id_equipo and col_equipo:
+                                ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
                     elif id_equipo and id_equipo != "None" and not curso_nombre:
                         gn = await graph.get_group_name_by_id(id_equipo)
                         if gn:
