@@ -1299,6 +1299,13 @@ async function doUploadDiplomados() {
   const urlInput = document.getElementById('diplomadoUrl').value.trim();
   const sheetInput = document.getElementById('diplomadoSheet').value.trim();
   
+  let ccList = Array.from(document.querySelectorAll('.cc-check-dip:checked')).map(cb => cb.value);
+  let otros = document.getElementById('otros_cc_dip') ? document.getElementById('otros_cc_dip').value : '';
+  if (otros) {
+      ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
+  }
+  const ccString = JSON.stringify(ccList).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+  
   if (!urlInput || !sheetInput) {
     toast('Por favor, ingresa la URL y el nombre de la pestaña.', 'warning');
     return;
@@ -1360,12 +1367,7 @@ async function doUploadDiplomados() {
     const safeUrl = urlInput.replace(/'/g, "\\'");
     const safeSheet = sheetInput.replace(/'/g, "\\'");
     
-    let ccList = Array.from(document.querySelectorAll('.cc-check-dip:checked')).map(cb => cb.value);
-    let otros = document.getElementById('otros_cc_dip').value;
-    if (otros) {
-        ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
-    }
-    const ccString = JSON.stringify(ccList).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
 
     document.getElementById('globalModalFooter').innerHTML = `
       <button type="button" class="btn btn-outline-secondary" onclick="openExcelDiplomados()">Cancelar y Volver</button>
@@ -1634,6 +1636,13 @@ async function fetchSheetsMasivo() {
 async function doUploadMasivo() {
   const urlInput = document.getElementById('masivoUrl').value.trim();
   const sheetInput = document.getElementById('masivoSheet').value.trim();
+  
+  let ccList = Array.from(document.querySelectorAll('.cc-check-mas:checked')).map(cb => cb.value);
+  let otros = document.getElementById('otros_cc_mas') ? document.getElementById('otros_cc_mas').value : '';
+  if (otros) {
+      ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
+  }
+  const ccString = JSON.stringify(ccList).replace(/'/g, "\\'").replace(/"/g, "&quot;");
   
   if (!urlInput || !sheetInput) {
     toast('Por favor, ingresa la URL y el nombre de la pestaña.', 'warning');
