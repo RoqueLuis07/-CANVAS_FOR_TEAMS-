@@ -1600,8 +1600,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     out_io.seek(0)
     
     try:
-        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read(), 
-                            headers={"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
 
