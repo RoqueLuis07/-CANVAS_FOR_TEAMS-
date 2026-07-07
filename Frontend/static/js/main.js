@@ -1221,31 +1221,30 @@ function openExcelDiplomados() {
               <option value="">Primero haz clic en Cargar Pestañas...</option>
           </select>
         </div>
-          <label class="form-label fw-bold mt-2">Copias de correo (CC)</label>
-          <div class="d-flex flex-wrap gap-3 mb-2">
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="ubs@usil.edu.py" id="cc_ubs_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_ubs_mas">UBS</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="lflorentin@usil.edu.py" id="cc_lf_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_lf_mas">L. Florentín</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="comercialcredenciales@usil.edu.py" id="cc_com_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_com_mas">Comercial</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="resteche@usil.edu.py" id="cc_re_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_re_mas">R. Esteche</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="glezcano@usil.edu.py" id="cc_gl_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_gl_mas">G. Lezcano</label>
-            </div>
+        <label class="form-label fw-bold mt-2">Copias de correo (CC)</label>
+        <div class="d-flex flex-wrap gap-3 mb-2">
+          <div class="form-check">
+            <input class="form-check-input cc-check-dip" type="checkbox" value="ubs@usil.edu.py" id="cc_ubs_dip" checked>
+            <label class="form-check-label text-secondary" for="cc_ubs_dip">UBS</label>
           </div>
-          <input type="text" id="otros_cc_mas" class="form-control form-control-sm mb-3" placeholder="Otros CC (separar por coma)">
-
+          <div class="form-check">
+            <input class="form-check-input cc-check-dip" type="checkbox" value="lflorentin@usil.edu.py" id="cc_lf_dip" checked>
+            <label class="form-check-label text-secondary" for="cc_lf_dip">L. Florentín</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input cc-check-dip" type="checkbox" value="comercialcredenciales@usil.edu.py" id="cc_com_dip" checked>
+            <label class="form-check-label text-secondary" for="cc_com_dip">Comercial</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input cc-check-dip" type="checkbox" value="resteche@usil.edu.py" id="cc_re_dip" checked>
+            <label class="form-check-label text-secondary" for="cc_re_dip">R. Esteche</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input cc-check-dip" type="checkbox" value="glezcano@usil.edu.py" id="cc_gl_dip" checked>
+            <label class="form-check-label text-secondary" for="cc_gl_dip">G. Lezcano</label>
+          </div>
+        </div>
+        <input type="text" id="otros_cc_dip" class="form-control form-control-sm mb-3" placeholder="Otros CC (separar por coma)">
       </div>
     </div>
   `;
@@ -1256,44 +1255,6 @@ function openExcelDiplomados() {
   
   new bootstrap.Modal(document.getElementById('globalModal')).show();
 }
-
-async function fetchSheets() {
-    const urlInput = document.getElementById('diplomadoUrl').value.trim();
-    if (!urlInput) {
-        toast('Por favor, ingresa la URL primero.', 'warning');
-        return;
-    }
-    
-    const btn = document.getElementById('btnLoadSheets');
-    const select = document.getElementById('diplomadoSheet');
-    const oldText = btn.innerHTML;
-    
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
-    btn.disabled = true;
-    select.innerHTML = '<option value="">Cargando pestañas...</option>';
-    
-    try {
-        const sheets = await api.post('/excel/diplomados/sheets', { url: urlInput });
-        if (sheets && sheets.length > 0) {
-            select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
-            sheets.forEach(sheet => {
-                const option = document.createElement('option');
-                option.value = sheet;
-                option.textContent = sheet;
-                select.appendChild(option);
-            });
-            toast('Pestañas cargadas correctamente.', 'success');
-        } else {
-            select.innerHTML = '<option value="">No se encontraron pestañas.</option>';
-        }
-    } catch (e) {
-        toast('Error al cargar pestañas: ' + (e.detail || e.message || e), 'danger');
-        select.innerHTML = '<option value="">Error al cargar.</option>';
-    } finally {
-        btn.innerHTML = oldText;
-        btn.disabled = false;
-    }
-  }
 
 async function doUploadDiplomados() {
   const urlInput = document.getElementById('diplomadoUrl').value.trim();
