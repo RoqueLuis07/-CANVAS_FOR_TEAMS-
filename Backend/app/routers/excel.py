@@ -1542,6 +1542,12 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     import time
     from app.services.teams_client import create_team_via_group
 
+    terms_data = []
+    try:
+        terms_res = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/terms")
+        terms_data = terms_res.get("enrollment_terms", [])
+    except: pass
+
     async def create_course_row(r_idx):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         sis_id = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
@@ -1572,7 +1578,15 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if sis_id and sis_id != "None":
                 payload["course"]["sis_course_id"] = sis_id
             if periodo:
-                payload["course"]["term_id"] = f"sis_term_id:{periodo}"
+                term_val = f"sis_term_id:{periodo}"
+                if periodo.isdigit():
+                    term_val = periodo
+                else:
+                    for t in terms_data:
+                        if t.get("name") == periodo or str(t.get("id")) == periodo or str(t.get("sis_term_id")) == periodo:
+                            term_val = t.get("id")
+                            break
+                payload["course"]["term_id"] = term_val
 
             data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
             canvas_id = data.get("id")
