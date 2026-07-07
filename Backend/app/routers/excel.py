@@ -1356,7 +1356,8 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v or "curso" in v or "canvas" in v for v in row_vals):
+        valid_cols = [v for v in row_vals if len(v) > 0]
+        if len(valid_cols) > 1 and any("nombre" in v or "curso" in v for v in row_vals):
             header_row_idx = row_idx
             for col_idx, val in enumerate(row_vals, 1):
                 headers[_norm(val)] = col_idx
@@ -1451,7 +1452,8 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v or "curso" in v or "canvas" in v for v in row_vals):
+        valid_cols = [v for v in row_vals if len(v) > 0]
+        if len(valid_cols) > 1 and any("nombre" in v or "curso" in v for v in row_vals):
             header_row_idx = row_idx
             for col_idx, val in enumerate(row_vals, 1):
                 headers[_norm(val)] = col_idx
