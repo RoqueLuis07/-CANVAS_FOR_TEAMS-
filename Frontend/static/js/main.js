@@ -1360,7 +1360,7 @@ async function executeUploadDiplomados(urlInput, sheetInput) {
     toast("Iniciando sincronización real, esto puede tardar un poco...", "info");
     
     try {
-        const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput, cc: ccList });
+        const res = await api.post('/excel/diplomados', { url: urlInput, sheet_name: sheetInput });
         toast(`Sincronización exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
         bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
     } catch (e) {
@@ -1665,7 +1665,7 @@ async function executeUploadMasivo(urlInput, sheetInput) {
   toast("Iniciando creación masiva, esto puede tardar unos minutos...", "info");
   
   try {
-      const res = await api.post('/excel/masivo', { url: urlInput, sheet_name: sheetInput, cc: ccList });
+      const res = await api.post('/excel/masivo', { url: urlInput, sheet_name: sheetInput });
       toast(`Proceso exitoso. ${res.succeeded?.length || 0} usuarios procesados.`, 'success');
       bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
       
