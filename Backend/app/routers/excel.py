@@ -943,6 +943,17 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
     col_cedula = get_col_idx("cedula", "c├®dula", "ci")
     col_enviado = get_col_idx("enviado", "estado")
     
+    col_cc = get_col_idx("cc", "copia")
+    sheet_cc_list = []
+    if col_cc:
+        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+            if cc_val:
+                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                    email = email.strip()
+                    if "@" in email and email not in sheet_cc_list:
+                        sheet_cc_list.append(email)
+    
     if not col_nombre or not col_cedula:
         raise HTTPException(status_code=400, detail="Columnas requeridas no encontradas.")
 
@@ -1040,6 +1051,17 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         col_usuario = get_col_idx("usuario")
         col_contra = get_col_idx("contrasena", "contrase├▒a", "clave")
         col_enviado = get_col_idx("enviado", "estado")
+    
+        col_cc = get_col_idx("cc", "copia")
+        sheet_cc_list = []
+        if col_cc:
+            for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+                cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+                if cc_val:
+                    for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                        email = email.strip()
+                        if "@" in email and email not in sheet_cc_list:
+                            sheet_cc_list.append(email)
 
         if not col_nombre or not col_cedula:
             continue
@@ -1210,7 +1232,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         platform="teams",
                         program_type="diplomado", 
                         program_name=curso_nombre or title_val or sheet_name,
-                        extra_cc=req.cc,
+                        extra_cc=(req.cc or []) + sheet_cc_list,
                         attachments=get_program_attachments("diplomado")
                     )
                     email_sent = True
@@ -1609,6 +1631,17 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     col_cedula = get_col_idx("cedula", "cédula", "ci")
     col_enviado = get_col_idx("enviado", "estado")
     
+    col_cc = get_col_idx("cc", "copia")
+    sheet_cc_list = []
+    if col_cc:
+        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+            if cc_val:
+                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                    email = email.strip()
+                    if "@" in email and email not in sheet_cc_list:
+                        sheet_cc_list.append(email)
+    
     if not col_nombre or not col_correo:
         raise HTTPException(status_code=400, detail="Columnas requeridas no encontradas.")
 
@@ -1705,6 +1738,17 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     col_correo = get_col_idx("correo", "email")
     col_cedula = get_col_idx("cedula", "cédula", "ci")
     col_enviado = get_col_idx("enviado", "estado")
+    
+    col_cc = get_col_idx("cc", "copia")
+    sheet_cc_list = []
+    if col_cc:
+        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+            if cc_val:
+                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                    email = email.strip()
+                    if "@" in email and email not in sheet_cc_list:
+                        sheet_cc_list.append(email)
     col_usuario = get_col_idx("usuario")
 
     if not col_nombre or not col_correo:
@@ -1854,6 +1898,17 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
     col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
     col_enviado = get_col_idx("enviado", "estado")
+    
+    col_cc = get_col_idx("cc", "copia")
+    sheet_cc_list = []
+    if col_cc:
+        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+            if cc_val:
+                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                    email = email.strip()
+                    if "@" in email and email not in sheet_cc_list:
+                        sheet_cc_list.append(email)
 
     rows = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
@@ -1946,6 +2001,17 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     col_usuario = get_col_idx("usuario")
     col_contra = get_col_idx("contrasena", "contrasea", "clave")
     col_enviado = get_col_idx("enviado", "estado")
+    
+    col_cc = get_col_idx("cc", "copia")
+    sheet_cc_list = []
+    if col_cc:
+        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+            if cc_val:
+                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                    email = email.strip()
+                    if "@" in email and email not in sheet_cc_list:
+                        sheet_cc_list.append(email)
 
     next_col = ws.max_column + 1
     if not col_usuario:
@@ -2364,6 +2430,17 @@ async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:
 
         col_usuario = get_col_idx("usuario")
         col_enviado = get_col_idx("enviado", "estado")
+    
+        col_cc = get_col_idx("cc", "copia")
+        sheet_cc_list = []
+        if col_cc:
+            for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+                cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+                if cc_val:
+                    for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                        email = email.strip()
+                        if "@" in email and email not in sheet_cc_list:
+                            sheet_cc_list.append(email)
         col_curso = get_col_idx("curso", "id curso", "canvas")
         col_equipo = get_col_idx("equipo", "id equipo", "teams")
         col_contra = get_col_idx("contrasena", "contraseña", "clave")
@@ -2488,6 +2565,17 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> dict:
     col_nombre = get_col_idx("nombre")
     col_cedula = get_col_idx("cedula", "cédula", "ci")
     col_enviado = get_col_idx("enviado", "estado")
+    
+    col_cc = get_col_idx("cc", "copia")
+    sheet_cc_list = []
+    if col_cc:
+        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+            if cc_val:
+                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                    email = email.strip()
+                    if "@" in email and email not in sheet_cc_list:
+                        sheet_cc_list.append(email)
     col_usuario = get_col_idx("usuario")
 
     students_to_process = 0
