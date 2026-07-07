@@ -1531,6 +1531,8 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             }
             if sis_id and sis_id != "None":
                 payload["course"]["sis_course_id"] = sis_id
+            if periodo:
+                payload["course"]["term_id"] = f"sis_term_id:{periodo}"
 
             data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
             canvas_id = data.get("id")
