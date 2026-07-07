@@ -1544,7 +1544,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
     terms_data = []
     try:
-        terms_res = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/terms")
+        terms_res = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/terms", params={"per_page": 100})
         terms_data = terms_res.get("enrollment_terms", [])
     except: pass
 
@@ -1582,8 +1582,11 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 if periodo.isdigit():
                     term_val = periodo
                 else:
+                    p_lower = periodo.strip().lower()
                     for t in terms_data:
-                        if t.get("name") == periodo or str(t.get("id")) == periodo or str(t.get("sis_term_id")) == periodo:
+                        t_name = str(t.get("name") or "").strip().lower()
+                        t_sis = str(t.get("sis_term_id") or "").strip().lower()
+                        if t_name == p_lower or str(t.get("id")) == periodo or t_sis == p_lower:
                             term_val = t.get("id")
                             break
                 payload["course"]["term_id"] = term_val
