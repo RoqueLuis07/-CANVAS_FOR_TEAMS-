@@ -1122,6 +1122,8 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             # Diplomados: No se crean en Canvas, solo en Teams/Azure AD
             pass
             
+            au_id = None
+            
             if not error:
                 parts = creds["full_name"].strip().split()
                 try:
@@ -1138,7 +1140,8 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                             "password": pwd,
                         },
                     })
-                    await graph.assign_license(au["id"], settings.azure_sku_students)
+                    au_id = au.get("id")
+                    await graph.assign_license(au_id, settings.azure_sku_students)
                 except Exception as e:
                     if "already exists" not in str(e).lower() and "Request_BadRequest" not in str(e):
                         error = str(e)
@@ -1171,10 +1174,25 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         if col_equipo and target_equipo != id_equipo:
                             ws.cell(row=r_idx, column=col_equipo, value=target_equipo)
                         
-                        user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
-                        if user_data and user_data.get("id"):
-                            uid = user_data["id"]
+                        uid = au_id
+                        if not uid:
+                            try:
+                                user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
+                                if user_data and user_data.get("id"):
+                                    uid = user_data["id"]
+                            except Exception as get_err:
+                                if "404" in str(get_err) and not error:
+                                    pass
+                                elif "404" in str(get_err) and "Ya existía" in str(error):
+                                    error = f"{error} pero se encuentra eliminado (Papelera de Azure AD)"
+                                else:
+                                    raise get_err
+                                    
+                        if uid:
                             await graph.post(f"/groups/{target_equipo}/members/$ref", {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{uid}"})
+                        else:
+                            if not error:
+                                error = "TeamsEnroll: No se pudo obtener el ID del usuario."
                 except Exception as e:
                     if "already exist" not in str(e).lower():
                         error = str(error) + f" | TeamsEnroll: {e}" if error else f"TeamsEnroll: {e}"
