@@ -1425,8 +1425,6 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
     )
 
 
-@router.post("/excel/courses", summary="Crear cursos en Canvas desde planilla OneDrive")
-
 async def append_report_onedrive(report_url: str, succeeded: list, failed: list):
     try:
         import datetime, io, base64, openpyxl
@@ -1466,6 +1464,7 @@ async def append_report_onedrive(report_url: str, succeeded: list, failed: list)
     except Exception as e:
         print(f"Error actualizando reporte maestro: {str(e)}")
 
+@router.post("/excel/courses", summary="Crear cursos en Canvas desde planilla OneDrive")
 async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     """Crea cursos simultáneamente en Canvas y equipos en Teams leyendo de OneDrive."""
     if not req.url or "http" not in req.url:
