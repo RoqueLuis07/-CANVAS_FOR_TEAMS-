@@ -1221,30 +1221,7 @@ function openExcelDiplomados() {
               <option value="">Primero haz clic en Cargar Pestañas...</option>
           </select>
         </div>
-        <label class="form-label fw-bold mt-2">Copias de correo (CC)</label>
-        <div class="d-flex flex-wrap gap-3 mb-2">
-          <div class="form-check">
-            <input class="form-check-input cc-check-dip" type="checkbox" value="ubs@usil.edu.py" id="cc_ubs_dip" checked>
-            <label class="form-check-label text-secondary" for="cc_ubs_dip">UBS</label>
-          </div>
-          <div class="form-check">
-            <input class="form-check-input cc-check-dip" type="checkbox" value="lflorentin@usil.edu.py" id="cc_lf_dip" checked>
-            <label class="form-check-label text-secondary" for="cc_lf_dip">L. Florentín</label>
-          </div>
-          <div class="form-check">
-            <input class="form-check-input cc-check-dip" type="checkbox" value="comercialcredenciales@usil.edu.py" id="cc_com_dip" checked>
-            <label class="form-check-label text-secondary" for="cc_com_dip">Comercial</label>
-          </div>
-          <div class="form-check">
-            <input class="form-check-input cc-check-dip" type="checkbox" value="resteche@usil.edu.py" id="cc_re_dip" checked>
-            <label class="form-check-label text-secondary" for="cc_re_dip">R. Esteche</label>
-          </div>
-          <div class="form-check">
-            <input class="form-check-input cc-check-dip" type="checkbox" value="glezcano@usil.edu.py" id="cc_gl_dip" checked>
-            <label class="form-check-label text-secondary" for="cc_gl_dip">G. Lezcano</label>
-          </div>
-        </div>
-        <input type="text" id="otros_cc_dip" class="form-control form-control-sm mb-3" placeholder="Otros CC (separar por coma)">
+        
       </div>
     </div>
   `;
@@ -1299,12 +1276,7 @@ async function doUploadDiplomados() {
   const urlInput = document.getElementById('diplomadoUrl').value.trim();
   const sheetInput = document.getElementById('diplomadoSheet').value.trim();
   
-  let ccList = Array.from(document.querySelectorAll('.cc-check-dip:checked')).map(cb => cb.value);
-  let otros = document.getElementById('otros_cc_dip') ? document.getElementById('otros_cc_dip').value : '';
-  if (otros) {
-      ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
-  }
-  const ccString = JSON.stringify(ccList).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
   
   if (!urlInput || !sheetInput) {
     toast('Por favor, ingresa la URL y el nombre de la pestaña.', 'warning');
@@ -1371,7 +1343,7 @@ async function doUploadDiplomados() {
 
     document.getElementById('globalModalFooter').innerHTML = `
       <button type="button" class="btn btn-outline-secondary" onclick="openExcelDiplomados()">Cancelar y Volver</button>
-      <button type="button" class="btn btn-success" id="btnConfirmUpload" onclick="executeUploadDiplomados('${safeUrl}', '${safeSheet}', ${ccString})">
+      <button type="button" class="btn btn-success" id="btnConfirmUpload" onclick="executeUploadDiplomados('${safeUrl}', '${safeSheet}')">
         <i class="bi bi-check-circle me-1"></i>Confirmar y Sincronizar
       </button>
     `;
@@ -1382,7 +1354,7 @@ async function doUploadDiplomados() {
   }
 }
 
-async function executeUploadDiplomados(urlInput, sheetInput, ccList = []) {
+async function executeUploadDiplomados(urlInput, sheetInput) {
     const btn = document.getElementById('btnConfirmUpload');
     setLoading(btn, true);
     toast("Iniciando sincronización real, esto puede tardar un poco...", "info");
@@ -1558,30 +1530,7 @@ function openExcelMasivo() {
               <option value="">Primero haz clic en Cargar Pestañas...</option>
           </select>
         </div>
-          <label class="form-label fw-bold mt-2">Copias de correo (CC)</label>
-          <div class="d-flex flex-wrap gap-3 mb-2">
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="ubs@usil.edu.py" id="cc_ubs_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_ubs_mas">UBS</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="lflorentin@usil.edu.py" id="cc_lf_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_lf_mas">L. Florentín</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="comercialcredenciales@usil.edu.py" id="cc_com_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_com_mas">Comercial</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="resteche@usil.edu.py" id="cc_re_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_re_mas">R. Esteche</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input cc-check-mas" type="checkbox" value="glezcano@usil.edu.py" id="cc_gl_mas" checked>
-              <label class="form-check-label text-secondary" for="cc_gl_mas">G. Lezcano</label>
-            </div>
-          </div>
-          <input type="text" id="otros_cc_mas" class="form-control form-control-sm mb-3" placeholder="Otros CC (separar por coma)">
+          
 
       </div>
     </div>
@@ -1637,12 +1586,7 @@ async function doUploadMasivo() {
   const urlInput = document.getElementById('masivoUrl').value.trim();
   const sheetInput = document.getElementById('masivoSheet').value.trim();
   
-  let ccList = Array.from(document.querySelectorAll('.cc-check-mas:checked')).map(cb => cb.value);
-  let otros = document.getElementById('otros_cc_mas') ? document.getElementById('otros_cc_mas').value : '';
-  if (otros) {
-      ccList = ccList.concat(otros.split(',').map(s => s.trim()).filter(s => s));
-  }
-  const ccString = JSON.stringify(ccList).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
   
   if (!urlInput || !sheetInput) {
     toast('Por favor, ingresa la URL y el nombre de la pestaña.', 'warning');
@@ -1715,7 +1659,7 @@ async function doUploadMasivo() {
   }
 }
 
-async function executeUploadMasivo(urlInput, sheetInput, ccList = []) {
+async function executeUploadMasivo(urlInput, sheetInput) {
   const btn = document.getElementById('btnConfirmUploadMasivo');
   setLoading(btn, true);
   toast("Iniciando creación masiva, esto puede tardar unos minutos...", "info");
