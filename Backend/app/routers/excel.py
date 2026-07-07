@@ -2088,17 +2088,6 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
 
-    background_tasks.add_task(
-        add_job_history,
-        user=auth.get("name", "Unknown"),
-        job_type="Alta Docentes (OneDrive)",
-        details=f"Pestaa: {req.sheet_name}",
-        status="Completado" if not result.failed else "Con Errores",
-        success_count=len(result.succeeded),
-        error_count=len(result.failed),
-        error_details="; ".join([f"{f['correo']}: {f['error']}" for f in result.failed]) if result.failed else None
-    )
-
     return result
 
 
@@ -2126,7 +2115,7 @@ async def get_docentes_sheets(req: UrlOnlyRequest) -> list[str]:
 
 
 @router.post("/excel/rollback", response_model=BulkResult)
-async def rollback_onedrive(req: UrlOnlyRequest, background_tasks: BackgroundTasks, auth: dict = Depends(verify_token)) -> BulkResult:
+async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
 
