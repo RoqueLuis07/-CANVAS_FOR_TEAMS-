@@ -1256,6 +1256,45 @@ function openExcelDiplomados() {
   new bootstrap.Modal(document.getElementById('globalModal')).show();
 }
 
+
+async function fetchSheets() {
+    const urlInput = document.getElementById('diplomadoUrl').value.trim();
+    if (!urlInput) {
+        toast('Por favor, ingresa la URL primero.', 'warning');
+        return;
+    }
+    
+    const btn = document.getElementById('btnLoadSheets');
+    const select = document.getElementById('diplomadoSheet');
+    const oldText = btn.innerHTML;
+    
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
+    btn.disabled = true;
+    select.innerHTML = '<option value="">Cargando pestañas...</option>';
+    
+    try {
+        const sheets = await api.post('/excel/diplomados/sheets', { url: urlInput });
+        if (sheets && sheets.length > 0) {
+            select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
+            sheets.forEach(sheet => {
+                const option = document.createElement('option');
+                option.value = sheet;
+                option.textContent = sheet;
+                select.appendChild(option);
+            });
+            toast('Pestañas cargadas correctamente.', 'success');
+        } else {
+            select.innerHTML = '<option value="">No se encontraron pestañas.</option>';
+        }
+    } catch (e) {
+        toast('Error al cargar pestañas: ' + (e.detail || e.message || e), 'danger');
+        select.innerHTML = '<option value="">Error al cargar.</option>';
+    } finally {
+        btn.innerHTML = oldText;
+        btn.disabled = false;
+    }
+  }
+
 async function doUploadDiplomados() {
   const urlInput = document.getElementById('diplomadoUrl').value.trim();
   const sheetInput = document.getElementById('diplomadoSheet').value.trim();
