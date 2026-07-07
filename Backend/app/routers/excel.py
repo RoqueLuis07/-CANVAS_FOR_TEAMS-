@@ -1209,7 +1209,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         platform="teams",
                         program_type="diplomado", 
                         program_name=curso_nombre or title_val or sheet_name,
-                        extra_cc=None,
+                        extra_cc=req.cc,
                         attachments=get_program_attachments("diplomado")
                     )
                     email_sent = True
