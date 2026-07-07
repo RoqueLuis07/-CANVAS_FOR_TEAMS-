@@ -832,6 +832,7 @@ async def template_unified_enrollment():
 class DiplomadosUrlRequest(BaseModel):
     url: str
     sheet_name: str
+    delete_account: bool = False
 
 
 class UrlOnlyRequest(BaseModel):
@@ -1709,12 +1710,15 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
             else:
                 error = f"Error Canvas: {str(e)}"
         
-        # 2. Azure AD Disable
+        # 2. Azure AD Disable or Delete
         if not error or "no encontrado en Canvas" in error:
             try:
                 ms_users = await graph.search_users(correo)
                 if ms_users:
-                    await graph.patch(f"/users/{ms_users[0]['id']}", {"accountEnabled": False})
+                    if req.delete_account:
+                        await graph.delete(f"/users/{ms_users[0]['id']}")
+                    else:
+                        await graph.patch(f"/users/{ms_users[0]['id']}", {"accountEnabled": False})
                 else:
                     if error:
                         error += " | No en Azure AD"
@@ -1727,7 +1731,8 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
             ws.cell(row=r_idx, column=col_enviado, value=f"Error: {error}")
             result.failed.append({"correo": correo, "error": error})
         else:
-            ws.cell(row=r_idx, column=col_enviado, value="OK (Eliminado)")
+            status_text = "OK (Eliminado permanentemente)" if req.delete_account else "OK (Deshabilitado)"
+            ws.cell(row=r_idx, column=col_enviado, value=status_text)
             result.succeeded.append({"correo": correo})
 
     # Guardar y subir

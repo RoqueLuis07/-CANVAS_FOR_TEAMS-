@@ -1371,6 +1371,7 @@ async function openEgresoOneDrive() {
   const btn = document.getElementById('btnEgresoOneDrive');
   const urlInput = document.getElementById('urlEgresoOneDrive').value.trim();
   const sheetInput = document.getElementById('sheetEgresoOneDrive').value.trim();
+  const deleteAccount = document.getElementById('chkDeleteAccountEgreso').checked;
 
   if (!urlInput || !sheetInput) {
     toast("Por favor ingresa la URL de OneDrive y el nombre de la pestaña.", "warning");
@@ -1381,7 +1382,7 @@ async function openEgresoOneDrive() {
   toast("Analizando el archivo para pre-visualizar...", "info");
   
   try {
-    const previewRes = await api.post('/excel/egreso/preview', { url: urlInput, sheet_name: sheetInput });
+    const previewRes = await api.post('/excel/egreso/preview', { url: urlInput, sheet_name: sheetInput, delete_account: deleteAccount });
     
     // We reuse the global modal for the preview
     const m = new bootstrap.Modal(document.getElementById('globalModal'));
@@ -1421,6 +1422,10 @@ async function openEgresoOneDrive() {
         <strong>Peligro: Revisa los datos cuidadosamente.</strong><br>
         Se van a dar de baja <b>${previewRes.students_to_process}</b> alumnos.<br>
         <small class="text-muted">Alumnos ignorados (ya desvinculados previamente): ${previewRes.students_already_processed}</small>
+        <br><br>
+        <span class="badge ${deleteAccount ? 'bg-danger' : 'bg-warning text-dark'}">
+          Acción en Microsoft: ${deleteAccount ? 'ELIMINAR CUENTA DEFINITIVAMENTE' : 'Solo deshabilitar inicio de sesión'}
+        </span>
       </div>
       ${tableHtml}
     `;
@@ -1430,7 +1435,7 @@ async function openEgresoOneDrive() {
 
     document.getElementById('globalModalFooter').innerHTML = `
       <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-      <button type="button" class="btn btn-danger" id="btnConfirmEgreso" onclick="executeEgresoOneDrive('${safeUrl}', '${safeSheet}')">
+      <button type="button" class="btn btn-danger" id="btnConfirmEgreso" onclick="executeEgresoOneDrive('${safeUrl}', '${safeSheet}', ${deleteAccount})">
         <i class="bi bi-trash-fill me-1"></i>Confirmar Desvinculación Masiva
       </button>
     `;
@@ -1442,14 +1447,14 @@ async function openEgresoOneDrive() {
   }
 }
 
-async function executeEgresoOneDrive(urlInput, sheetInput) {
+async function executeEgresoOneDrive(urlInput, sheetInput, deleteAccount) {
     const btn = document.getElementById('btnConfirmEgreso');
     setLoading(btn, true);
     toast("Iniciando desvinculación masiva... observa tu Excel abierto.", "info");
     
     try {
-        const res = await api.post('/excel/egreso', { url: urlInput, sheet_name: sheetInput });
-        toast(`Operación exitosa. ${res.succeeded?.length || 0} alumnos dados de baja.`, 'success');
+        const res = await api.post('/excel/egreso', { url: urlInput, sheet_name: sheetInput, delete_account: deleteAccount });
+        toast(`Operación exitosa. ${res.succeeded?.length || 0} alumnos procesados.`, 'success');
         bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
     } catch (e) {
         toast('Error: ' + (e.detail || e.message || e), 'danger');
