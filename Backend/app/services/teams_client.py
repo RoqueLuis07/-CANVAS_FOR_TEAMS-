@@ -232,6 +232,27 @@ async def paginate_limited(path: str, params: dict | None = None,
     return results[:max_records]
 
 
+
+async def search_group_by_name(name: str) -> str | None:
+    """Search for a Microsoft 365 group by exactly matching the displayName. Returns the group ID if found."""
+    try:
+        # We use $filter to get groups that start with the name to narrow it down, 
+        # then check exact match in Python to be safe (Graph API filtering can be finicky).
+        # Note: $filter requires ConsistencyLevel: eventual for some properties, but startswith on displayName is usually supported.
+        params = {
+            "$filter": f"startswith(displayName, '{name}')",
+            "$select": "id,displayName"
+        }
+        res = await get("/groups", params=params)
+        groups = res.get("value", [])
+        for g in groups:
+            if g.get("displayName", "").strip().lower() == name.strip().lower():
+                return g.get("id")
+        return None
+    except Exception as e:
+        print(f"Error searching group by name {name}: {e}")
+        return None
+
 async def search_users(query: str, select: str | None = None) -> list[Any]:
     """Search users using Graph $search (requires ConsistencyLevel: eventual)."""
     params: dict = {

@@ -1054,6 +1054,9 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
             cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
             correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
+            id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
+            id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
+            curso_nombre = str(ws.cell(row=r_idx, column=col_curso_nombre).value or "").strip() if col_curso_nombre else ""
             
             enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
             
@@ -1094,6 +1097,24 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         error = str(e)
                     else:
                         error = "Ya existía en Azure AD" 
+            
+            if not error or "Ya existía" in str(error):
+                try:
+                    if not id_equipo and curso_nombre:
+                        existing_tid = await graph.search_group_by_name(curso_nombre)
+                        if existing_tid:
+                            id_equipo = existing_tid
+                            if col_equipo:
+                                ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
+                    
+                    if id_equipo and id_equipo != "None":
+                        user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
+                        if user_data and user_data.get("id"):
+                            uid = user_data["id"]
+                            await graph.post(f"/groups/{id_equipo}/members/$ref", {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{uid}"})
+                except Exception as e:
+                    if "already exist" not in str(e).lower():
+                        error = str(error) + f" | TeamsEnroll: {e}" if error else f"TeamsEnroll: {e}"
             
             email_sent = False
             if not error and correo and correo != "None":
@@ -1161,56 +1182,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         for i in range(0, len(tasks), batch_size):
             await asyncio.gather(*tasks[i:i+batch_size])
             
-        # --- NUEVA LÓGICA DE GRUPOS EN TEAMS ---
-        diplomado_name = ""
-        for c in range(1, ws.max_column + 1):
-            val = str(ws.cell(row=1, column=c).value or "").strip()
-            if val:
-                diplomado_name = val
-                break
         
-        if not diplomado_name:
-            diplomado_name = sheet_name
-            
-        group_id = None
-        try:
-            existing_groups = await graph.get("/groups", params={"$filter": f"displayName eq '{diplomado_name}'", "$select": "id,displayName"})
-            if existing_groups and existing_groups.get("value"):
-                group_id = existing_groups["value"][0]["id"]
-            else:
-                owner_users = await graph.search_users("it@usil.edu.py")
-                owner_id = owner_users[0]["id"] if owner_users else None
-                if owner_id:
-                    import re
-                    import time
-                    nickname = re.sub(r'[^a-zA-Z0-9]', '', diplomado_name).lower()
-                    if not nickname:
-                        nickname = f"diplomado{int(time.time())}"
-                    team_data = await graph.create_team_via_group(
-                        display_name=diplomado_name,
-                        mail_nickname=nickname,
-                        description=f"Grupo para {diplomado_name}",
-                        visibility="Private",
-                        owner_ids=[owner_id]
-                    )
-                    group_id = team_data.get("id")
-        except Exception as e:
-            print(f"Error al buscar/crear el grupo: {e}")
-            
-        if group_id:
-            ws.cell(row=header_row_idx - 1, column=col_usuario, value=group_id)
-            login_ids_to_add = [s.get("login_id") for s in result.succeeded if s.get("login_id")]
-            for login_id in login_ids_to_add:
-                try:
-                    user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
-                    if user_data and user_data.get("id"):
-                        uid = user_data["id"]
-                        # Adding user to group
-                        await graph.post(f"/groups/{group_id}/members/$ref", {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{uid}"})
-                except Exception as e:
-                    if "already exist" not in str(e).lower():
-                        print(f"Error añadiendo {login_id} al grupo: {e}")
-        # --- FIN NUEVA LÓGICA ---
 
     output = io.BytesIO()
     wb.save(output)
@@ -1784,6 +1756,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     col_plat = get_col_idx("plataforma")
     col_curso = get_col_idx("curso", "id curso", "canvas")
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
+    col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
     col_enviado = get_col_idx("enviado", "estado")
 
     rows = []
@@ -1871,6 +1844,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     col_plat = get_col_idx("plataforma")
     col_curso = get_col_idx("curso", "id curso", "canvas")
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
+    col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
     
     col_usuario = get_col_idx("usuario")
     col_contra = get_col_idx("contrasena", "contrasea", "clave")
@@ -1905,6 +1879,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         plat = str(ws.cell(row=r_idx, column=col_plat).value or "both").strip().lower() if col_plat else "both"
         id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
         id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
+        curso_nombre = str(ws.cell(row=r_idx, column=col_curso_nombre).value or "").strip() if col_curso_nombre else ""
 
         creds, status = await user_service.generate_unique_credentials(nombre, cedula, plat)
         login_id = creds["email"]
@@ -1946,6 +1921,43 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         pass
                 else:
                     error += f"Teams: {str(e)} | "
+
+        # Dynamic Canvas Course Search/Create
+        if plat in ("canvas", "both") and not id_curso and curso_nombre:
+            try:
+                existing_cid = await canvas_client.search_course_by_name(_ACCOUNT_LOCAL, curso_nombre)
+                if existing_cid:
+                    id_curso = existing_cid
+                else:
+                    id_curso = await canvas_client.create_course(_ACCOUNT_LOCAL, curso_nombre)
+                if id_curso and col_curso:
+                    ws.cell(row=r_idx, column=col_curso, value=id_curso)
+            except Exception as e:
+                error += f"CanvasCourseLogic: {str(e)} | "
+
+        # Dynamic Teams Group Search/Create
+        if plat in ("teams", "both") and not id_equipo and curso_nombre:
+            try:
+                existing_tid = await graph.search_group_by_name(curso_nombre)
+                if existing_tid:
+                    id_equipo = existing_tid
+                else:
+                    import re, time
+                    nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
+                    if not nickname: nickname = f"grupo{int(time.time())}"
+                    owner_ids = [azure_id] if azure_id else []
+                    new_team = await graph.create_team_via_group(
+                        display_name=curso_nombre,
+                        mail_nickname=nickname,
+                        description=f"Grupo para {curso_nombre}",
+                        visibility="Private",
+                        owner_ids=owner_ids
+                    )
+                    id_equipo = new_team.get("id")
+                if id_equipo and col_equipo:
+                    ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
+            except Exception as e:
+                error += f"TeamsGroupLogic: {str(e)} | "
 
         # Azure Teams Enrollment
         if id_equipo and azure_id and id_equipo != "None":
