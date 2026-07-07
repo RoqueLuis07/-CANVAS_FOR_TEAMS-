@@ -126,10 +126,10 @@ async def get_sku_id(part_number: str) -> str | None:
 
 
 async def assign_license(user_id: str, sku_part_number: str) -> Any:
-    """Assign a license to the user. Returns None silently if the SKU is not available."""
+    """Assign a license to the user. Raises an error if the SKU is not available."""
     sku_id = await get_sku_id(sku_part_number)
     if sku_id is None:
-        return None
+        raise ValueError(f"La licencia {sku_part_number} no se encontró o no está disponible en tu cuenta de Microsoft.")
     return await post(f"/users/{user_id}/assignLicense", {"addLicenses": [{"skuId": sku_id}], "removeLicenses": []})
 
 _client_instance: httpx.AsyncClient | None = None
