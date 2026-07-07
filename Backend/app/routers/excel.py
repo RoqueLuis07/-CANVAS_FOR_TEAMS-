@@ -1029,6 +1029,9 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         col_nombre = get_col_idx("nombre")
         col_cedula = get_col_idx("cedula", "c├®dula", "ci")
         col_correo = get_col_idx("correo")
+        col_curso = get_col_idx("curso", "id curso", "canvas")
+        col_equipo = get_col_idx("equipo", "id equipo", "teams")
+        col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
         
         col_usuario = get_col_idx("usuario")
         col_contra = get_col_idx("contrasena", "contrase├▒a", "clave")
