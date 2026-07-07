@@ -522,6 +522,11 @@ function openCoursesOneDrive() {
           <input type="url" class="form-control" id="coursesOdUrl" placeholder="https://...sharepoint.com/..." required>
           <button class="btn btn-primary" type="button" id="btnLoadCoursesSheets" onclick="fetchCoursesSheets()">Cargar Pestañas</button>
         </div>
+        <label class="form-label fw-bold mt-2">URL del Excel Maestro de Reportes (Opcional)</label>
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="bi bi-journal-bookmark-fill"></i></span>
+          <input type="url" class="form-control" id="coursesReportUrl" placeholder="https://...sharepoint.com/... (Bitácora)">
+        </div>
         <label class="form-label fw-bold">Nombre de la Pestaña (Requerido)</label>
         <div class="input-group mb-3">
           <span class="input-group-text"><i class="bi bi-file-spreadsheet"></i></span>
@@ -537,6 +542,10 @@ function openCoursesOneDrive() {
     <button type="button" class="btn btn-success" id="btnUploadCourses" onclick="doPreviewCourses()"><i class="bi bi-lightning-charge me-1"></i>Pre-visualizar</button>
   `;
   new bootstrap.Modal(document.getElementById('globalModal')).show();
+  
+  setTimeout(() => {
+    document.getElementById('coursesReportUrl').value = localStorage.getItem('masterReportUrl') || '';
+  }, 100);
 }
 
 async function fetchCoursesSheets() {
@@ -648,15 +657,18 @@ async function executeCreateCourses(urlInput, sheetInput) {
   toast('Creando cursos en Canvas, esto puede tardar un momento...', 'info');
 
   try {
-    const res = await api.post('/excel/courses', { url: urlInput, sheet_name: sheetInput });
+    const reportUrl = document.getElementById('coursesReportUrl').value.trim();
+    if (reportUrl) localStorage.setItem('masterReportUrl', reportUrl);
+
+    const res = await api.post('/excel/courses', { url: urlInput, sheet_name: sheetInput, report_url: reportUrl });
     const successCount = res.succeeded?.length || 0;
     const failCount = res.failed?.length || 0;
 
     toast(`✅ ${successCount} cursos creados exitosamente.${failCount > 0 ? ` ❌ ${failCount} fallaron.` : ''}`, successCount > 0 ? 'success' : 'danger');
 
-    // Auto-download report Excel
-    if (res.succeeded && res.succeeded.length > 0) {
-      generateCoursesReport(res.succeeded, res.failed || []);
+    // Remove old Auto-download report Excel
+    if (reportUrl) {
+      toast('✅ Cursos creados y reporte maestro en OneDrive actualizado exitosamente.', 'success');
     }
 
     bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
@@ -669,29 +681,7 @@ async function executeCreateCourses(urlInput, sheetInput) {
 }
 
 function generateCoursesReport(succeeded, failed) {
-  const rows = [
-    ['REPORTE DE CURSOS CREADOS EN CANVAS'],
-    [`Fecha: ${new Date().toLocaleString('es-PY')}`],
-    [`Total creados: ${succeeded.length} | Fallidos: ${failed.length}`],
-    [],
-    ['Nombre del Curso', 'Canvas ID', 'SIS Course ID', 'Estado'],
-  ];
-
-  succeeded.forEach(c => {
-    rows.push([c.nombre, c.canvas_id, c.sis_course_id || '—', '✅ Creado']);
-  });
-
-  failed.forEach(f => {
-    rows.push([f.input?.nombre || '—', '—', f.input?.sis_id || '—', `❌ ${f.error}`]);
-  });
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 50 }, { wch: 12 }, { wch: 18 }, { wch: 30 }];
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Reporte Cursos');
-  XLSX.writeFile(wb, `REPORTE_CURSOS_CANVAS_${new Date().toISOString().slice(0,10)}.xlsx`);
-  toast('📥 Reporte de IDs descargado automáticamente.', 'info');
+  // Función eliminada, ahora se hace en el backend
 }
 
 loadCourses();

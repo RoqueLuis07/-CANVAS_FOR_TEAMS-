@@ -834,6 +834,7 @@ class DiplomadosUrlRequest(BaseModel):
     sheet_name: str
     delete_account: bool = False
     cc: list[str] = []
+    report_url: str | None = None
 
 
 class UrlOnlyRequest(BaseModel):
@@ -1425,6 +1426,46 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
 
 
 @router.post("/excel/courses", summary="Crear cursos en Canvas desde planilla OneDrive")
+
+async def append_report_onedrive(report_url: str, succeeded: list, failed: list):
+    try:
+        import datetime, io, base64, openpyxl
+        encoded = base64.urlsafe_b64encode(report_url.encode("utf-8")).decode("utf-8").rstrip("=")
+        encoded_url = "u!" + encoded.replace("-", "+").replace("_", "/")
+        
+        r = await graph._client().get(f"{graph._GRAPH}/shares/{encoded_url}/driveItem/content", headers=graph._headers())
+        if r.status_code != 200:
+            print(f"No se pudo descargar el reporte maestro: {r.status_code}")
+            return
+            
+        file_content = r.content
+        wb = openpyxl.load_workbook(io.BytesIO(file_content))
+        
+        sheet_name = datetime.datetime.now().strftime("%d-%m-%Y")
+        if sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        else:
+            ws = wb.create_sheet(title=sheet_name)
+            
+        if ws.max_row == 1 and not ws.cell(row=1, column=1).value:
+            ws.append(['Fecha Hora', 'Nombre del Curso', 'Canvas ID', 'SIS Course ID', 'Estado', 'Teams ID'])
+            
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for c in succeeded:
+            ws.append([now_str, c.get("input", {}).get("nombre", ""), c.get("canvas_id", ""), c.get("sis_course_id", ""), "Creado", c.get("teams_id", "")])
+            
+        for c in failed:
+            ws.append([now_str, c.get("input", {}).get("nombre", ""), c.get("canvas_id", ""), c.get("sis_course_id", ""), f"Fallo: {c.get('error', '')}", ""])
+            
+        out_io = io.BytesIO()
+        wb.save(out_io)
+        out_io.seek(0)
+        
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+        print("Reporte maestro actualizado exitosamente.")
+    except Exception as e:
+        print(f"Error actualizando reporte maestro: {str(e)}")
+
 async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     """Crea cursos simultáneamente en Canvas y equipos en Teams leyendo de OneDrive."""
     if not req.url or "http" not in req.url:
@@ -1605,6 +1646,10 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+
+    if req.report_url and (succeeded or failed):
+        # We need to map succeeded list format, wait, succeeded might just be a dict inside result
+        await append_report_onedrive(req.report_url, result.succeeded, result.failed)
 
     return result
 
