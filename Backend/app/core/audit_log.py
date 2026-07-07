@@ -3,24 +3,24 @@ import logging
 import json
 from datetime import datetime
 from pathlib import Path
-import sqlite3
+import psycopg2
+import psycopg2.extras
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-AUDIT_DB = Path(__file__).parent.parent.parent / "data" / "audit.db"
+
 
 
 def init_audit_db():
     """Initialize audit database."""
-    AUDIT_DB.parent.mkdir(parents=True, exist_ok=True)
-
-    conn = sqlite3.connect(AUDIT_DB)
+    conn = psycopg2.connect(settings.supabase_database_url)
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             username TEXT,
             endpoint TEXT,
             method TEXT,
@@ -48,7 +48,7 @@ async def log_activity(
 ):
     """Log an activity to the audit database."""
     try:
-        conn = sqlite3.connect(AUDIT_DB)
+        conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -68,9 +68,8 @@ async def log_activity(
 async def get_audit_logs(limit: int = 100, offset: int = 0):
     """Get audit logs from database."""
     try:
-        conn = sqlite3.connect(AUDIT_DB)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        conn = psycopg2.connect(settings.supabase_database_url)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
         # Get total count
         cursor.execute("SELECT COUNT(*) FROM audit_logs")
@@ -114,7 +113,7 @@ async def get_audit_logs(limit: int = 100, offset: int = 0):
 async def clear_old_logs(days: int = 90):
     """Clear audit logs older than N days."""
     try:
-        conn = sqlite3.connect(AUDIT_DB)
+        conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor()
 
         cursor.execute("""

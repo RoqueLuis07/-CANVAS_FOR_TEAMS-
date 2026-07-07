@@ -1,5 +1,6 @@
 """Database module - handles SQLite and PostgreSQL operations."""
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import asyncio
 import logging
 from datetime import datetime
@@ -8,15 +9,16 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Database file location
-DB_FILE = Path(__file__).parent.parent.parent / "app.db"
+
 
 _conn = None
 _db_lock = asyncio.Lock()
 
+from app.core.config import settings
 def _get_conn():
     global _conn
-    if _conn is None:
-        _conn = sqlite3.connect(str(DB_FILE), check_same_thread=False, timeout=30.0)
+    if _conn is None or _conn.closed:
+        _conn = psycopg2.connect(settings.supabase_database_url)
     return _conn
 
 async def close_db():
@@ -37,7 +39,7 @@ async def init_db():
             # Create main tables
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS canvas_courses (
-                    id INTEGER PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     name TEXT NOT NULL,
                     course_code TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -47,7 +49,7 @@ async def init_db():
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS canvas_users (
-                    id INTEGER PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     name TEXT NOT NULL,
                     email TEXT UNIQUE,
                     login_id TEXT,
@@ -58,7 +60,7 @@ async def init_db():
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS canvas_enrollments (
-                    id INTEGER PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     course_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     role TEXT,
@@ -81,7 +83,7 @@ async def init_db():
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sync_metadata (
-                    id INTEGER PRIMARY KEY,
+                    id BIGINT PRIMARY KEY,
                     sync_type TEXT NOT NULL,
                     last_sync TIMESTAMP,
                     status TEXT DEFAULT 'pending',
@@ -92,7 +94,7 @@ async def init_db():
 
             conn.commit()
             # conn.close()
-            logger.info(f"Database initialized at {DB_FILE}")
+            logger.info("Database initialized at Supabase PostgreSQL")
 
         async with _db_lock:
             await asyncio.to_thread(_init)
@@ -162,7 +164,7 @@ async def mark_synced(sync_type: str) -> bool:
             conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT OR REPLACE INTO sync_metadata (sync_type, last_sync, status)
+                INSERT INTO sync_metadata (sync_type, last_sync, status)
                 VALUES (?, ?, 'completed')
             """, (sync_type, datetime.utcnow()))
             conn.commit()
@@ -221,7 +223,7 @@ async def upsert_courses(courses: list) -> int:
 
             for course in courses:
                 cursor.execute("""
-                    INSERT OR REPLACE INTO canvas_courses (id, name, course_code, updated_at)
+                    INSERT INTO canvas_courses (id, name, course_code, updated_at)
                     VALUES (?, ?, ?, ?)
                 """, (
                     course.get('id'),
@@ -253,7 +255,7 @@ async def upsert_canvas_users(users: list) -> int:
             for user in users:
                 try:
                     cursor.execute("""
-                        INSERT OR REPLACE INTO canvas_users (id, name, email, login_id, updated_at)
+                        INSERT INTO canvas_users (id, name, email, login_id, updated_at)
                         VALUES (?, ?, ?, ?, ?)
                     """, (
                         user.get('id'),
@@ -283,8 +285,7 @@ async def get_canvas_users() -> list:
     try:
         def _get():
             conn = _get_conn()
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cursor.execute("SELECT id, name, email, login_id FROM canvas_users ORDER BY name")
             rows = [dict(r) for r in cursor.fetchall()]
             # conn.close()
@@ -301,13 +302,12 @@ async def search_canvas_users(term: str, limit: int = 1000) -> list:
     try:
         def _search():
             conn = _get_conn()
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             pattern = f"%{term}%"
             cursor.execute("""
                 SELECT id, name, email, login_id FROM canvas_users
-                WHERE name LIKE ? OR email LIKE ? OR login_id LIKE ?
-                ORDER BY name LIMIT ?
+                WHERE name LIKE %s OR email LIKE %s OR login_id LIKE %s
+                ORDER BY name LIMIT %s
             """, (pattern, pattern, pattern, limit))
             rows = [dict(r) for r in cursor.fetchall()]
             # conn.close()
@@ -324,7 +324,7 @@ async def delete_canvas_user(user_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM canvas_users WHERE id = ?", (user_id,))
+            conn.execute("DELETE FROM canvas_users WHERE id = %s", (user_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:
@@ -340,8 +340,7 @@ async def get_courses() -> list:
     try:
         def _get():
             conn = _get_conn()
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cursor.execute("SELECT id, name, course_code FROM canvas_courses ORDER BY name")
             rows = [dict(r) for r in cursor.fetchall()]
             # conn.close()
@@ -358,7 +357,7 @@ async def delete_course(course_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM canvas_courses WHERE id = ?", (course_id,))
+            conn.execute("DELETE FROM canvas_courses WHERE id = %s", (course_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:
@@ -379,9 +378,14 @@ async def upsert_azure_users(users: list) -> int:
             for user in users:
                 try:
                     cursor.execute("""
-                        INSERT OR REPLACE INTO azure_users
+                        INSERT INTO azure_users
                             (id, display_name, mail, user_principal_name, updated_at)
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            display_name = EXCLUDED.display_name,
+                            mail = EXCLUDED.mail,
+                            user_principal_name = EXCLUDED.user_principal_name,
+                            updated_at = EXCLUDED.updated_at
                     """, (
                         user.get('id'),
                         user.get('displayName', ''),
@@ -407,16 +411,15 @@ async def get_azure_users(search: str | None = None) -> list:
     try:
         def _get():
             conn = _get_conn()
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             if search:
                 q = f"%{search.lower()}%"
                 cursor.execute("""
                     SELECT id, display_name, mail, user_principal_name
                     FROM azure_users
-                    WHERE lower(display_name) LIKE ?
-                       OR lower(user_principal_name) LIKE ?
-                       OR lower(coalesce(mail,'')) LIKE ?
+                    WHERE lower(display_name) LIKE %s
+                       OR lower(user_principal_name) LIKE %s
+                       OR lower(coalesce(mail,'')) LIKE %s
                     ORDER BY display_name
                 """, (q, q, q))
             else:
@@ -439,7 +442,7 @@ async def delete_azure_user(user_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM azure_users WHERE id = ?", (user_id,))
+            conn.execute("DELETE FROM azure_users WHERE id = %s", (user_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:
@@ -460,9 +463,13 @@ async def upsert_enrollments(enrollments: list) -> int:
             for e in enrollments:
                 try:
                     cursor.execute("""
-                        INSERT OR REPLACE INTO canvas_enrollments
+                        INSERT INTO canvas_enrollments
                             (id, course_id, user_id, role)
-                        VALUES (?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            course_id = EXCLUDED.course_id,
+                            user_id = EXCLUDED.user_id,
+                            role = EXCLUDED.role
                     """, (
                         e.get('id'),
                         e.get('course_id'),
@@ -487,7 +494,7 @@ async def delete_enrollment(enrollment_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM canvas_enrollments WHERE id = ?", (enrollment_id,))
+            conn.execute("DELETE FROM canvas_enrollments WHERE id = %s", (enrollment_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     canvas_access_token: str = ""
     canvas_account_id: str = "1"
 
+    # Supabase
+    supabase_database_url: str = ""
+
     # Azure
     azure_tenant_id: str = ""
     azure_client_id: str = ""

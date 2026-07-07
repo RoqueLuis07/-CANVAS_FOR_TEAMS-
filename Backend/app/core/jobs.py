@@ -2,27 +2,27 @@
 import logging
 from datetime import datetime
 from typing import Optional
-import sqlite3
+import psycopg2
+import psycopg2.extras
+from app.core.config import settings
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-JOBS_DB = Path(__file__).parent.parent.parent / "data" / "jobs.db"
+
 
 
 def init_jobs_db():
     """Initialize jobs database."""
-    JOBS_DB.parent.mkdir(parents=True, exist_ok=True)
-
-    conn = sqlite3.connect(JOBS_DB)
+    conn = psycopg2.connect(settings.supabase_database_url)
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            started_at DATETIME,
-            completed_at DATETIME,
+            id SERIAL PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
             job_type TEXT NOT NULL,
             operation TEXT NOT NULL,
             username TEXT,
@@ -78,7 +78,7 @@ async def create_job(
     Returns the job ID.
     """
     try:
-        conn = sqlite3.connect(JOBS_DB)
+        conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -101,13 +101,13 @@ async def create_job(
 async def start_job(job_id: int):
     """Mark a job as started."""
     try:
-        conn = sqlite3.connect(JOBS_DB)
+        conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor()
 
         cursor.execute("""
             UPDATE jobs
             SET status = 'processing', started_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            WHERE id = %s
         """, (job_id,))
 
         conn.commit()
@@ -127,7 +127,7 @@ async def complete_job(
 ):
     """Mark a job as completed."""
     try:
-        conn = sqlite3.connect(JOBS_DB)
+        conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor()
 
         status = "completed" if error_count == 0 else "completed_with_errors"
@@ -139,7 +139,7 @@ async def complete_job(
                 result_count = ?,
                 error_count = ?,
                 error_message = ?
-            WHERE id = ?
+            WHERE id = %s
         """, (status, result_count, error_count, error_message, job_id))
 
         conn.commit()
@@ -154,7 +154,7 @@ async def complete_job(
 async def fail_job(job_id: int, error_message: str):
     """Mark a job as failed."""
     try:
-        conn = sqlite3.connect(JOBS_DB)
+        conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -162,7 +162,7 @@ async def fail_job(job_id: int, error_message: str):
             SET status = 'failed',
                 completed_at = CURRENT_TIMESTAMP,
                 error_message = ?
-            WHERE id = ?
+            WHERE id = %s
         """, (error_message, job_id))
 
         conn.commit()
@@ -185,9 +185,8 @@ async def get_jobs(
 ) -> dict:
     """Get jobs with filters."""
     try:
-        conn = sqlite3.connect(JOBS_DB)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        conn = psycopg2.connect(settings.supabase_database_url)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
         # Build filter query
         where_clauses = []
@@ -264,7 +263,7 @@ async def get_jobs(
 async def get_jobs_stats(date_from: str = None, date_to: str = None) -> dict:
     """Get job statistics."""
     try:
-        conn = sqlite3.connect(JOBS_DB)
+        conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor()
 
         where_clause = ""
