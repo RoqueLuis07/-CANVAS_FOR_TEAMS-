@@ -917,6 +917,7 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
     ws = wb[req.sheet_name]
     
     header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1007,6 +1008,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         ws = wb[sheet_name]
         
         header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
         headers = {}
         for row_idx in range(1, min(6, ws.max_row + 1)):
             row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1141,7 +1143,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         password=pwd, 
                         platform="teams",
                         program_type="diplomado", 
-                        program_name=sheet_name,
+                        program_name=curso_nombre or title_val or sheet_name,
                         extra_cc=None,
                         attachments=get_program_attachments("diplomado")
                     )
@@ -1266,6 +1268,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
 
     # Buscar fila de encabezados
     header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1362,6 +1365,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
     # Find header row
     header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1514,6 +1518,7 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     ws = wb[req.sheet_name]
     
     header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1610,6 +1615,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     ws = wb[req.sheet_name]
     
     header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1745,6 +1751,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     ws = wb[req.sheet_name]
     
     header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1833,6 +1840,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     ws = wb[req.sheet_name]
     
     header_row_idx = None
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
     headers = {}
     for row_idx in range(1, min(6, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
