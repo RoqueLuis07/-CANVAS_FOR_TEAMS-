@@ -1646,7 +1646,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
 
-    if req.report_url and (succeeded or failed):
+    if req.report_url and (result.succeeded or result.failed):
         # We need to map succeeded list format, wait, succeeded might just be a dict inside result
         await append_report_onedrive(req.report_url, result.succeeded, result.failed)
 
