@@ -1009,7 +1009,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         ws = wb[sheet_name]
         
         header_row_idx = None
-        title_val = str(ws.cell(row=1, column=1).value or "").strip()
+        title_val = next((str(c.value).strip() for c in ws[1] if c.value and isinstance(c.value, str) and len(str(c.value).strip()) > 5), "")
         headers = {}
         for row_idx in range(1, min(6, ws.max_row + 1)):
             row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
@@ -1060,6 +1060,42 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         if not col_enviado:
             col_enviado = next_col
             ws.cell(row=header_row_idx, column=col_enviado, value="Enviado").font = Font(bold=True)
+            
+        global_team_id = ""
+        global_team_name = title_val
+        if global_team_name and col_usuario:
+            team_id_from_header = str(ws.cell(row=1, column=col_usuario).value or "").strip()
+            if team_id_from_header and len(team_id_from_header) > 10:
+                global_team_id = team_id_from_header
+            else:
+                try:
+                    existing_tid = await graph.search_group_by_name(global_team_name)
+                    if existing_tid:
+                        global_team_id = existing_tid
+                    else:
+                        import re, time
+                        nickname = re.sub(r'[^a-zA-Z0-9]', '', global_team_name).lower()
+                        if not nickname: nickname = f"grupo{int(time.time())}"
+                        
+                        owner_ids = []
+                        try:
+                            admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
+                            if admin_user and admin_user.get("id"):
+                                owner_ids.append(admin_user["id"])
+                        except: pass
+                        
+                        new_team = await graph.create_team_via_group(
+                            display_name=global_team_name,
+                            mail_nickname=nickname,
+                            description=f"Grupo para {global_team_name}",
+                            visibility="Private",
+                            owner_ids=owner_ids
+                        )
+                        global_team_id = new_team.get("id", "")
+                    if global_team_id:
+                        ws.cell(row=1, column=col_usuario, value=global_team_id).font = Font(bold=True)
+                except Exception as e:
+                    print(f"Error pre-creando equipo: {e}")
         
         async def process_row(r_idx):
             nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
@@ -1111,38 +1147,34 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             
             if not error or "Ya existía" in str(error):
                 try:
-                    if not id_equipo and curso_nombre:
+                    target_equipo = global_team_id
+                    if id_equipo and id_equipo != "None":
+                        target_equipo = id_equipo
+                    elif not target_equipo and curso_nombre:
                         existing_tid = await graph.search_group_by_name(curso_nombre)
                         if existing_tid:
-                            id_equipo = existing_tid
-                            if col_equipo:
-                                ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
+                            target_equipo = existing_tid
                         else:
                             import re, time
                             nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
                             if not nickname: nickname = f"grupo{int(time.time())}"
-                            new_team = await create_team_via_group(
+                            new_team = await graph.create_team_via_group(
                                 display_name=curso_nombre,
                                 mail_nickname=nickname,
                                 description=f"Grupo para {curso_nombre}",
                                 visibility="Private",
                                 owner_ids=[]
                             )
-                            id_equipo = new_team.get("id")
-                            if id_equipo and col_equipo:
-                                ws.cell(row=r_idx, column=col_equipo, value=id_equipo)
-                    elif id_equipo and id_equipo != "None" and not curso_nombre:
-                        gn = await graph.get_group_name_by_id(id_equipo)
-                        if gn:
-                            curso_nombre = gn
-                            if col_curso_nombre:
-                                ws.cell(row=r_idx, column=col_curso_nombre, value=gn)
-                    
-                    if id_equipo and id_equipo != "None":
+                            target_equipo = new_team.get("id")
+                            
+                    if target_equipo:
+                        if col_equipo and target_equipo != id_equipo:
+                            ws.cell(row=r_idx, column=col_equipo, value=target_equipo)
+                        
                         user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
                         if user_data and user_data.get("id"):
                             uid = user_data["id"]
-                            await graph.post(f"/groups/{id_equipo}/members/$ref", {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{uid}"})
+                            await graph.post(f"/groups/{target_equipo}/members/$ref", {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{uid}"})
                 except Exception as e:
                     if "already exist" not in str(e).lower():
                         error = str(error) + f" | TeamsEnroll: {e}" if error else f"TeamsEnroll: {e}"
@@ -1654,6 +1686,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     col_correo = get_col_idx("correo", "email")
     col_cedula = get_col_idx("cedula", "cédula", "ci")
     col_enviado = get_col_idx("enviado", "estado")
+    col_usuario = get_col_idx("usuario")
 
     if not col_nombre or not col_correo:
         raise HTTPException(status_code=400, detail="Falta columna de correo o nombre.")
@@ -1668,6 +1701,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
         nombre = str(ws.cell(row=row_idx, column=col_nombre).value or "").strip()
         correo = str(ws.cell(row=row_idx, column=col_correo).value or "").strip()
         enviado = str(ws.cell(row=row_idx, column=col_enviado).value or "").strip().lower()
+        usuario_val = str(ws.cell(row=row_idx, column=col_usuario).value or "").strip() if col_usuario else ""
         
         if not nombre or not correo:
             continue
@@ -1678,6 +1712,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
         users_to_process.append({
             "r_idx": row_idx,
             "correo": correo,
+            "usuario": usuario_val,
             "nombre": nombre,
             "cedula": str(ws.cell(row=row_idx, column=col_cedula).value or "").strip() if col_cedula else ""
         })
@@ -1694,12 +1729,15 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
 
     for user_data in users_to_process:
         correo = user_data["correo"]
+        usuario_upn = user_data["usuario"]
         r_idx = user_data["r_idx"]
         
+        search_term = usuario_upn if usuario_upn and "@" in usuario_upn else correo
         error = ""
+        
         # 1. Canvas Delete
         try:
-            users_canvas = await canvas.get(f"/accounts/{settings.canvas_account_id}/users", params={"search_term": correo})
+            users_canvas = await canvas.get(f"/accounts/{settings.canvas_account_id}/users", params={"search_term": search_term})
             if users_canvas:
                 await canvas.delete(f"/accounts/{settings.canvas_account_id}/users/{users_canvas[0]['id']}")
             else:
@@ -1711,23 +1749,22 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
                 error = f"Error Canvas: {str(e)}"
         
         # 2. Azure AD Disable or Delete
-        if not error or "no encontrado en Canvas" in error:
-            try:
-                ms_users = await graph.search_users(correo)
-                if ms_users:
-                    if req.delete_account:
-                        await graph.delete(f"/users/{ms_users[0]['id']}")
-                    else:
-                        await graph.patch(f"/users/{ms_users[0]['id']}", {"accountEnabled": False})
+        try:
+            ms_users = await graph.search_users(search_term)
+            if ms_users:
+                if req.delete_account:
+                    await graph.delete(f"/users/{ms_users[0]['id']}")
                 else:
-                    if error:
-                        error += " | No en Azure AD"
-                    else:
-                        error = "No encontrado en Azure AD"
-            except Exception as e:
-                error = error + f" | Error Azure: {str(e)}" if error else f"Error Azure: {str(e)}"
+                    await graph.patch(f"/users/{ms_users[0]['id']}", {"accountEnabled": False})
+            else:
+                if error:
+                    error += " | No en Azure AD"
+                else:
+                    error = "No encontrado en Azure AD"
+        except Exception as e:
+            error = error + f" | Error Azure: {str(e)}" if error else f"Error Azure: {str(e)}"
         
-        if error and error != "Usuario no encontrado en Canvas | No en Azure AD":
+        if error:
             ws.cell(row=r_idx, column=col_enviado, value=f"Error: {error}")
             result.failed.append({"correo": correo, "error": error})
         else:
