@@ -585,6 +585,10 @@ async function fetchCoursesSheets() {
 async function doPreviewCourses() {
   const urlInput = document.getElementById('coursesOdUrl').value.trim();
   const sheetInput = document.getElementById('coursesOdSheet').value.trim();
+  const reportUrlInput = document.getElementById('coursesReportUrl');
+  if (reportUrlInput) {
+    localStorage.setItem('masterReportUrl', reportUrlInput.value.trim());
+  }
 
   if (!urlInput || !sheetInput) {
     toast('Por favor, ingresa la URL y selecciona una pestaña.', 'warning');
@@ -657,8 +661,7 @@ async function executeCreateCourses(urlInput, sheetInput) {
   toast('Creando cursos en Canvas, esto puede tardar un momento...', 'info');
 
   try {
-    const reportUrl = document.getElementById('coursesReportUrl').value.trim();
-    if (reportUrl) localStorage.setItem('masterReportUrl', reportUrl);
+    const reportUrl = localStorage.getItem('masterReportUrl') || '';
 
     const res = await api.post('/excel/courses', { url: urlInput, sheet_name: sheetInput, report_url: reportUrl });
     const successCount = res.succeeded?.length || 0;
