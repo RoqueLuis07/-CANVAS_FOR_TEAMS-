@@ -831,7 +831,7 @@ function openExcelCrear() {
       // Renderizar en el modal de preview
       pendingStudents = students;
       const tbody = document.getElementById('ingresoPreviewTbody');
-      tbody.innerHTML = previewRes.sample.map(r => {
+      tbody.innerHTML = previewRes.sample_rows.map(r => {
          const cvBadge = r.status_canvas === 'exists' ? '<span class="badge bg-warning">Ya existe</span>' : (r.status_canvas === '-' ? '-' : '<span class="badge bg-success">Nuevo</span>');
          const tmBadge = r.status_teams === 'exists' ? '<span class="badge bg-warning">Ya existe</span>' : (r.status_teams === '-' ? '-' : '<span class="badge bg-success">Nuevo</span>');
          return `
@@ -973,7 +973,7 @@ async function previewDocentes() {
     try {
         const res = await api.post('/excel/docentes-onedrive/preview', { url: url, sheet_name: sheet });
         const tbody = document.getElementById('docPreviewTbody');
-        tbody.innerHTML = res.sample.map(r => `
+        tbody.innerHTML = res.sample_rows.map(r => `
             <tr>
                 <td>${r.nombre}</td>
                 <td>${r.cedula}</td>
@@ -1077,7 +1077,7 @@ async function previewDiplomados() {
     try {
         const res = await api.post('/excel/diplomados/preview', { url: url, sheet_name: sheet });
         const tbody = document.getElementById('diplomadoPreviewTbody');
-        tbody.innerHTML = res.sample.map(r => `
+        tbody.innerHTML = res.sample_rows.map(r => `
             <tr>
                 <td>${r.nombre || '-'}</td>
                 <td>${r.cedula || '-'}</td>
@@ -1172,7 +1172,7 @@ async function previewMasivo() {
     try {
         const res = await api.post('/excel/masivo/preview', { url: url, sheet_name: sheet });
         const tbody = document.getElementById('masivoPreviewTbody');
-        tbody.innerHTML = res.sample.map(r => `
+        tbody.innerHTML = res.sample_rows.map(r => `
             <tr>
                 <td>${r.nombre || '-'}</td>
                 <td>${r.cedula || '-'}</td>
