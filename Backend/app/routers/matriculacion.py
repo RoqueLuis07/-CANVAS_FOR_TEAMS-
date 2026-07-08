@@ -115,9 +115,13 @@ async def matriculate_individual(req: IndividualEnrollmentRequest,):
         # Teams Enrollment
         if req.platforms in ["teams", "both"] and materia.teams_group_id:
             try:
-                # Graph API uses user email/UPN directly
-                await teams.add_member(materia.teams_group_id, req.email, "member")
-                teams_status = "OK"
+                azure_user = await teams.search_users(req.email)
+                if azure_user:
+                    uid = azure_user[0]["id"]
+                    await teams.add_member_to_group(materia.teams_group_id, uid)
+                    teams_status = "OK"
+                else:
+                    teams_status = "Error: Usuario no encontrado en Teams"
             except Exception as e:
                 teams_status = f"Error: {str(e)}"
                 
