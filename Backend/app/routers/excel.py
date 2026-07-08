@@ -825,18 +825,28 @@ class DiplomadosUrlRequest(BaseModel):
     report_url: str | None = None
 
 
+
+class MatriculacionesPreviewResponse(BaseModel):
+    headers: list[str]
+    sample_rows: list[dict]
+
 class UrlOnlyRequest(BaseModel):
     url: str
 class DocentesPreviewResponse(BaseModel):
     total_rows: int
     valid_rows: int
-    sample: list[dict]
+    headers: list[str]
+    sample_rows: list[dict]
+    headers: list[str] = []
 
 class PreviewResponse(BaseModel):
     sheet_name: str
     students_to_process: int
     students_already_processed: int
-    student_details: list[dict]
+    headers: list[str]
+    sample_rows: list[dict]
+    headers: list[str] = []
+    sample_rows: list[dict] = []
 
 def _encode_share_url(url: str) -> str:
     import base64
@@ -906,71 +916,26 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
         raise HTTPException(status_code=400, detail=f"La pesta├▒a '{req.sheet_name}' no existe. Disponibles: {', '.join(wb.sheetnames)}")
 
     ws = wb[req.sheet_name]
-    
+
+    headers = []
+    sample_rows = []
     header_row_idx = None
-    title_val = str(ws.cell(row=1, column=1).value or "").strip()
-    headers = {}
-    for row_idx in range(1, min(6, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v for v in row_vals) and any("cedula" in v or "c├®dula" in v for v in row_vals):
+    
+    for row_idx in range(1, min(10, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        valid_cols = [v for v in row_vals if v]
+        if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
             header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
+            headers = [v for v in row_vals if v]
             break
             
     if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontraron las columnas 'Nombre' y 'C├®dula'.")
-
-    def get_col_idx(*keys):
-        for k in keys:
-            for h, idx in headers.items():
-                if _norm(k) in h:
-                    return idx
-        return None
-
-    col_nombre = get_col_idx("nombre")
-    col_cedula = get_col_idx("cedula", "c├®dula", "ci")
-    col_enviado = get_col_idx("enviado", "estado")
-    
-    col_cc = get_col_idx("cc", "copia")
-    sheet_cc_list = []
-    if col_cc:
-        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
-            if cc_val:
-                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
-                    email = email.strip()
-                    if "@" in email and email not in sheet_cc_list:
-                        sheet_cc_list.append(email)
-    
-    if not col_nombre or not col_cedula:
-        raise HTTPException(status_code=400, detail="Columnas requeridas no encontradas.")
-
-    to_process = 0
-    already_processed = 0
-    details = []
-    
-    empty_count = 0
-    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-        cedula_val = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
         
-        if not nombre_val and not cedula_val:
-            empty_count += 1
-            if empty_count > 10:
-                break
-            continue
-            
-        empty_count = 0
-        enviado = ""
-        if col_enviado:
-            enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
-            
-        if "Ô£à" in enviado or enviado.lower() in ["si", "yes", "true", "enviado"]:
-            already_processed += 1
-        else:
-            to_process += 1
-            details.append({"nombre": nombre_val, "cedula": cedula_val})
+    for row_idx in range(header_row_idx + 1, min(header_row_idx + 11, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        if any(row_vals):
+            sample_rows.append(dict(zip(headers, row_vals)))
             
     wb.close()
     return PreviewResponse(
@@ -1289,7 +1254,10 @@ class CoursesPreviewResponse(BaseModel):
     sheet_name: str
     courses_to_create: int
     courses_already_created: int
-    course_details: list[dict]
+    headers: list[str]
+    sample_rows: list[dict]
+    headers: list[str] = []
+    sample_rows: list[dict] = []
 
 
 @router.post("/excel/courses/sheets", response_model=list[str])
@@ -1335,71 +1303,26 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
 
     ws = wb[req.sheet_name]
 
-    # Buscar fila de encabezados
+    headers = []
+    sample_rows = []
     header_row_idx = None
-    title_val = str(ws.cell(row=1, column=1).value or "").strip()
-    headers = {}
-    for row_idx in range(1, min(6, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        valid_cols = [v for v in row_vals if len(v) > 0]
-        if len(valid_cols) > 1 and any("nombre" in v or "curso" in v for v in row_vals):
+    
+    for row_idx in range(1, min(10, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        valid_cols = [v for v in row_vals if v]
+        if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
             header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
+            headers = [v for v in row_vals if v]
             break
-
+            
     if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados. Asegúrate de tener una columna 'Nombre del Curso' o 'CANVAS'.")
-
-    def get_col(*keys):
-        for k in keys:
-            for h, idx in headers.items():
-                if _norm(k) in h:
-                    return idx
-        return None
-
-    col_nombre = get_col("nombre", "curso", "canvas")
-    col_sis = get_col("sis", "sys")
-    col_canvas_id = get_col("canvas id", "id canvas", "course id")
-    col_estado = get_col("estado")
-
-    if not col_nombre:
-        raise HTTPException(status_code=400, detail="No se encontró la columna 'Nombre del Curso' / 'CANVAS'.")
-
-    to_create = 0
-    already_created = 0
-    details = []
-
-    empty_count = 0
-    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-
-        if not nombre_val:
-            empty_count += 1
-            if empty_count > 10:
-                break
-            continue
-
-        empty_count = 0
-        sis_val = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
-
-        # Check if already created (Canvas ID column has a value)
-        canvas_id_val = ""
-        if col_canvas_id:
-            canvas_id_val = str(ws.cell(row=r_idx, column=col_canvas_id).value or "").strip()
-
-        estado_val = ""
-        if col_estado:
-            estado_val = str(ws.cell(row=r_idx, column=col_estado).value or "").strip()
-
-        if canvas_id_val and canvas_id_val != "None" and canvas_id_val.isdigit():
-            already_created += 1
-        elif "✅" in estado_val:
-            already_created += 1
-        else:
-            to_create += 1
-            details.append({"nombre": nombre_val, "sis_id": sis_val})
-
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+        
+    for row_idx in range(header_row_idx + 1, min(header_row_idx + 11, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        if any(row_vals):
+            sample_rows.append(dict(zip(headers, row_vals)))
+            
     wb.close()
     return CoursesPreviewResponse(
         sheet_name=req.sheet_name,
@@ -2263,6 +2186,41 @@ async def get_matriculaciones_sheets(req: UrlOnlyRequest):
         return {"sheets": wb.sheetnames}
     except Exception as e:
         raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+
+@router.post("/excel/matriculaciones-onedrive/preview", summary="Previsualizar Matriculaciones desde OneDrive")
+async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> MatriculacionesPreviewResponse:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo: {e}")
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+    ws = wb[req.sheet_name]
+    headers = []
+    sample_rows = []
+    header_row_idx = None
+    for row_idx in range(1, min(10, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        if any("usuario" in v.lower() or "correo" in v.lower() or "cedula" in v.lower() for v in row_vals):
+            header_row_idx = row_idx
+            headers = [v for v in row_vals if v]
+            break
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontraron encabezados.")
+    for row_idx in range(header_row_idx + 1, min(header_row_idx + 11, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        if any(row_vals):
+            sample_rows.append(dict(zip(headers, row_vals)))
+    wb.close()
+    return MatriculacionesPreviewResponse(headers=headers, sample_rows=sample_rows)
 
 @router.post("/excel/matriculaciones-onedrive", response_model=BulkResult)
 async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResult:

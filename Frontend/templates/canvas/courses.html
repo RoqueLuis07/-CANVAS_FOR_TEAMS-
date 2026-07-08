@@ -570,6 +570,7 @@ async function doBulkAttendanceDownload() {
 
 // Recuperar la url maestra al cargar la página
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('coursesOdUrl').value = localStorage.getItem('coursesOdUrl') || '';
     setTimeout(() => {
         const el = document.getElementById('coursesReportUrl');
         if(el) el.value = localStorage.getItem('masterReportUrl') || '';
@@ -582,6 +583,7 @@ function cancelPreviewCourses() {
 }
 
 async function fetchCoursesSheets() {
+  localStorage.setItem('coursesOdUrl', document.getElementById('coursesOdUrl').value);
   const urlInput = document.getElementById('coursesOdUrl').value.trim();
   if (!urlInput) { toast('Por favor, ingresa la URL primero.', 'warning'); return; }
 

@@ -136,6 +136,7 @@ async function doEnrollUnified() {
 
 // Configurar Autocompletado
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('mat_url').value = localStorage.getItem('matUrl') || '';
   setupAutocomplete('search_user', 'user_identifier', 'user_results', '/canvas/users', 
     (u) => `<div class="autocomplete-title">${u.name}</div><div class="autocomplete-sub">${u.login_id || u.email || 'Sin email'}</div>`,
     (u, input, hidden) => { input.value = u.name; hidden.value = u.login_id || u.email; }
@@ -155,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // OneDrive Integration Logic
 
 async function fetchMatSheets() {
+  localStorage.setItem('matUrl', document.getElementById('mat_url').value);
   const urlInput = document.getElementById('mat_url').value.trim();
   if (!urlInput) {
       return toast('Por favor, ingresa la URL primero.', 'warning');
@@ -183,11 +185,31 @@ async function fetchMatSheets() {
   }
 }
 
-function enableMatProcessBtn() {
+
+async function enableMatProcessBtn() {
     const val = document.getElementById('mat_sheet').value;
+    const url = document.getElementById('mat_url').value.trim();
     document.getElementById('btnImportMat').disabled = !val;
     document.getElementById('btnRollbackMat').disabled = !val;
+    
+    if (val && url) {
+        try {
+            const preview = await api.post('/excel/matriculaciones-onedrive/preview', { url: url, sheet_name: val });
+            document.getElementById('matPreviewWrap').style.display = 'block';
+            let head = preview.headers.map(h => `<th>${h}</th>`).join('');
+            document.getElementById('matPreviewHead').innerHTML = head;
+            let body = '';
+            preview.sample_rows.forEach(r => {
+                body += `<tr>${preview.headers.map(h => `<td>${r[h] || ''}</td>`).join('')}</tr>`;
+            });
+            document.getElementById('matPreviewBody').innerHTML = body;
+        } catch(e) {
+            console.error('Error in preview:', e);
+            document.getElementById('matPreviewWrap').style.display = 'none';
+        }
+    }
 }
+
 
 async function doImportMatriculaciones() {
     const url = document.getElementById('mat_url').value.trim();
