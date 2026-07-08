@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 # Insert JS code into the `<script>` block
-content = content.replace('let pendingRollbackIds = [];', js_code + '\nlet pendingRollbackIds = [];')
+content = content.replace('<script>', '<script>\n' + js_code)
 
 # Ensure we have cursor-pointer style
 if '.cursor-pointer {' not in content:
