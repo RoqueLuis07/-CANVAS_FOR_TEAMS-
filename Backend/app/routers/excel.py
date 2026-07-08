@@ -931,17 +931,37 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
             
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
-        
-    for row_idx in range(header_row_idx + 1, min(header_row_idx + 11, ws.max_row + 1)):
+
+    col_estado = -1
+    for i, h in enumerate(headers):
+        if "estado" in h.lower() or "canvas" in h.lower() and "id" in h.lower():
+            col_estado = i
+            break
+
+    students_to_process = 0
+    students_already_processed = 0
+
+    for row_idx in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
-        if any(row_vals):
+        
+        # Check if the row has at least a name
+        if not any(row_vals):
+            continue
+            
+        estado_val = row_vals[col_estado] if col_estado >= 0 else ""
+        if "✅" in estado_val or estado_val.lower() in ["creado", "ok", "si"]:
+            students_already_processed += 1
+        else:
+            students_to_process += 1
+            
+        if len(sample_rows) < 10:
             sample_rows.append(dict(zip(headers, row_vals)))
             
     wb.close()
     return PreviewResponse(
         sheet_name=req.sheet_name,
-        students_to_process=0,
-        students_already_processed=0,
+        students_to_process=students_to_process,
+        students_already_processed=students_already_processed,
         headers=headers,
         sample_rows=sample_rows
     )
@@ -1317,17 +1337,37 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
             
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
-        
-    for row_idx in range(header_row_idx + 1, min(header_row_idx + 11, ws.max_row + 1)):
+
+    col_estado = -1
+    for i, h in enumerate(headers):
+        if "estado" in h.lower() or "canvas" in h.lower() and "id" in h.lower():
+            col_estado = i
+            break
+
+    courses_to_create = 0
+    courses_already_created = 0
+
+    for row_idx in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
-        if any(row_vals):
+        
+        # Check if the row has at least a course name (assuming column 0 or 1 is name)
+        if not any(row_vals):
+            continue
+            
+        estado_val = row_vals[col_estado] if col_estado >= 0 else ""
+        if "✅" in estado_val or estado_val.lower() in ["creado", "ok", "si"]:
+            courses_already_created += 1
+        else:
+            courses_to_create += 1
+            
+        if len(sample_rows) < 10:
             sample_rows.append(dict(zip(headers, row_vals)))
             
     wb.close()
     return CoursesPreviewResponse(
         sheet_name=req.sheet_name,
-        courses_to_create=0,
-        courses_already_created=0,
+        courses_to_create=courses_to_create,
+        courses_already_created=courses_already_created,
         headers=headers,
         sample_rows=sample_rows
     )
