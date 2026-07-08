@@ -433,3 +433,11 @@ async def remove_owner_from_group(group_id: str, user_id: str) -> bool:
     except Exception:
         pass
     return False
+
+
+async def add_member_to_group(group_id: str, user_id: str) -> bool:
+    try:
+        await post(f'/groups/{group_id}/members/', {'@odata.id': f'https://graph.microsoft.com/v1.0/directoryObjects/{user_id}'})
+        return True
+    except Exception:
+        return False

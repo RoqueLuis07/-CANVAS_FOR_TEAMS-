@@ -6,11 +6,10 @@ import os
 import uuid
 from datetime import datetime
 
-from app.services.canvas_client import canvas_client as canvas
-from app.services.teams import TeamsService
+from app.services import canvas_client as canvas
+from app.services import teams_client as teams
 
 router = APIRouter(tags=["Matriculaciones Individuales"])
-teams = TeamsService()
 
 # Models
 class MateriaSearchRequest(BaseModel):
@@ -160,7 +159,7 @@ def log_history(req, results):
         json.dump(history, f, indent=2, ensure_ascii=False)
 
 @router.get("/api/matriculacion/history")
-async def get_history(_=Depends(get_current_user)):
+async def get_history():
     log_file = os.path.join(os.path.dirname(__file__), "..", "data", "matriculaciones_history.json")
     if not os.path.exists(log_file):
         return []
