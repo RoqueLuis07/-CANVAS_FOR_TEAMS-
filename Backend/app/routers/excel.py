@@ -2057,7 +2057,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
         # Validation: Avoid Copy-Paste Errors
         if id_curso and id_curso != "None" and curso_nombre:
-            cn = await canvas_client.get_course_name_by_id(id_curso)
+            cn = await canvas.get_course_name_by_id(id_curso)
             if cn and cn.strip().lower() != curso_nombre.strip().lower():
                 error += f"Error de Validación: El ID Curso {id_curso} pertenece a '{cn}' y no coincide con '{curso_nombre}' | "
                 
@@ -2077,18 +2077,18 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         if plat in ("canvas", "both"):
             if not id_curso and curso_nombre:
                 try:
-                    existing_cid = await canvas_client.search_course_by_name(_ACCOUNT_LOCAL, curso_nombre)
+                    existing_cid = await canvas.search_course_by_name(_ACCOUNT_LOCAL, curso_nombre)
                     if existing_cid:
                         id_curso = existing_cid
                     else:
-                        id_curso = await canvas_client.create_course(_ACCOUNT_LOCAL, curso_nombre)
+                        id_curso = await canvas.create_course(_ACCOUNT_LOCAL, curso_nombre)
                     if id_curso and col_curso:
                         ws.cell(row=r_idx, column=col_curso, value=id_curso)
                 except Exception as e:
                     error += f"CanvasCourseLogic: {str(e)} | "
             elif id_curso and id_curso != "None" and not curso_nombre:
                 try:
-                    cn = await canvas_client.get_course_name_by_id(id_curso)
+                    cn = await canvas.get_course_name_by_id(id_curso)
                     if cn:
                         curso_nombre = cn
                         if col_curso_nombre:
@@ -2145,7 +2145,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         canvas_id = None
         if plat in ("canvas", "both"):
             try:
-                cu = await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/users", {
+                cu = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/users", {
                     "user": {
                         "name": creds["full_name"],
                         "sortable_name": creds["full_name"],
@@ -2166,7 +2166,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 entry["canvas"] = "creado"
             except Exception as e:
                 try:
-                    ex_c = await canvas_client.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
+                    ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
                     if ex_c:
                         canvas_id = ex_c[0]["id"]
                         entry["canvas"] = "exista"
@@ -2178,7 +2178,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         # Canvas Enrollment
         if id_curso and canvas_id and id_curso != "None":
             try:
-                await canvas_client.post(f"/courses/{id_curso}/enrollments", {
+                await canvas.post(f"/courses/{id_curso}/enrollments", {
                     "enrollment": {
                         "user_id": canvas_id,
                         "type": "TeacherEnrollment",
@@ -2476,10 +2476,10 @@ async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:
                 # Canvas Rollback
                 if id_curso and id_curso != "None":
                     try:
-                        ex_c = await canvas_client.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
+                        ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
                         if ex_c and len(ex_c) > 0:
                             cid = ex_c[0]["id"]
-                            await canvas_client.remove_user_from_course(id_curso, str(cid))
+                            await canvas.remove_user_from_course(id_curso, str(cid))
                     except Exception as e:
                         error += f"CanvasUnenroll: {e} | "
                 
@@ -2747,7 +2747,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 "communication_channel": {"type": "email", "address": login_id, "skip_confirmation": True},
             }
             try:
-                await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/users", payload)
+                await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/users", payload)
             except Exception as e:
                 err_str = str(e).lower()
                 if "already in use" not in err_str and "taken" not in err_str:
