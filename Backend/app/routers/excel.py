@@ -1457,6 +1457,13 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         terms_data = terms_res.get("enrollment_terms", [])
     except: pass
 
+    sheet_lower = req.sheet_name.lower()
+    default_plat = "both"
+    if "canvas" in sheet_lower and "teams" not in sheet_lower:
+        default_plat = "canvas"
+    elif "teams" in sheet_lower and "canvas" not in sheet_lower:
+        default_plat = "teams"
+
     async def create_course_row(r_idx):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         sis_id = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
@@ -1477,56 +1484,58 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         course_code_str = f"{nombre} {periodo}".strip()
 
         # 1. Canvas Creation
-        try:
-            payload = {
-                "course": {
-                    "name": nombre,
-                    "course_code": course_code_str,
+        if default_plat in ("canvas", "both"):
+            try:
+                payload = {
+                    "course": {
+                        "name": nombre,
+                        "course_code": course_code_str,
+                    }
                 }
-            }
-            if sis_id and sis_id != "None":
-                payload["course"]["sis_course_id"] = sis_id
-            if periodo:
-                term_val = f"sis_term_id:{periodo}"
-                if periodo.isdigit():
-                    term_val = periodo
-                else:
-                    p_lower = periodo.strip().lower()
-                    for t in terms_data:
-                        t_name = str(t.get("name") or "").strip().lower()
-                        t_sis = str(t.get("sis_term_id") or "").strip().lower()
-                        if t_name == p_lower or str(t.get("id")) == periodo or t_sis == p_lower:
-                            term_val = t.get("id")
-                            break
-                payload["course"]["term_id"] = term_val
-
-            data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
-            canvas_id = data.get("id")
-        except Exception as e:
-            error_canvas = str(e)
+                if sis_id and sis_id != "None":
+                    payload["course"]["sis_course_id"] = sis_id
+                if periodo:
+                    term_val = f"sis_term_id:{periodo}"
+                    if periodo.isdigit():
+                        term_val = periodo
+                    else:
+                        p_lower = periodo.strip().lower()
+                        for t in terms_data:
+                            t_name = str(t.get("name") or "").strip().lower()
+                            t_sis = str(t.get("sis_term_id") or "").strip().lower()
+                            if t_name == p_lower or str(t.get("id")) == periodo or t_sis == p_lower:
+                                term_val = t.get("id")
+                                break
+                    payload["course"]["term_id"] = term_val
+    
+                data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
+                canvas_id = data.get("id")
+            except Exception as e:
+                error_canvas = str(e)
 
         # 2. Teams Creation
-        try:
-            nickname = re.sub(r'[^a-zA-Z0-9]', '', course_code_str).lower()
-            nickname = f"{nickname}{int(time.time() * 1000) % 100000}" if nickname else f"grupo{int(time.time())}"
-            
-            owner_ids = []
+        if default_plat in ("teams", "both"):
             try:
-                admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
-                if admin_user and admin_user.get("id"):
-                    owner_ids.append(admin_user["id"])
-            except: pass
-
-            new_team = await create_team_via_group(
-                display_name=nombre,
-                mail_nickname=nickname,
-                description=f"Grupo para {nombre}",
-                visibility="Private",
-                owner_ids=owner_ids
-            )
-            teams_id = new_team.get("id")
-        except Exception as e:
-            error_teams = str(e)
+                nickname = re.sub(r'[^a-zA-Z0-9]', '', course_code_str).lower()
+                nickname = f"{nickname}{int(time.time() * 1000) % 100000}" if nickname else f"grupo{int(time.time())}"
+                
+                owner_ids = []
+                try:
+                    admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
+                    if admin_user and admin_user.get("id"):
+                        owner_ids.append(admin_user["id"])
+                except: pass
+    
+                new_team = await create_team_via_group(
+                    display_name=nombre,
+                    mail_nickname=nickname,
+                    description=f"Grupo para {nombre}",
+                    visibility="Private",
+                    owner_ids=owner_ids
+                )
+                teams_id = new_team.get("id")
+            except Exception as e:
+                error_teams = str(e)
 
         # Update Excel
         ws.cell(row=r_idx, column=col_fecha, value=datetime.now().strftime("%d/%m/%Y"))
@@ -1924,6 +1933,13 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     if not col_enviado:
         col_enviado = next_col; ws.cell(row=header_row_idx, column=col_enviado, value="Estado").font = Font(bold=True); next_col += 1
 
+    sheet_lower = req.sheet_name.lower()
+    default_plat = "both"
+    if "canvas" in sheet_lower and "teams" not in sheet_lower:
+        default_plat = "canvas"
+    elif "teams" in sheet_lower and "canvas" not in sheet_lower:
+        default_plat = "teams"
+
     users_to_process = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
@@ -1942,7 +1958,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
         correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
-        plat = str(ws.cell(row=r_idx, column=col_plat).value or "both").strip().lower() if col_plat else "both"
+        plat = str(ws.cell(row=r_idx, column=col_plat).value or default_plat).strip().lower() if col_plat else default_plat
         id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
         id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
         curso_nombre = str(ws.cell(row=r_idx, column=col_curso_nombre).value or "").strip() if col_curso_nombre else ""
@@ -2610,11 +2626,18 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         col_enviado = next_col
         ws.cell(row=header_row_idx, column=col_enviado, value="Enviado").font = Font(bold=True)
     
+    sheet_lower = req.sheet_name.lower()
+    default_plat = "both"
+    if "canvas" in sheet_lower and "teams" not in sheet_lower:
+        default_plat = "canvas"
+    elif "teams" in sheet_lower and "canvas" not in sheet_lower:
+        default_plat = "teams"
+
     async def process_row(r_idx):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
         correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
-        plat_val = str(ws.cell(row=r_idx, column=col_plataforma).value or "both").strip().lower() if col_plataforma else "both"
+        plat_val = str(ws.cell(row=r_idx, column=col_plataforma).value or default_plat).strip().lower() if col_plataforma else default_plat
         
         enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
         
