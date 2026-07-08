@@ -6,7 +6,6 @@ import os
 import uuid
 from datetime import datetime
 
-from app.core.security import get_current_user
 from app.services.canvas import canvas
 from app.services.teams import TeamsService
 
@@ -50,7 +49,7 @@ def load_catalogue():
             return []
 
 @router.get("/api/matriculacion/materias", response_model=List[MateriaResponse])
-async def search_materias(program: str, q: str = "", _=Depends(get_current_user)):
+async def search_materias(program: str, q: str = "",):
     catalogue = load_catalogue()
     
     # Filter by program
@@ -64,7 +63,7 @@ async def search_materias(program: str, q: str = "", _=Depends(get_current_user)
     return filtered
 
 @router.post("/api/matriculacion/individual")
-async def matriculate_individual(req: IndividualEnrollmentRequest, _=Depends(get_current_user)):
+async def matriculate_individual(req: IndividualEnrollmentRequest,):
     results = []
     
     # Look up the user in canvas to get canvas user ID if needed
