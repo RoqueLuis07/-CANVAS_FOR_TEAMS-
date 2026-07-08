@@ -1681,3 +1681,26 @@ async function executeUploadMasivo(urlInput, sheetInput) {
       setLoading(btn, false);
   }
 }
+
+
+// Restore OneDrive URL across pages
+document.addEventListener('DOMContentLoaded', () => {
+    const urlInputs = ['doc_url', 'diplomadoUrl', 'masivoUrl', 'mat_url'];
+    const savedUrl = localStorage.getItem('onedrive_excel_url');
+    
+    urlInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (savedUrl) el.value = savedUrl;
+            el.addEventListener('change', (e) => {
+                if (e.target.value && e.target.value.includes('http')) {
+                    localStorage.setItem('onedrive_excel_url', e.target.value);
+                    urlInputs.forEach(otherId => {
+                        const otherEl = document.getElementById(otherId);
+                        if (otherEl && otherEl !== el) otherEl.value = e.target.value;
+                    });
+                }
+            });
+        }
+    });
+});
