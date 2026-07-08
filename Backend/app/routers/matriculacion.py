@@ -6,7 +6,7 @@ import os
 import uuid
 from datetime import datetime
 
-from app.services.canvas import canvas
+from app.services.canvas_client import canvas_client as canvas
 from app.services.teams import TeamsService
 
 router = APIRouter(tags=["Matriculaciones Individuales"])
