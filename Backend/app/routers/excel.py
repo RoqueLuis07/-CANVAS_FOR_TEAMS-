@@ -940,10 +940,10 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
     wb.close()
     return PreviewResponse(
         sheet_name=req.sheet_name,
-        students_to_process=to_process,
-        students_already_processed=already_processed,
-        total_rows=to_process + already_processed,
-        student_details=details
+        students_to_process=0,
+        students_already_processed=0,
+        headers=headers,
+        sample_rows=sample_rows
     )
 
 
@@ -1326,9 +1326,10 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
     wb.close()
     return CoursesPreviewResponse(
         sheet_name=req.sheet_name,
-        courses_to_create=to_create,
-        courses_already_created=already_created,
-        course_details=details
+        courses_to_create=0,
+        courses_already_created=0,
+        headers=headers,
+        sample_rows=sample_rows
     )
 
 
@@ -1854,7 +1855,8 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     return DocentesPreviewResponse(
         total_rows=ws.max_row - header_row_idx,
         valid_rows=len(rows),
-        sample=rows
+        headers=list(headers.keys()),
+        sample_rows=rows
     )
 
 @router.post("/excel/docentes-onedrive", summary="Alta Docentes OneDrive")
