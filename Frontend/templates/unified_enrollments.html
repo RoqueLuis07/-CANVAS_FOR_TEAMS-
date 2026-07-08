@@ -153,16 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // OneDrive Integration Logic
-let modalMat;
-function openExcelMatriculaciones() {
-  if (!modalMat) modalMat = new bootstrap.Modal(document.getElementById('modalExcelMatriculaciones'));
-  document.getElementById('mat_url').value = '';
-  document.getElementById('matSheetWrap').style.display = 'none';
-  document.getElementById('matResultWrap').style.display = 'none';
-  document.getElementById('btnImportMat').disabled = true;
-  document.getElementById('btnRollbackMat').disabled = true;
-  modalMat.show();
-}
 
 async function fetchMatSheets() {
   const urlInput = document.getElementById('mat_url').value.trim();
@@ -308,3 +298,4 @@ async function rollbackMatriculaciones() {
 }
 </script>
 {% endblock %}
+

@@ -708,7 +708,10 @@ async function executeCreateCourses() {
       toast('✅ Cursos creados y reporte maestro en OneDrive actualizado exitosamente.', 'success');
     }
 
-    bootstrap.Modal.getInstance(document.getElementById('globalModal')).hide();
+    cancelPreviewCourses(); // Regresa al form
+    document.getElementById('coursesOdUrl').value = '';
+    document.getElementById('coursesOdSheet').innerHTML = '<option value="">Primero haz clic en Cargar Pestañas...</option>';
+    
     loadCourses();
   } catch (e) {
     toast('Error: ' + (e.detail || e.message || e), 'danger');
