@@ -45,6 +45,7 @@ from app.routers import (
     sspr,
     analytics,
 )
+from app.routers import matriculacion
 import asyncio
 from app.routers.teams import teams_mgmt, users as teams_users
 
@@ -194,6 +195,7 @@ routers_to_load = [
     ("Canvas", canvas.router),
     ("Excel", excel.router),
     ("Ingreso", ingreso.router),
+    ("Matriculacion", matriculacion.router),
     ("Egreso", egreso.router),
     ("SSPR", sspr.router),
     ("Analytics", analytics.router),
