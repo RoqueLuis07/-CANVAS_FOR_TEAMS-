@@ -1126,22 +1126,6 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             pwd = creds["password"]
             error = None
             
-            # 1. Canvas Creation
-            canvas_error = ""
-            payload = {
-                "user": {"name": creds["full_name"], "short_name": creds["full_name"]},
-                "pseudonym": {"unique_id": login_id, "password": pwd, "sis_user_id": cedula, "send_confirmation": False},
-                "communication_channel": {"type": "email", "address": login_id, "skip_confirmation": True},
-            }
-            try:
-                await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/users", payload)
-            except Exception as e:
-                err_str = str(e).lower()
-                if "already in use" not in err_str and "taken" not in err_str:
-                    canvas_error = f"Canvas Error: {str(e)}"
-                else:
-                    canvas_error = "Ya existía en Canvas"
-            
             au_id = None
             
             if not error:
@@ -1218,9 +1202,6 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         error = str(error) + f" | TeamsEnroll: {e}" if error else f"TeamsEnroll: {e}"
             
             email_sent = False
-            if canvas_error:
-                error = error + f" | {canvas_error}" if error else canvas_error
-                
             if not error or "Creado OK" in str(error) or "Ya existía" in str(error):
                 ws.cell(row=r_idx, column=col_usuario, value=login_id)
                 ws.cell(row=r_idx, column=col_contra, value=pwd)
