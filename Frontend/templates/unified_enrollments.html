@@ -6,8 +6,67 @@
 <div class="d-flex align-items-center mb-4 gap-3 flex-wrap">
   <div><div class="page-title">Matriculación Unificada</div><div class="page-subtitle">Añadir usuarios a Canvas y Teams simultáneamente</div></div>
   <div class="ms-auto d-flex gap-2 flex-wrap">
-    <button class="btn btn-primary" onclick="openExcelMatriculaciones()"><i class="bi bi-file-earmark-excel me-2"></i>Matriculación Masiva (OneDrive)</button>
+    <button class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#collapseMatriculaciones" aria-expanded="false" aria-controls="collapseMatriculaciones"><i class="bi bi-file-earmark-excel me-2"></i>Matriculación Masiva (OneDrive)</button>
     <a href="/excel/template/unified-enrollment" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>Plantilla Excel</a>
+  </div>
+</div>
+
+
+<!-- Accordion Matriculación Masiva (OneDrive) -->
+<div class="accordion mb-4" id="accordionMatriculaciones">
+  <div class="accordion-item border-primary shadow-sm">
+    <h2 class="accordion-header" id="headingMatriculaciones">
+      <button class="accordion-button collapsed fw-bold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMatriculaciones" aria-expanded="false" aria-controls="collapseMatriculaciones" style="background: linear-gradient(135deg, rgba(13, 110, 253, 0.1), rgba(13, 110, 253, 0.05));">
+        <i class="bi bi-file-earmark-spreadsheet me-2 text-primary"></i> Matriculación Masiva desde OneDrive
+      </button>
+    </h2>
+    <div id="collapseMatriculaciones" class="accordion-collapse collapse" aria-labelledby="headingMatriculaciones" data-bs-parent="#accordionMatriculaciones">
+      <div class="accordion-body p-4">
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Enlace del Excel (OneDrive) <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-link-45deg text-secondary"></i></span>
+            <input type="url" class="form-control" id="mat_url" placeholder="https://uamericana-my.sharepoint.com/:x:/g/personal/..." required>
+            <button class="btn btn-outline-primary" type="button" id="btnLoadMatSheets" onclick="fetchMatSheets()">
+              Cargar Pestañas
+            </button>
+          </div>
+          <div class="form-text">Asegúrate de que el enlace sea de "Cualquier persona con el vínculo puede editar".</div>
+        </div>
+
+        <div id="matSheetWrap" style="display:none;" class="mb-4 bg-light p-3 rounded border">
+          <label class="form-label fw-semibold text-primary">Pestaña a procesar <span class="text-danger">*</span></label>
+          <select id="mat_sheet" class="form-select border-primary" onchange="enableMatProcessBtn()">
+            <option value="" disabled selected>Seleccione la pestaña de matriculaciones...</option>
+          </select>
+          <div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>Asegúrate de que la primera fila contenga: Usuario (o correo/cédula), Curso (o ID), Equipo (o ID) y Rol.</div>
+        </div>
+
+        <div id="matPreviewWrap" style="display:none;" class="mb-3">
+          <label class="form-label fw-semibold">Previsualización (Primeras 5 filas)</label>
+          <div class="table-responsive border rounded bg-white">
+            <table class="table table-sm table-striped mb-0 text-nowrap" id="matPreviewTable">
+              <thead><tr id="matPreviewHead"></tr></thead>
+              <tbody id="matPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="matResultWrap" style="display:none;" class="alert alert-info border-info">
+          <h6 class="alert-heading fw-bold mb-1"><i class="bi bi-info-circle-fill me-2"></i>Progreso</h6>
+          <p class="mb-0 small" id="matResultText">Esperando inicio...</p>
+        </div>
+        <div class="d-flex justify-content-end align-items-center mt-3 pt-3 border-top">
+            <button type="button" class="btn btn-danger me-auto" id="btnRollbackMat" onclick="rollbackMatriculaciones()" disabled>
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Revertir Operación
+        </button>
+        <button type="button" class="btn btn-secondary" data-bs-toggle="collapse" data-bs-target="#collapseMatriculaciones">Cancelar</button>
+        <button type="button" class="btn btn-success" id="btnImportMat" onclick="doImportMatriculaciones()" disabled>
+          <i class="bi bi-play-circle me-1"></i>Procesar Matriculaciones
+        </button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -49,64 +108,7 @@
   </div>
 </div>
 
-<!-- Modal Excel Matriculaciones -->
-<div class="modal fade" id="modalExcelMatriculaciones" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header border-bottom-0 pb-0">
-        <h5 class="modal-title"><i class="bi bi-file-earmark-spreadsheet me-2 text-primary"></i>Matriculación Masiva desde OneDrive</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body pb-4">
-        
-        <div class="mb-4">
-          <label class="form-label fw-semibold">Enlace del Excel (OneDrive) <span class="text-danger">*</span></label>
-          <div class="input-group">
-            <span class="input-group-text bg-white"><i class="bi bi-link-45deg text-secondary"></i></span>
-            <input type="url" class="form-control" id="mat_url" placeholder="https://uamericana-my.sharepoint.com/:x:/g/personal/..." required>
-            <button class="btn btn-outline-primary" type="button" id="btnLoadMatSheets" onclick="fetchMatSheets()">
-              Cargar Pestañas
-            </button>
-          </div>
-          <div class="form-text">Asegúrate de que el enlace sea de "Cualquier persona con el vínculo puede editar".</div>
-        </div>
 
-        <div id="matSheetWrap" style="display:none;" class="mb-4 bg-light p-3 rounded border">
-          <label class="form-label fw-semibold text-primary">Pestaña a procesar <span class="text-danger">*</span></label>
-          <select id="mat_sheet" class="form-select border-primary" onchange="enableMatProcessBtn()">
-            <option value="" disabled selected>Seleccione la pestaña de matriculaciones...</option>
-          </select>
-          <div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>Asegúrate de que la primera fila contenga: Usuario (o correo/cédula), Curso (o ID), Equipo (o ID) y Rol.</div>
-        </div>
-
-        <div id="matPreviewWrap" style="display:none;" class="mb-3">
-          <label class="form-label fw-semibold">Previsualización (Primeras 5 filas)</label>
-          <div class="table-responsive border rounded bg-white">
-            <table class="table table-sm table-striped mb-0 text-nowrap" id="matPreviewTable">
-              <thead><tr id="matPreviewHead"></tr></thead>
-              <tbody id="matPreviewBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="matResultWrap" style="display:none;" class="alert alert-info border-info">
-          <h6 class="alert-heading fw-bold mb-1"><i class="bi bi-info-circle-fill me-2"></i>Progreso</h6>
-          <p class="mb-0 small" id="matResultText">Esperando inicio...</p>
-        </div>
-
-      </div>
-      <div class="modal-footer bg-light border-top-0 pt-3">
-        <button type="button" class="btn btn-danger me-auto" id="btnRollbackMat" onclick="rollbackMatriculaciones()" disabled>
-          <i class="bi bi-arrow-counterclockwise me-1"></i>Revertir Operación
-        </button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success" id="btnImportMat" onclick="doImportMatriculaciones()" disabled>
-          <i class="bi bi-play-circle me-1"></i>Procesar Matriculaciones
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}

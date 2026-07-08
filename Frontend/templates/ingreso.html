@@ -38,10 +38,98 @@
         <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
           <h5 class="mb-0 text-secondary"><i class="bi bi-person me-2"></i>Creación Individual</h5>
           <div>
-            <button class="btn btn-warning text-dark me-2" onclick="openExcelDocentes()"><i class="bi bi-person-video3 me-2"></i>Alta Docentes</button>
+            <button class="btn btn-warning text-dark me-2" data-bs-toggle="collapse" data-bs-target="#collapseDocentes" aria-expanded="false" aria-controls="collapseDocentes"><i class="bi bi-person-video3 me-2"></i>Alta Docentes</button>
             <button class="btn btn-success me-2" onclick="openExcelDiplomados()"><i class="bi bi-file-earmark-excel me-2"></i>Carga Diplomados</button>
             <button class="btn btn-primary" onclick="openExcelMasivo()"><i class="bi bi-people-fill me-2"></i>Carga Masiva</button>
             
+          </div>
+        </div>
+        
+        
+        <!-- Accordion Docentes (OneDrive) -->
+        <div class="accordion mb-4" id="accordionDocentes">
+          <div class="accordion-item border-warning shadow-sm">
+            <h2 class="accordion-header" id="headingDocentes">
+              <button class="accordion-button collapsed fw-bold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDocentes" aria-expanded="false" aria-controls="collapseDocentes" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.1));">
+                <i class="bi bi-person-video3 me-2 text-warning"></i> Alta Docentes (OneDrive)
+              </button>
+            </h2>
+            <div id="collapseDocentes" class="accordion-collapse collapse" aria-labelledby="headingDocentes" data-bs-parent="#accordionDocentes">
+              <div class="accordion-body p-4">
+                <div class="alert alert-warning mb-4">
+          <h6 class="alert-heading fw-bold mb-1"><i class="bi bi-info-circle me-2"></i>Estructura Requerida</h6>
+          <p class="mb-0 small">
+            El Excel debe estar en OneDrive y tener al menos las columnas: <strong>Nombre</strong> y <strong>Cédula</strong>.<br>
+            Columnas opcionales: <em>Correo, Plataforma (both/canvas/teams), ID Curso, ID Equipo</em>.
+          </p>
+        </div>
+        
+                  <div class="row g-3 mb-4">
+            <div class="col-md-8">
+              <label class="form-label fw-bold text-secondary">Enlace de Compartir (OneDrive) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="url" id="doc_url" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/..." required>
+                <button class="btn btn-warning text-dark fw-bold" type="button" id="btnLoadDocSheets" onclick="fetchDocSheets()"><i class="bi bi-cloud-arrow-down me-1"></i>Cargar Pestañas</button>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-bold text-secondary">Seleccionar Pestaña <span class="text-danger">*</span></label>
+              <select id="doc_sheet" class="form-select" required>
+                <option value="">Carga las pestañas primero...</option>
+              </select>
+            </div>
+          </div>
+        
+        <div class="d-flex justify-content-end gap-2 mb-4">
+          <button type="button" class="btn btn-outline-secondary" onclick="previewDocentes()" id="btnPreviewDocentes">
+            <i class="bi bi-eye me-2"></i>Previsualizar
+          </button>
+          <button type="button" class="btn btn-warning text-dark" onclick="importDocentes()" id="btnImportDocentes" disabled>
+            <i class="bi bi-cloud-arrow-up me-2"></i>Procesar Docentes
+          </button>
+        </div>
+        
+        <div id="docPreviewWrap" style="display:none;" class="mb-4">
+          <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
+          <div class="table-responsive bg-white rounded border">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Nombre</th>
+                  <th>Cédula</th>
+                  <th>Correo</th>
+                  <th>Plataforma</th>
+                  <th>ID Curso</th>
+                  <th>ID Equipo</th>
+                </tr>
+              </thead>
+              <tbody id="docPreviewTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div id="docResultWrap" style="display:none;">
+          <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-check-circle me-2"></i>Resultados</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="card border-success h-100">
+                <div class="card-header bg-success text-white py-2">
+                  <i class="bi bi-check-circle me-2"></i>Éxitos (<span id="docSuccessCount">0</span>)
+                </div>
+                <div class="card-body p-0">
+                  <ul class="list-group list-group-flush" id="docSuccessList" style="max-height: 200px; overflow-y: auto;"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white py-2">
+                  <i class="bi bi-x-circle me-2"></i>Errores (<span id="docErrorCount">0</span>)
+                </div>
+                <div class="card-body p-0">
+                  <ul class="list-group list-group-flush" id="docErrorList" style="max-height: 200px; overflow-y: auto;"></ul>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -291,91 +379,7 @@
 {% endblock %}
 {% block scripts %}
 
-<!-- Modal Excel Docentes (OneDrive) -->
-<div class="modal fade" id="modalExcelDocentes" tabindex="-1">
-  <div class="modal-dialog modal-xl">
-    <div class="modal-content border-0 shadow-lg">
-      <div class="modal-header text-white" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
-        <h5 class="modal-title"><i class="bi bi-person-video3 me-2"></i>Alta Docentes (OneDrive)</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body p-4">
-        <div class="alert alert-warning mb-4">
-          <h6 class="alert-heading fw-bold mb-1"><i class="bi bi-info-circle me-2"></i>Estructura Requerida</h6>
-          <p class="mb-0 small">
-            El Excel debe estar en OneDrive y tener al menos las columnas: <strong>Nombre</strong> y <strong>Cédula</strong>.<br>
-            Columnas opcionales: <em>Correo, Plataforma (both/canvas/teams), ID Curso, ID Equipo</em>.
-          </p>
-        </div>
-        
-                  <div class="row g-3 mb-4">
-            <div class="col-md-8">
-              <label class="form-label fw-bold text-secondary">Enlace de Compartir (OneDrive) <span class="text-danger">*</span></label>
-              <div class="input-group">
-                <input type="url" id="doc_url" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/..." required>
-                <button class="btn btn-warning text-dark fw-bold" type="button" id="btnLoadDocSheets" onclick="fetchDocSheets()"><i class="bi bi-cloud-arrow-down me-1"></i>Cargar Pestañas</button>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-bold text-secondary">Seleccionar Pestaña <span class="text-danger">*</span></label>
-              <select id="doc_sheet" class="form-select" required>
-                <option value="">Carga las pestañas primero...</option>
-              </select>
-            </div>
-          </div>
-        
-        <div class="d-flex justify-content-end gap-2 mb-4">
-          <button type="button" class="btn btn-outline-secondary" onclick="previewDocentes()" id="btnPreviewDocentes">
-            <i class="bi bi-eye me-2"></i>Previsualizar
-          </button>
-          <button type="button" class="btn btn-warning text-dark" onclick="importDocentes()" id="btnImportDocentes" disabled>
-            <i class="bi bi-cloud-arrow-up me-2"></i>Procesar Docentes
-          </button>
-        </div>
-        
-        <div id="docPreviewWrap" style="display:none;" class="mb-4">
-          <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
-          <div class="table-responsive bg-white rounded border">
-            <table class="table table-sm table-hover mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Nombre</th>
-                  <th>Cédula</th>
-                  <th>Correo</th>
-                  <th>Plataforma</th>
-                  <th>ID Curso</th>
-                  <th>ID Equipo</th>
-                </tr>
-              </thead>
-              <tbody id="docPreviewTbody"></tbody>
-            </table>
-          </div>
-        </div>
-        
-        <div id="docResultWrap" style="display:none;">
-          <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-check-circle me-2"></i>Resultados</h6>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <div class="card border-success h-100">
-                <div class="card-header bg-success text-white py-2">
-                  <i class="bi bi-check-circle me-2"></i>Éxitos (<span id="docSuccessCount">0</span>)
-                </div>
-                <div class="card-body p-0">
-                  <ul class="list-group list-group-flush" id="docSuccessList" style="max-height: 200px; overflow-y: auto;"></ul>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <div class="card border-danger h-100">
-                <div class="card-header bg-danger text-white py-2">
-                  <i class="bi bi-x-circle me-2"></i>Errores (<span id="docErrorCount">0</span>)
-                </div>
-                <div class="card-body p-0">
-                  <ul class="list-group list-group-flush" id="docErrorList" style="max-height: 200px; overflow-y: auto;"></ul>
-                </div>
-              </div>
-            </div>
-          </div>
+
         </div>
         
       </div>
@@ -770,15 +774,7 @@ function openExcelVerificar() {
 
 
 // --- DOCENTES ONEDRIVE ---
-let modalDocentes;
-function openExcelDocentes() {
-    if (!modalDocentes) modalDocentes = new bootstrap.Modal(document.getElementById('modalExcelDocentes'));
-    document.getElementById('doc_url').value = '';
-    document.getElementById('docPreviewWrap').style.display = 'none';
-    document.getElementById('docResultWrap').style.display = 'none';
-    document.getElementById('btnImportDocentes').disabled = true;
-    modalDocentes.show();
-}
+
 
 
 async function fetchDocSheets() {
