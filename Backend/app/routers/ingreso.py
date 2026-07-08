@@ -30,7 +30,6 @@ from app.models.canvas import BulkResult
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
 from app.services import user_service
-from app.services.email_service import send_welcome_email, get_program_attachments
 
 router = APIRouter(prefix="/ingreso", tags=["Nuevo Ingreso"])
 _ACCOUNT = settings.canvas_account_id
@@ -380,35 +379,7 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
             else:
                 results["teams"] = {"status": "error", "error": error_str}
 
-    # ── Email ─────────────────────────────────────────────────
-    # Solo enviar email si realmente se creó en todas las plataformas solicitadas
-    is_existing_canvas = results.get("canvas", {}).get("status") == "exists"
-    is_existing_teams = results.get("teams", {}).get("status") == "exists"
-    
-    skip_email = False
-    if student.platform in ("canvas", "both") and is_existing_canvas:
-        skip_email = True
-    if student.platform in ("teams", "both") and is_existing_teams:
-        skip_email = True
 
-    if student.send_email and not skip_email:
-        try:
-            attachments = get_program_attachments(student.program_type)
-            await send_welcome_email(
-                to_email=student.personal_email,
-                full_name=creds["full_name"],
-                institutional_email=creds["email"],
-                login_id=login_id,
-                password=creds["password"],
-                platform=student.platform,
-                program_type=student.program_type,
-                program_name=student.program_name,
-                extra_cc=student.cc or None,
-                attachments=attachments or None,
-            )
-            results["email"] = "sent"
-        except Exception as exc:
-            results["email"] = f"error: {_err(exc)}"
 
     # ── Canvas Enrollments ──────────────────────────────────────
     if student.courses and results.get("canvas", {}).get("status") in ("ok", "exists"):
@@ -435,46 +406,6 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
     return results
 
 
-async def _resend_credentials(body: ResendCredentialsIn) -> dict[str, Any]:
-    """Regenera y reenvía las credenciales a un usuario ya existente.
-
-    No crea ni modifica cuentas en Canvas ni Teams. Solo envía el correo
-    con las credenciales calculadas a partir del nombre y la cédula.
-
-    Returns:
-        Diccionario con las credenciales generadas y el estado del envío.
-    """
-    creds = generate_credentials(body.full_name, body.cedula, settings.institutional_domain)
-    login_id, _ = _resolve_login(creds, "student")
-
-    results: dict[str, Any] = {
-        "student": body.full_name,
-        "cedula": body.cedula,
-        "credentials": {**creds, "login_id": login_id},
-        "action": "resend",
-    }
-
-    # En el reenvío de correo desde la UI, enviamos las credenciales base. 
-    # Idealmente, deberíamos alertar si el usuario ya cambió su clave, pero como es un reenvío manual asumimos que el admin sabe lo que hace.
-    try:
-        attachments = get_program_attachments(body.program_type)
-        await send_welcome_email(
-            to_email=body.personal_email,
-            full_name=creds["full_name"],
-            institutional_email=creds["email"],
-            login_id=login_id,
-            password=creds["password"],
-            platform=body.platform,
-            program_type=body.program_type,
-            program_name=body.program_name,
-            extra_cc=body.cc or None,
-            attachments=attachments or None,
-        )
-        results["email"] = "sent"
-    except Exception as exc:
-        results["email"] = f"error: {_err(exc)}"
-
-    return results
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -510,37 +441,6 @@ async def preview_credentials(body: StudentIn):
     )
 
 
-@router.post("/test-email", summary="Probar envío de correo")
-async def test_email(
-    to_email: str,
-    program_type: str = "grado",
-    program_name: str = "",
-):
-    """Envía un correo de prueba para verificar la configuración y la plantilla HTML."""
-    if not _EMAIL_RE.match(to_email.strip()):
-        raise HTTPException(status_code=400, detail=f"Email inválido: {to_email}")
-    try:
-        await send_welcome_email(
-            to_email=to_email,
-            full_name="Usuario de Prueba",
-            institutional_email=f"prueba@{settings.institutional_domain}",
-            login_id=f"prueba@{settings.institutional_domain}",
-            password="Test-Pw123",
-            platform="both",
-            program_type=program_type,
-            program_name=program_name,
-            attachments=get_program_attachments(program_type)
-        )
-        return {
-            "status": "ok",
-            "to": to_email,
-            "from": settings.smtp_from,
-            "program_type": program_type,
-        }
-    except Exception as exc:
-        return {"status": "error", "detail": str(exc)}
-
-
 @router.post("/create", summary="Crear credenciales para un alumno o docente")
 async def create_student(body: StudentIn):
     """Crea un usuario en Canvas y/o Teams y envía el correo de bienvenida."""
@@ -555,28 +455,6 @@ async def create_students_bulk(body: BulkStudentsIn) -> BulkResult:
     async def _run(student: StudentIn):
         try:
             data = await _create_student(student)
-            result.succeeded.append(data)
-        except Exception as exc:
-            result.failed.append({"student": student.full_name, "error": str(exc)})
-
-    await asyncio.gather(*[_run(s) for s in body.students])
-    return result
-
-
-@router.post("/resend-credentials", summary="Reenviar credenciales a usuario existente")
-async def resend_credentials(body: ResendCredentialsIn) -> dict[str, Any]:
-    """Reenvía el correo de credenciales sin crear ni modificar la cuenta."""
-    return await _resend_credentials(body)
-
-
-@router.post("/bulk-resend", summary="Reenviar credenciales conjuntas")
-async def resend_credentials_bulk(body: BulkResendIn) -> BulkResult:
-    """Reenvía credenciales a múltiples usuarios en paralelo."""
-    result = BulkResult()
-
-    async def _run(student: ResendCredentialsIn):
-        try:
-            data = await _resend_credentials(student)
             result.succeeded.append(data)
         except Exception as exc:
             result.failed.append({"student": student.full_name, "error": str(exc)})

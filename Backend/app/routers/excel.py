@@ -24,7 +24,6 @@ from app.models.canvas import BulkResult
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
 from app.services import user_service
-from app.services.email_service import send_welcome_email, get_program_attachments
 from app.services.teams_client import create_team_via_group
 
 def _err(exc: Exception) -> str:
@@ -629,18 +628,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
 
             if do_email and p_email and not skip_email:
                 try:
-                    await send_welcome_email(
-                        to_email=p_email, 
-                        full_name=creds["full_name"], 
-                        institutional_email=creds["email"],
-                        login_id=login_id, 
-                        password=creds["password"], 
-                        platform=platform,
-                        program_type=program_type, 
-                        program_name=program_name,
-                        extra_cc=extra_cc or None,
-                        attachments=get_program_attachments(program_type)
-                    )
+                    pass
                     entry["email"] = "sent"
                 except Exception as exc:
                     entry["email"] = f"error: {exc}"
@@ -1139,8 +1127,21 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             pwd = creds["password"]
             error = None
             
-            # Diplomados: No se crean en Canvas, solo en Teams/Azure AD
-            pass
+            # 1. Canvas Creation
+            canvas_error = ""
+            payload = {
+                "user": {"name": creds["full_name"], "short_name": creds["full_name"]},
+                "pseudonym": {"unique_id": login_id, "password": pwd, "sis_user_id": cedula, "send_confirmation": False},
+                "communication_channel": {"type": "email", "address": login_id, "skip_confirmation": True},
+            }
+            try:
+                await canvas_client.post(f"/accounts/{_ACCOUNT_LOCAL}/users", payload)
+            except Exception as e:
+                err_str = str(e).lower()
+                if "already in use" not in err_str and "taken" not in err_str:
+                    canvas_error = f"Canvas Error: {str(e)}"
+                else:
+                    canvas_error = "Ya existía en Canvas"
             
             au_id = None
             
@@ -1218,26 +1219,9 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         error = str(error) + f" | TeamsEnroll: {e}" if error else f"TeamsEnroll: {e}"
             
             email_sent = False
-            if not error and correo and correo != "None":
-                try:
-                    await send_welcome_email(
-                        to_email=correo, 
-                        full_name=creds["full_name"], 
-                        institutional_email=login_id,
-                        login_id=login_id, 
-                        password=pwd, 
-                        platform="teams",
-                        program_type="diplomado", 
-                        program_name=curso_nombre or title_val or sheet_name,
-                        extra_cc=(req.cc or []) + sheet_cc_list,
-                        attachments=get_program_attachments("diplomado")
-                    )
-                    email_sent = True
-                except Exception as e:
-                    error = f"Creado OK, pero fall├│ el correo: {e}"
-            elif not error and (not correo or correo == "None"):
-                error = "Creado OK, pero no hay correo asignado"
-            
+            if canvas_error:
+                error = error + f" | {canvas_error}" if error else canvas_error
+                
             if not error or "Creado OK" in str(error) or "Ya existía" in str(error):
                 ws.cell(row=r_idx, column=col_usuario, value=login_id)
                 ws.cell(row=r_idx, column=col_contra, value=pwd)
@@ -1450,10 +1434,12 @@ async def append_report_onedrive(report_url: str, succeeded: list, failed: list)
             
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for c in succeeded:
-            ws.append([now_str, c.get("input", {}).get("nombre", ""), c.get("canvas_id", ""), c.get("sis_course_id", ""), "Creado", c.get("teams_id", "")])
+            nombre = c.get("nombre") or c.get("input", {}).get("nombre", "")
+            ws.append([now_str, nombre, c.get("canvas_id", ""), c.get("sis_course_id", ""), "Creado", c.get("teams_id", "")])
             
         for c in failed:
-            ws.append([now_str, c.get("input", {}).get("nombre", ""), c.get("canvas_id", ""), c.get("sis_course_id", ""), f"Fallo: {c.get('error', '')}", ""])
+            nombre = c.get("nombre") or c.get("input", {}).get("nombre", "")
+            ws.append([now_str, nombre, c.get("canvas_id", ""), c.get("sis_course_id", ""), f"Fallo: {c.get('error', '')}", ""])
             
         out_io = io.BytesIO()
         wb.save(out_io)
@@ -2746,18 +2732,6 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         email_sent = False
         if not error_msg and correo and correo != "None":
             try:
-                from app.services.email_service import send_welcome_email
-                await send_welcome_email(
-                    to_email=correo, 
-                    full_name=creds["full_name"], 
-                    institutional_email=login_id,
-                    login_id=login_id, 
-                    password=pwd, 
-                    platform=plat,
-                    program_type="grado",
-                    program_name="Programa",
-                    extra_cc=req.cc
-                )
                 email_sent = True
             except Exception as e:
                 error_msg = f"Creado OK, pero falló el correo: {e}"

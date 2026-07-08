@@ -39,16 +39,7 @@ class Settings(BaseSettings):
     usage_location: str = "PY"
     teams_url: str = "https://teams.microsoft.com"
 
-    # Email (Graph API – smtp_from debe ser un buzón válido del tenant)
-    smtp_host: str = ""
-    smtp_port: int = 587
-    smtp_tls: bool = True
-    smtp_user: str = ""
-    smtp_password: str = ""
-    smtp_from: str = "no-reply@usil.edu.py"
-    smtp_from_name: str = "Roque Esteche"
-    # CC separados por coma, ej: "director@usil.edu.py,rectorado@usil.edu.py"
-    email_cc: str = ""
+
 
     @field_validator("secret_key")
     @classmethod

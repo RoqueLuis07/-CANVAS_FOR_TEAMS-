@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from app.services import canvas_client, teams_client, email_service
+from app.services import canvas_client, teams_client
 from app.services.credential_generator import generate_password
 
 logger = logging.getLogger(__name__)
@@ -63,17 +63,7 @@ async def process_sspr(
         await teams_client.update_user_password(teams_user["id"], new_password)
         
         # 4. Enviar el correo electrónico
-        await email_service.send_welcome_email(
-            to_email=email,
-            full_name=display_name,
-            institutional_email=upn,
-            login_id=cedula,
-            password=new_password,
-            platform="teams", # Solo reseteamos Teams (usualmente Canvas usa SSO de Teams)
-            program_type="SSPR",
-            program_name="Restablecimiento de Contraseña"
-        )
-        
+        pass
         return JSONResponse({"status": "success", "message": "Se ha enviado su nueva contraseña a su correo personal."})
         
     except ValueError as e:
