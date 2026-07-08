@@ -362,39 +362,8 @@
             </div>
           </div>
           
-          <div class="mb-3">
-            <label class="form-label">Copias de correo (CC)</label>
-            <div class="d-flex flex-wrap gap-3 mb-2">
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="comercialcredenciales@usil.edu.py" data-group="ci" id="cc1">
-                <label class="form-check-label text-secondary" for="cc1">Comercial</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="lflorentin@usil.edu.py" data-group="ci" id="cc2">
-                <label class="form-check-label text-secondary" for="cc2">L. Florentín</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="it@usil.edu.py" data-group="ci" id="cc3">
-                <label class="form-check-label text-secondary" for="cc3">Soporte TI</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="usilbusinessschool@usil.edu.py" data-group="ci" id="cc4">
-                <label class="form-check-label text-secondary" for="cc4">UBS</label>
-              </div>
-            </div>
-            <input type="text" id="ci_cc_otros" class="form-control form-control-sm w-50" placeholder="Otros CC (separar por coma)">
-          </div>
           
-          <div class="mb-4">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="ci_enviar" checked>
-              <label class="form-check-label" for="ci_enviar">
-                Enviar correo de bienvenida con credenciales
-              </label>
-            </div>
-          </div>
-          
-          <div class="d-flex justify-content-end gap-2 border-top pt-3">
+            <div class="d-flex justify-content-end gap-2 border-top pt-3">
             <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('crearIndForm').reset(); toggleProg('ci');">Limpiar</button>
             <button type="submit" class="btn btn-primary px-4" id="btnCrearInd">Crear usuario</button>
           </div>
@@ -695,8 +664,8 @@ async function doCrearInd() {
             platform:     document.getElementById('ci_plataforma').value,
             program_type: document.getElementById('ci_tipo').value,
             program_name: document.getElementById('ci_programa').value,
-            send_email:   document.getElementById('ci_enviar').checked,
-            cc:           getCCs('ci')
+            send_email:   false,
+            cc:           []
         });
         renderCreateSingle(res);
         toast('Proceso completado', 'success');
