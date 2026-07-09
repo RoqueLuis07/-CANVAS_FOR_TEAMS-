@@ -2258,7 +2258,7 @@ async def get_matriculaciones_sheets(req: UrlOnlyRequest):
 
 
 @router.post("/excel/matriculaciones-onedrive/preview", summary="Previsualizar Matriculaciones desde OneDrive")
-async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> MatriculacionesPreviewResponse:
+async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
     encoded_url = _encode_share_url(req.url)
@@ -2273,23 +2273,52 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Matricu
     if req.sheet_name not in wb.sheetnames:
         raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
     ws = wb[req.sheet_name]
+    
     headers = []
     sample_rows = []
     header_row_idx = None
+    
     for row_idx in range(1, min(10, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
         if any("usuario" in v.lower() or "correo" in v.lower() or "cedula" in v.lower() or "sis" in v.lower() or "alumno" in v.lower() for v in row_vals):
             header_row_idx = row_idx
             headers = row_vals
             break
+            
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontraron encabezados.")
-    for row_idx in range(header_row_idx + 1, min(header_row_idx + 11, ws.max_row + 1)):
+
+    col_enviado = -1
+    for i, h in enumerate(headers):
+        if "estado" in h.lower() or "enviado" in h.lower():
+            col_enviado = i
+
+    students_to_process = 0
+    students_already_processed = 0
+
+    for row_idx in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
-        if any(row_vals):
+        if not any(row_vals):
+            continue
+            
+        estado_val = row_vals[col_enviado] if col_enviado >= 0 else ""
+        if estado_val.lower() == "ok" or "error" in estado_val.lower():
+            students_already_processed += 1
+        else:
+            students_to_process += 1
+            
+        if len(sample_rows) < 10:
             sample_rows.append(dict(zip(headers, row_vals)))
+            
     wb.close()
-    return MatriculacionesPreviewResponse(headers=headers, sample_rows=sample_rows)
+    return PreviewResponse(
+        sheet_name=req.sheet_name,
+        students_to_process=students_to_process,
+        students_already_processed=students_already_processed,
+        headers=headers,
+        sample_rows=sample_rows,
+        student_details=[]
+    )
 
 @router.post("/excel/matriculaciones-onedrive", response_model=BulkResult)
 async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
