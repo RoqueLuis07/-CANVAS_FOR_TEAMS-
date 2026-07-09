@@ -182,12 +182,12 @@
                   <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
                   <div class="table-responsive bg-white rounded border">
                     <table class="table table-sm table-hover mb-0">
-                      <thead class="table-light">
-                        <tr>
-                          <th>Nombre</th>
-                          <th>Cédula</th>
-                        </tr>
-                      </thead>
+                        <thead class="table-light" id="diplomadoPreviewThead">
+                          <tr>
+                            <th>Nombre</th>
+                            <th>Cédula</th>
+                          </tr>
+                        </thead>
                       <tbody id="diplomadoPreviewTbody"></tbody>
                     </table>
                   </div>
@@ -263,7 +263,7 @@
                   <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
                   <div class="table-responsive bg-white rounded border">
                     <table class="table table-sm table-hover mb-0">
-                      <thead class="table-light">
+                      <thead class="table-light" id="masivoPreviewThead">
                         <tr>
                           <th>Nombre</th>
                           <th>Cédula</th>
@@ -1076,13 +1076,14 @@ async function previewDiplomados() {
     
     try {
         const res = await api.post('/excel/diplomados/preview', { url: url, sheet_name: sheet });
+        const thead = document.getElementById('diplomadoPreviewThead');
         const tbody = document.getElementById('diplomadoPreviewTbody');
-        tbody.innerHTML = res.student_details.map(r => `
-            <tr>
-                <td>${r.nombre || '-'}</td>
-                <td>${r.cedula || '-'}</td>
-            </tr>
-        `).join('');
+        
+        thead.innerHTML = `<tr>${res.headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+        
+        tbody.innerHTML = res.sample_rows.map(r => {
+            return `<tr>${res.headers.map(h => `<td>${r[h] || '-'}</td>`).join('')}</tr>`;
+        }).join('');
         document.getElementById('diplomadoPreviewWrap').style.display = 'block';
         document.getElementById('btnImportDiplomados').disabled = false;
         toast(`Previsualizando muestra (alumnos a procesar: ${res.students_to_process})`, 'success');
@@ -1171,13 +1172,14 @@ async function previewMasivo() {
     
     try {
         const res = await api.post('/excel/masivo/preview', { url: url, sheet_name: sheet });
+        const thead = document.getElementById('masivoPreviewThead');
         const tbody = document.getElementById('masivoPreviewTbody');
-        tbody.innerHTML = res.student_details.map(r => `
-            <tr>
-                <td>${r.nombre || '-'}</td>
-                <td>${r.cedula || '-'}</td>
-            </tr>
-        `).join('');
+        
+        thead.innerHTML = `<tr>${res.headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+        
+        tbody.innerHTML = res.sample_rows.map(r => {
+            return `<tr>${res.headers.map(h => `<td>${r[h] || '-'}</td>`).join('')}</tr>`;
+        }).join('');
         document.getElementById('masivoPreviewWrap').style.display = 'block';
         document.getElementById('btnImportMasivo').disabled = false;
         toast(`Previsualizando muestra (filas a procesar: ${res.students_to_process})`, 'success');
