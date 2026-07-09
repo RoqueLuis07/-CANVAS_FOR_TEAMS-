@@ -2302,7 +2302,7 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Preview
             continue
             
         estado_val = row_vals[col_enviado] if col_enviado >= 0 else ""
-        if estado_val.lower() == "ok" or "error" in estado_val.lower():
+        if estado_val.lower() == "ok" or "matriculado" in estado_val.lower():
             students_already_processed += 1
         else:
             students_to_process += 1
@@ -2382,6 +2382,10 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
     async def process_row(r_idx):
         user_val = str(ws.cell(row=r_idx, column=user_col).value or "").strip()
         if not user_val:
+            return None
+            
+        estado_val = str(ws.cell(row=r_idx, column=env_col).value or "").strip().lower()
+        if estado_val == "ok" or "matriculado" in estado_val:
             return None
         
         canvas_val = str(ws.cell(row=r_idx, column=canvas_col).value or "").strip() if canvas_col else ""

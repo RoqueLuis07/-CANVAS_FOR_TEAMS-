@@ -484,8 +484,10 @@ async function enableMatProcessBtn() {
                 preview.headers.forEach(h => {
                     let cellVal = r[h] || '';
                     if (h.toLowerCase().includes('estado') || h.toLowerCase().includes('enviado')) {
-                        if (cellVal.toLowerCase() === 'ok' || cellVal.toLowerCase().includes('error')) {
+                        if (cellVal.toLowerCase() === 'ok' || cellVal.toLowerCase().includes('matriculado')) {
                             cellVal = `<span class="badge bg-warning text-dark">${cellVal}</span>`;
+                        } else if (cellVal.toLowerCase().includes('error')) {
+                            cellVal = `<span class="badge bg-danger">${cellVal}</span><span class="badge bg-success ms-1">Reintento</span>`;
                         } else {
                             cellVal = `<span class="badge bg-success">A procesar</span>`;
                         }
