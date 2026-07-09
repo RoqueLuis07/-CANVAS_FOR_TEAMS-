@@ -963,7 +963,7 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
     student_details = []
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
         
         # Check if the row has at least a name
         if not any(row_vals):
@@ -981,7 +981,7 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
                 })
             
         if len(sample_rows) < 10:
-            sample_rows.append(dict(zip(headers, row_vals)))
+            sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
             
     wb.close()
     return PreviewResponse(
@@ -1360,7 +1360,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
     course_details = []
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
         
         # Check if the row has at least a course name (assuming column 0 or 1 is name)
         if not any(row_vals):
@@ -1378,7 +1378,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
                 })
             
         if len(sample_rows) < 10:
-            sample_rows.append(dict(zip(headers, row_vals)))
+            sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
             
     wb.close()
     return CoursesPreviewResponse(
@@ -1706,7 +1706,7 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
             students_to_process += 1
             if len(student_details) < 3:
                 student_details.append({"nombre": nombre, "correo": correo})
-                sample_rows.append(dict(zip(headers, row_vals)))
+                sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
 
     return PreviewResponse(
         headers=headers[:min(5, len(headers))],
@@ -2347,7 +2347,7 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Preview
     students_already_processed = 0
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
         if not any(row_vals):
             continue
             
@@ -2358,7 +2358,7 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Preview
             students_to_process += 1
             
         if len(sample_rows) < 10:
-            sample_rows.append(dict(zip(headers, row_vals)))
+            sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
             
     wb.close()
     return PreviewResponse(
@@ -2698,7 +2698,7 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     student_details = []
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
         
         if not any(row_vals):
             continue
@@ -2717,7 +2717,7 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
                 })
             
         if len(sample_rows) < 10:
-            sample_rows.append(dict(zip(headers, row_vals)))
+            sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
             
     wb.close()
     return PreviewResponse(
