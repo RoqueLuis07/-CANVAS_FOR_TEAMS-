@@ -80,51 +80,57 @@
             </div>
           </div>
         
-        <div class="d-flex justify-content-end mb-4">
-                    <button type="button" class="btn btn-primary" onclick="importMasivo()" id="btnImportMasivo" disabled>
-                      <i class="bi bi-check-circle me-2"></i>Confirmar y Procesar
-                    </button>
-                  </div>
-                
-                <div id="masivoPreviewWrap" style="display:none;" class="mb-4">
-                  <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
-                  <div class="table-responsive bg-white rounded border">
-                    <table class="table table-sm table-hover mb-0">
-                      <thead class="table-light" id="masivoPreviewThead">
-                        <tr>
-                          <th>Nombre</th>
-                          <th>Cédula</th>
-                        </tr>
-                      </thead>
-                      <tbody id="masivoPreviewTbody"></tbody>
-                    </table>
-                  </div>
+        <div class="d-flex justify-content-end gap-2 mb-4">
+          <button type="button" class="btn btn-warning text-dark" onclick="importDocentes()" id="btnImportDocentes" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
+        </div>
+        
+        <div id="docPreviewWrap" style="display:none;" class="mb-4">
+          <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
+          <div class="table-responsive bg-white rounded border">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Nombre</th>
+                  <th>Cédula</th>
+                  <th>Correo</th>
+                  <th>Plataforma</th>
+                  <th>ID Curso</th>
+                  <th>ID Equipo</th>
+                </tr>
+              </thead>
+              <tbody id="docPreviewTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div id="docResultWrap" style="display:none;">
+          <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-check-circle me-2"></i>Resultados</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="card border-success h-100">
+                <div class="card-header bg-success text-white py-2">
+                  <i class="bi bi-check-circle me-2"></i>Éxitos (<span id="docSuccessCount">0</span>)
                 </div>
-                
-                <div id="masivoResultWrap" style="display:none;">
-                  <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-check-circle me-2"></i>Resultados del Proceso</h6>
-                  <div class="row">
-                    <div class="col-md-6">
-                      <div class="card border-success h-100">
-                        <div class="card-header bg-success text-white fw-bold py-2"><i class="bi bi-check2-all me-1"></i>Éxitos (<span id="masivoSuccessCount">0</span>)</div>
-                        <ul class="list-group list-group-flush" id="masivoSuccessList" style="max-height: 250px; overflow-y:auto;"></ul>
-                      </div>
-                    </div>
-                    <div class="col-md-6">
-                      <div class="card border-danger h-100 mt-3 mt-md-0">
-                        <div class="card-header bg-danger text-white fw-bold py-2"><i class="bi bi-exclamation-triangle me-1"></i>Errores (<span id="masivoErrorCount">0</span>)</div>
-                        <ul class="list-group list-group-flush" id="masivoErrorList" style="max-height: 250px; overflow-y:auto;"></ul>
-                      </div>
-                    </div>
-                  </div>
+                <div class="card-body p-0">
+                  <ul class="list-group list-group-flush" id="docSuccessList" style="max-height: 200px; overflow-y: auto;"></ul>
                 </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white py-2">
+                  <i class="bi bi-x-circle me-2"></i>Errores (<span id="docErrorCount">0</span>)
+                </div>
+                <div class="card-body p-0">
+                  <ul class="list-group list-group-flush" id="docErrorList" style="max-height: 200px; overflow-y: auto;"></ul>
               </div>
             </div>
           </div>
         </div>
-
         
-        <!-- Accordion Diplomados (OneDrive) -->
+        
+        </div></div></div></div>
+          <!-- Accordion Diplomados (OneDrive) -->
         <div class="accordion mb-4" id="accordionDiplomados">
           <div class="accordion-item border-success shadow-sm">
             <h2 class="accordion-header" id="headingDiplomados">
@@ -159,7 +165,6 @@
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
-                  
                   <button type="button" class="btn btn-success text-white" onclick="importDiplomados()" id="btnImportDiplomados" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
                 </div>
                 
@@ -236,7 +241,6 @@
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
-                  
                   <button type="button" class="btn btn-primary" onclick="importMasivo()" id="btnImportMasivo" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
                 </div>
                 
@@ -948,7 +952,7 @@ async function previewDocentes() {
     const sheet = document.getElementById('doc_sheet').value;
     if (!url || !sheet) return toast('Completa la URL y la pestaña', 'warning');
     
-    const btn = document.getElementById('btnImportDocentes'); btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...';
+    const btn = document.getElementById('btnPreviewDocentes');
     setLoading(btn, true);
     
     try {
@@ -1052,7 +1056,7 @@ async function previewDiplomados() {
     const sheet = document.getElementById('diplomadoSheet').value;
     if (!url || !sheet) return toast('Completa la URL y la pestaña', 'warning');
     
-    const btn = document.getElementById('btnImportDiplomados'); btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...';
+    const btn = document.getElementById('btnPreviewDiplomados');
     setLoading(btn, true);
     
     try {
@@ -1148,7 +1152,7 @@ async function previewMasivo() {
     const sheet = document.getElementById('masivoSheet').value;
     if (!url || !sheet) return toast('Completa la URL y la pestaña', 'warning');
     
-    const btn = document.getElementById('btnImportMasivo'); btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cargando...';
+    const btn = document.getElementById('btnPreviewMasivo');
     setLoading(btn, true);
     
     try {
