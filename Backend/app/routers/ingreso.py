@@ -10,8 +10,6 @@ Endpoints públicos:
   POST /ingreso/preview             – Previsualizar credenciales sin crear nada.
   POST /ingreso/create              – Crear usuario individual.
   POST /ingreso/bulk                – Crear múltiples usuarios en paralelo.
-  POST /ingreso/resend-credentials  – Reenviar credenciales a usuario existente.
-  POST /ingreso/bulk-resend         – Reenviar masivamente.
   POST /ingreso/check-account       – Verificar si un usuario existe en Canvas/Teams.
   POST /ingreso/bulk-check          – Verificar múltiples usuarios.
   GET  /ingreso/template/crear      – Descargar plantilla Excel.

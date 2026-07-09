@@ -1711,7 +1711,7 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
         details=student_details
     )
 
-@router.post("/excel/egreso/import", summary="Procesar planilla de Egreso/Eliminación")
+@router.post("/excel/egreso", summary="Procesar planilla de Egreso/Eliminación")
 async def import_egreso_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     try:
         return await _import_egreso_onedrive_inner(req)

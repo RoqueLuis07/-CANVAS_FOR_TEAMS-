@@ -18,9 +18,7 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link active fw-semibold" id="crear-tab" data-bs-toggle="tab" data-bs-target="#crear" type="button" role="tab"><i class="bi bi-person-plus-fill me-1"></i>Crear usuario</button>
       </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link fw-semibold" id="reenviar-tab" data-bs-toggle="tab" data-bs-target="#reenviar" type="button" role="tab"><i class="bi bi-envelope-arrow-up-fill me-1"></i>Reenviar credenciales</button>
-      </li>
+      
       <li class="nav-item" role="presentation">
         <button class="nav-link fw-semibold" id="verificar-tab" data-bs-toggle="tab" data-bs-target="#verificar" type="button" role="tab"><i class="bi bi-check-circle-fill me-1"></i>Verificar cuenta</button>
       </li>
@@ -360,84 +358,6 @@
         </div>
       </div>
 
-      <!-- REENVIAR CREDENCIALES -->
-      <div class="tab-pane fade" id="reenviar" role="tabpanel">
-        <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
-          <h5 class="mb-0 text-secondary"><i class="bi bi-envelope me-2"></i>Reenvío Individual</h5>
-          
-        </div>
-        
-        <form id="reenviarIndForm" onsubmit="event.preventDefault(); doReenviarInd();">
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Nombre completo <span class="text-danger">*</span></label>
-              <input type="text" id="ri_nombre" class="form-control" placeholder="Ej: Karen Gonzalez" required>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Cédula <span class="text-danger">*</span></label>
-              <input type="text" id="ri_cedula" class="form-control" placeholder="Ej: 6868066" required>
-            </div>
-          </div>
-          
-          <div class="row g-3 mb-3">
-            <div class="col-md-4">
-              <label class="form-label">Email personal <span class="text-danger">*</span></label>
-              <input type="email" id="ri_email" class="form-control" placeholder="usuario@gmail.com" required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Plataforma</label>
-              <select id="ri_plataforma" class="form-select">
-                <option value="both">Canvas + Teams</option>
-                <option value="canvas">Solo Canvas</option>
-                <option value="teams">Solo Teams</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Programa</label>
-              <select id="ri_tipo" class="form-select" onchange="toggleProg('ri')">
-                <option value="grado">Grado</option>
-                <option value="mba">MBA</option>
-                <option value="diplomado">Diplomado</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="mb-3">
-            <label class="form-label">Nombre del programa <small class="text-muted">(solo diplomados)</small></label>
-            <input type="text" id="ri_programa" class="form-control" placeholder="Ej: Diplomado en SQL avanzado" disabled>
-          </div>
-          
-          <div class="mb-4">
-            <label class="form-label">Copias de correo (CC)</label>
-            <div class="d-flex flex-wrap gap-3 mb-2">
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="comercialcredenciales@usil.edu.py" data-group="ri" id="rcc1">
-                <label class="form-check-label text-secondary" for="rcc1">Comercial</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="lflorentin@usil.edu.py" data-group="ri" id="rcc2">
-                <label class="form-check-label text-secondary" for="rcc2">L. Florentín</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="it@usil.edu.py" data-group="ri" id="rcc3">
-                <label class="form-check-label text-secondary" for="rcc3">Soporte TI</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="usilbusinessschool@usil.edu.py" data-group="ri" id="rcc4">
-                <label class="form-check-label text-secondary" for="rcc4">UBS</label>
-              </div>
-            </div>
-            <input type="text" id="ri_cc_otros" class="form-control form-control-sm w-50" placeholder="Otros CC (separar por coma)">
-          </div>
-          
-          <div class="d-flex justify-content-end gap-2 border-top pt-3">
-            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('reenviarIndForm').reset(); toggleProg('ri');">Limpiar</button>
-            <button type="submit" class="btn btn-primary px-4" id="btnReenviarInd">Reenviar credenciales</button>
-          </div>
-        </form>
-        <div id="reenviarIndResult" class="mt-4" style="display:none;"></div>
-      </div>
-      
       <!-- VERIFICAR CUENTA -->
       <div class="tab-pane fade" id="verificar" role="tabpanel">
         <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
