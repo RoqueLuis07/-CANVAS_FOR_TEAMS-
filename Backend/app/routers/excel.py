@@ -114,6 +114,25 @@ def _get(row: dict, *keys) -> Any:
             return str(v).strip()
     return None
 
+def _find_header_row_and_headers(ws, max_scan_rows=15):
+    """
+    Escanea las primeras `max_scan_rows` buscando la fila de encabezados.
+    Retorna (header_row_idx, dict_de_headers_normalizados, array_de_headers) o (None, {}, []).
+    """
+    for row_idx in range(1, min(max_scan_rows, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, min(50, ws.max_column + 1))]
+        valid_cols = [v for v in row_vals if v]
+        if len(valid_cols) >= 2:
+            row_str = " ".join(valid_cols).lower()
+            if any(keyword in row_str for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci", "id canvas", "id teams"]):
+                headers_dict = {}
+                for col_idx, val in enumerate(row_vals, 1):
+                    if val:
+                        headers_dict[_norm(val)] = col_idx
+                return row_idx, headers_dict, row_vals
+                
+    return None, {}, []
+
 
 # ── Template generation ───────────────────────────────────────────────────────
 
@@ -918,25 +937,19 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
 
     ws = wb[req.sheet_name]
 
-    headers = []
     sample_rows = []
-    header_row_idx = None
-    
-    for row_idx in range(1, min(10, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
-        valid_cols = [v for v in row_vals if v]
-        if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
-            header_row_idx = row_idx
-            headers = row_vals
-            break
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
             
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
 
+    headers = [h for h in headers_raw if h] # Just for returning to frontend
+    
     col_estado = -1
     col_nombre = -1
     col_cedula = -1
-    for i, h in enumerate(headers):
+    for i, h in enumerate(headers_raw):
+        if not h: continue
         h_lower = h.lower()
         if "estado" in h_lower or ("canvas" in h_lower and "id" in h_lower):
             col_estado = i
@@ -1008,16 +1021,8 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     for sheet_name in [req.sheet_name]:
         ws = wb[sheet_name]
         
-        header_row_idx = None
-        title_val = next((str(c.value).strip() for c in ws[1] if c.value and isinstance(c.value, str) and len(str(c.value).strip()) > 5), "")
-        headers = {}
-        for row_idx in range(1, min(6, ws.max_row + 1)):
-            row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-            if any("nombre" in v for v in row_vals) and any("cedula" in v or "c├®dula" in v for v in row_vals):
-                header_row_idx = row_idx
-                for col_idx, val in enumerate(row_vals, 1):
-                    headers[_norm(val)] = col_idx
-                break
+        header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+
         
         if not header_row_idx:
             continue
@@ -1321,25 +1326,22 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
 
     ws = wb[req.sheet_name]
 
-    headers = []
     sample_rows = []
-    header_row_idx = None
-    
-    for row_idx in range(1, min(10, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
-        valid_cols = [v for v in row_vals if v]
-        if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
-            header_row_idx = row_idx
-            headers = row_vals
-            break
-            
+
+
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
+
+
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    headers = [h for h in headers_raw if h]
+
 
     col_estado = -1
     col_nombre = -1
     col_sis = -1
-    for i, h in enumerate(headers):
+    for i, h in enumerate(headers_raw):
         h_lower = h.lower()
         if "estado" in h_lower or ("canvas" in h_lower and "id" in h_lower):
             col_estado = i
@@ -1449,16 +1451,8 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     result = BulkResult()
     ws = wb[req.sheet_name]
 
-    header_row_idx = None
-    headers = {}
-    for row_idx in range(1, min(6, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        valid_cols = [v for v in row_vals if len(v) > 0]
-        if len(valid_cols) > 1 and any("nombre" in v or "curso" in v for v in row_vals):
-            header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
-            break
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+
 
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
@@ -1677,16 +1671,8 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
 
     ws = wb[req.sheet_name]
     
-    header_row_idx = None
-    title_val = str(ws.cell(row=1, column=1).value or "").strip()
-    headers = {}
-    for row_idx in range(1, min(6, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v for v in row_vals) and any("correo" in v or "email" in v for v in row_vals):
-            header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
-            break
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+
     
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontraron cabeceras.")
@@ -1833,17 +1819,9 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
 
     ws = wb[req.sheet_name]
     
-    header_row_idx = None
-    title_val = str(ws.cell(row=1, column=1).value or "").strip()
-    headers = {}
-    for row_idx in range(1, min(6, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v for v in row_vals) and any("cedula" in v or "cdula" in v or "ci" in v for v in row_vals):
-            header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
-            break
-            
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+
+    
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontraron las columnas de 'Nombre' y 'Cdula'.")
 
@@ -1934,16 +1912,8 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
     ws = wb[req.sheet_name]
     
-    header_row_idx = None
-    title_val = str(ws.cell(row=1, column=1).value or "").strip()
-    headers = {}
-    for row_idx in range(1, min(6, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v for v in row_vals) and any("cedula" in v or "cdula" in v or "ci" in v for v in row_vals):
-            header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
-            break
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+
     
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="Columnas de Nombre y Cdula no encontradas.")
@@ -2274,22 +2244,20 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Preview
         raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
     ws = wb[req.sheet_name]
     
-    headers = []
     sample_rows = []
-    header_row_idx = None
+
     
-    for row_idx in range(1, min(10, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
-        if any("usuario" in v.lower() or "correo" in v.lower() or "cedula" in v.lower() or "sis" in v.lower() or "alumno" in v.lower() for v in row_vals):
-            header_row_idx = row_idx
-            headers = row_vals
-            break
-            
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
+
+    
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontraron encabezados.")
 
+    headers = [h for h in headers_raw if h]
+
+
     col_enviado = -1
-    for i, h in enumerate(headers):
+    for i, h in enumerate(headers_raw):
         if "estado" in h.lower() or "enviado" in h.lower():
             col_enviado = i
 
@@ -2616,26 +2584,23 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
 
     ws = wb[req.sheet_name]
     
-    headers = []
     sample_rows = []
-    header_row_idx = None
+
     
-    for row_idx in range(1, min(10, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
-        valid_cols = [v for v in row_vals if v]
-        if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
-            header_row_idx = row_idx
-            headers = row_vals
-            break
-            
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
+
+    
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    headers = [h for h in headers_raw if h]
+
 
     col_estado = -1
     col_nombre = -1
     col_cedula = -1
     col_usuario = -1
-    for i, h in enumerate(headers):
+    for i, h in enumerate(headers_raw):
         h_lower = h.lower()
         if "estado" in h_lower or "enviado" in h_lower:
             col_estado = i
@@ -2708,15 +2673,8 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
     ws = wb[req.sheet_name]
     
-    header_row_idx = None
-    headers = {}
-    for row_idx in range(1, min(10, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v for v in row_vals) and any("cedula" in v or "cédula" in v or "ci" in v for v in row_vals):
-            header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
-            break
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+
     
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontraron las columnas requeridas (Nombre, Cedula).")
