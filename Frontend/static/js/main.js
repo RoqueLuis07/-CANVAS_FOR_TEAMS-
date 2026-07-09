@@ -1683,22 +1683,30 @@ async function executeUploadMasivo(urlInput, sheetInput) {
 }
 
 
-// Restore OneDrive URL across pages
+// Restore OneDrive URL across pages with defaults
 document.addEventListener('DOMContentLoaded', () => {
-    const urlInputs = ['doc_url', 'diplomadoUrl', 'masivoUrl', 'mat_url'];
-    const savedUrl = localStorage.getItem('onedrive_excel_url');
+    const defaultUrls = {
+        'coursesOdUrl': 'https://usilparaguay-my.sharepoint.com/:x:/g/personal/resteche_usil_edu_py/IQARA_HJhg00QKcvL8bD1WvnATEbShmJ6jbq6qzgbWLzqIc?e=BayIS2',
+        'diplomadoUrl': 'https://usilparaguay-my.sharepoint.com/:x:/g/personal/resteche_usil_edu_py/IQBjeh0nYFG7QbZx21y-3U-8AfhP2B9akxz7fo_LK_sKyGo?e=tXi91Q',
+        'mat_url': 'https://usilparaguay-my.sharepoint.com/:x:/g/personal/resteche_usil_edu_py/IQCHMuoLYGs9T4NDeid5n9A7AZvphg9oml_g9dt-GYD5tY0?e=d4RKCr',
+        'masivoUrl': 'https://usilparaguay-my.sharepoint.com/:x:/g/personal/resteche_usil_edu_py/IQA4gwZnz09sSIwlVtQ5bZlmAblW8XRtsRBXTTPnz6UTXjU?e=AlIYI6',
+        'doc_url': 'https://usilparaguay-my.sharepoint.com/:x:/g/personal/resteche_usil_edu_py/IQAXcMN-cm4oQL3gRm2urNcTAeH-gSDKwUwleXVrjyAFcZY?e=GhWnCj',
+        'urlEgresoOneDrive': ''
+    };
     
-    urlInputs.forEach(id => {
+    Object.keys(defaultUrls).forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            if (savedUrl) el.value = savedUrl;
+            const savedUrl = localStorage.getItem(`onedrive_excel_url_${id}`);
+            if (savedUrl) {
+                el.value = savedUrl;
+            } else if (defaultUrls[id]) {
+                el.value = defaultUrls[id];
+            }
+            
             el.addEventListener('change', (e) => {
                 if (e.target.value && e.target.value.includes('http')) {
-                    localStorage.setItem('onedrive_excel_url', e.target.value);
-                    urlInputs.forEach(otherId => {
-                        const otherEl = document.getElementById(otherId);
-                        if (otherEl && otherEl !== el) otherEl.value = e.target.value;
-                    });
+                    localStorage.setItem(`onedrive_excel_url_${id}`, e.target.value);
                 }
             });
         }
