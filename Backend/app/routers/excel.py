@@ -927,7 +927,7 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
         valid_cols = [v for v in row_vals if v]
         if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
             header_row_idx = row_idx
-            headers = [v for v in row_vals if v]
+            headers = row_vals
             break
             
     if not header_row_idx:
@@ -1330,7 +1330,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
         valid_cols = [v for v in row_vals if v]
         if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
             header_row_idx = row_idx
-            headers = [v for v in row_vals if v]
+            headers = row_vals
             break
             
     if not header_row_idx:
@@ -2280,7 +2280,7 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Matricu
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
         if any("usuario" in v.lower() or "correo" in v.lower() or "cedula" in v.lower() for v in row_vals):
             header_row_idx = row_idx
-            headers = [v for v in row_vals if v]
+            headers = row_vals
             break
     if not header_row_idx:
         raise HTTPException(status_code=400, detail="No se encontraron encabezados.")
@@ -2545,7 +2545,7 @@ async def get_masivo_sheets(req: UrlOnlyRequest) -> list[str]:
         raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
 
 @router.post("/excel/masivo/preview", summary="Previsualizar Carga Masiva de Usuarios")
-async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> dict:
+async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
     
@@ -2556,7 +2556,7 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
 
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
     except Exception as e:
         raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
 
@@ -2565,68 +2565,72 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> dict:
 
     ws = wb[req.sheet_name]
     
+    headers = []
+    sample_rows = []
     header_row_idx = None
-    headers = {}
+    
     for row_idx in range(1, min(10, ws.max_row + 1)):
-        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip().lower() for c in range(1, ws.max_column + 1)]
-        if any("nombre" in v for v in row_vals) and any("cedula" in v or "cédula" in v or "ci" in v for v in row_vals):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        valid_cols = [v for v in row_vals if v]
+        if len(valid_cols) > 1 and any(keyword in " ".join(valid_cols).lower() for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci"]):
             header_row_idx = row_idx
-            for col_idx, val in enumerate(row_vals, 1):
-                headers[_norm(val)] = col_idx
+            headers = row_vals
             break
-    
+            
     if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontraron las columnas 'Nombre' y 'Cedula'.")
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
 
-    def get_col_idx(*keys):
-        for k in keys:
-            for h, idx in headers.items():
-                if _norm(k) in h:
-                    return idx
-        return None
-
-    col_nombre = get_col_idx("nombre")
-    col_cedula = get_col_idx("cedula", "cédula", "ci")
-    col_enviado = get_col_idx("enviado", "estado")
-    
-    col_cc = get_col_idx("cc", "copia")
-    sheet_cc_list = []
-    if col_cc:
-        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
-            if cc_val:
-                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
-                    email = email.strip()
-                    if "@" in email and email not in sheet_cc_list:
-                        sheet_cc_list.append(email)
-    col_usuario = get_col_idx("usuario")
+    col_estado = -1
+    col_nombre = -1
+    col_cedula = -1
+    col_usuario = -1
+    for i, h in enumerate(headers):
+        h_lower = h.lower()
+        if "estado" in h_lower or "enviado" in h_lower:
+            col_estado = i
+        if "nombre" in h_lower:
+            if col_nombre == -1: col_nombre = i
+        if "cedula" in h_lower or "cédula" in h_lower or "ci" in h_lower:
+            if col_cedula == -1: col_cedula = i
+        if "usuario" in h_lower:
+            if col_usuario == -1: col_usuario = i
 
     students_to_process = 0
+    students_already_processed = 0
     student_details = []
 
-    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-        cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
-        enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip().lower() if col_enviado else ""
-        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
-
-        if not nombre or not cedula or cedula == "None":
+    for row_idx in range(header_row_idx + 1, ws.max_row + 1):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers) + 1)]
+        
+        if not any(row_vals):
             continue
+            
+        estado_val = row_vals[col_estado] if col_estado >= 0 else ""
+        usuario_val = row_vals[col_usuario] if col_usuario >= 0 else ""
+        
+        if "no." in estado_val.lower() or estado_val.lower() in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in estado_val.lower() or "ya exist" in estado_val.lower() or (usuario_val and "@" in usuario_val):
+            students_already_processed += 1
+        else:
+            students_to_process += 1
+            if len(student_details) < 10:
+                student_details.append({
+                    "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
+                    "cedula": row_vals[col_cedula] if col_cedula >= 0 else ""
+                })
+            
+        if len(sample_rows) < 10:
+            sample_rows.append(dict(zip(headers, row_vals)))
+            
+    wb.close()
+    return PreviewResponse(
+        sheet_name=req.sheet_name,
+        students_to_process=students_to_process,
+        students_already_processed=students_already_processed,
+        headers=headers,
+        sample_rows=sample_rows,
+        student_details=student_details
+    )
 
-        if "✅" in enviado or enviado in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado or "ya exist" in enviado or (usuario_val and "@" in usuario_val):
-            continue
-
-        students_to_process += 1
-        if len(student_details) < 100:
-            student_details.append({
-                "nombre": nombre,
-                "cedula": cedula
-            })
-
-    return {
-        "students_to_process": students_to_process,
-        "student_details": student_details
-    }
 
 
 @router.post("/excel/masivo", summary="Importar Masivamente desde OneDrive (Sin Matriculación)", response_model=BulkResult)
