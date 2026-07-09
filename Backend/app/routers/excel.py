@@ -1119,6 +1119,8 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
             enviado_lower = enviado.lower()
             if "✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado_lower or "ya exist" in enviado_lower or (usuario_val and "@" in usuario_val):
+                if not enviado and col_enviado:
+                    ws.cell(row=r_idx, column=col_enviado, value="✅ Existente")
                 return
 
             creds, status = await user_service.generate_unique_credentials(nombre, cedula, "teams")
