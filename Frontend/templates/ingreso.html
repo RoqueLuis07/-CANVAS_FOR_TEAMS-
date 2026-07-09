@@ -74,14 +74,14 @@
             </div>
             <div class="col-md-4">
               <label class="form-label fw-bold text-secondary">Seleccionar Pestaña <span class="text-danger">*</span></label>
-              <select id="doc_sheet" class="form-select" required>
+              <select id="doc_sheet" class="form-select" onchange="previewDocentes()" required>
                 <option value="">Carga las pestañas primero...</option>
               </select>
             </div>
           </div>
         
         <div class="d-flex justify-content-end gap-2 mb-4">
-          <button type="button" class="btn btn-outline-secondary" onclick="previewDocentes()" id="btnPreviewDocentes">
+          <button type="button" class="btn btn-outline-secondary d-none" onclick="previewDocentes()" id="btnPreviewDocentes">
             <i class="bi bi-eye me-2"></i>Previsualizar
           </button>
           <button type="button" class="btn btn-warning text-dark" onclick="importDocentes()" id="btnImportDocentes" disabled>
@@ -163,14 +163,14 @@
                   </div>
                   <div class="col-md-4">
                     <label class="form-label fw-bold text-secondary">Seleccionar Pestaña <span class="text-danger">*</span></label>
-                    <select id="diplomadoSheet" class="form-select" required>
+                    <select id="diplomadoSheet" class="form-select" onchange="previewDiplomados()" required>
                       <option value="">Carga las pestañas primero...</option>
                     </select>
                   </div>
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
-                  <button type="button" class="btn btn-outline-secondary" onclick="previewDiplomados()" id="btnPreviewDiplomados">
+                  <button type="button" class="btn btn-outline-secondary d-none" onclick="previewDiplomados()" id="btnPreviewDiplomados">
                     <i class="bi bi-eye me-2"></i>Previsualizar
                   </button>
                   <button type="button" class="btn btn-success text-white" onclick="importDiplomados()" id="btnImportDiplomados" disabled>
@@ -244,14 +244,14 @@
                   </div>
                   <div class="col-md-4">
                     <label class="form-label fw-bold text-secondary">Seleccionar Pestaña <span class="text-danger">*</span></label>
-                    <select id="masivoSheet" class="form-select" required>
+                    <select id="masivoSheet" class="form-select" onchange="previewMasivo()" required>
                       <option value="">Carga las pestañas primero...</option>
                     </select>
                   </div>
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
-                  <button type="button" class="btn btn-outline-secondary" onclick="previewMasivo()" id="btnPreviewMasivo">
+                  <button type="button" class="btn btn-outline-secondary d-none" onclick="previewMasivo()" id="btnPreviewMasivo">
                     <i class="bi bi-eye me-2"></i>Previsualizar
                   </button>
                   <button type="button" class="btn btn-primary" onclick="importMasivo()" id="btnImportMasivo" disabled>
