@@ -84,6 +84,21 @@ async def list_courses(
     return await _fetch_all_courses(search_term)
 
 
+
+@router.get("/by-term/{term_id}", summary="Obtener cursos por periodo académico")
+async def list_courses_by_term(term_id: str, per_page: Annotated[int, Query(ge=1, le=100)] = 100):
+    """Lista todos los cursos asociados a un término específico."""
+    params = {
+        "enrollment_term_id": term_id,
+        "per_page": per_page,
+        "include[]": "term",
+        "state[]": _ALL_STATES,
+    }
+    try:
+        return await canvas.paginate(f"/accounts/{_ACCOUNT}/courses", params)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
 @router.get("/{course_id}", summary="Obtener curso por ID")
 async def get_course(course_id: str):
     try:
@@ -110,6 +125,58 @@ async def update_course(course_id: str, body: CanvasCourseUpdate):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+
+
+from pydantic import BaseModel
+from app.services import teams_client as graph
+
+class BulkDeleteCoursesRequest(BaseModel):
+    course_ids: list[str]
+    delete_teams: bool = True
+
+@router.post("/bulk-delete", summary="Eliminación masiva de cursos y equipos asociados")
+async def bulk_delete_courses(req: BulkDeleteCoursesRequest):
+    """
+    Toma una lista de IDs de Canvas y elimina el curso en Canvas y su equipo en Teams.
+    """
+    result = {"succeeded": [], "failed": []}
+    
+    for cid in req.course_ids:
+        course_name = f"Curso {cid}"
+        error = ""
+        # 1. Obtener nombre para buscar en Teams
+        try:
+            course = await canvas.get(f"/courses/{cid}")
+            course_name = course.get("name", course_name)
+        except Exception as e:
+            error += f"Canvas Get Error: {str(e)}"
+            
+        # 2. Eliminar en Canvas
+        if not error:
+            try:
+                await canvas.delete(f"/courses/{cid}", {"event": "delete"})
+                await database.delete_course(cid)
+                _cache.patch_list(_CACHE_KEY, cid, None, id_field="id", action="delete")
+            except Exception as e:
+                error += f" | Canvas Delete Error: {str(e)}"
+                
+        # 3. Eliminar en Teams
+        if req.delete_teams:
+            try:
+                team_id = await graph.search_group_by_name(course_name)
+                if team_id:
+                    await graph.delete(f"/groups/{team_id}")
+                else:
+                    error += " | Teams: No se encontró el equipo asociado"
+            except Exception as e:
+                error += f" | Teams Delete Error: {str(e)}"
+                
+        if error and not error.startswith(" | Teams: No se encontró"):
+            result["failed"].append({"course_id": cid, "name": course_name, "error": error.strip(" | ")})
+        else:
+            result["succeeded"].append({"course_id": cid, "name": course_name, "notes": error.strip(" | ")})
+            
+    return result
 
 @router.delete("/{course_id}", summary="Eliminar / concluir curso")
 async def delete_course(

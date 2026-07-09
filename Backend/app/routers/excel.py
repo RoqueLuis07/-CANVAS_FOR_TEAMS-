@@ -2921,3 +2921,190 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo en OneDrive: {e}")
 
     return result
+
+@router.post("/courses/delete/preview")
+async def preview_delete_courses_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontraron cabeceras.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_sis = get_col_idx("sisid", "sis", "id")
+    col_nombre = get_col_idx("nombre", "curso")
+    col_estado = get_col_idx("estado", "enviado", "eliminado", "baja")
+
+    if not col_sis:
+        raise HTTPException(status_code=400, detail="Se requiere una columna 'SIS ID' o 'ID' para borrar cursos.")
+
+    sample_rows = []
+    courses_to_process = 0
+    courses_skipped = 0
+
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        sis = str(ws.cell(row=r_idx, column=col_sis).value or "").strip()
+        if not sis:
+            continue
+            
+        estado = ""
+        if col_estado:
+            estado = str(ws.cell(row=r_idx, column=col_estado).value or "").strip().lower()
+
+        if "ok" in estado or "eliminado" in estado or "baja" in estado:
+            courses_skipped += 1
+        else:
+            courses_to_process += 1
+            if len(sample_rows) < 10:
+                row_vals = []
+                for _, idx in headers.items():
+                    val = ws.cell(row=r_idx, column=idx).value
+                    row_vals.append(str(val).strip() if val is not None else "")
+                sample_rows.append(dict(zip(headers.keys(), row_vals)))
+
+    wb.close()
+    return PreviewResponse(
+        headers=list(headers.keys()),
+        sample_rows=sample_rows,
+        students_to_process=courses_to_process,
+        students_already_processed=courses_skipped
+    )
+
+@router.post("/courses/delete/import")
+async def import_delete_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+    result = BulkResult()
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+    
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontraron cabeceras.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_sis = get_col_idx("sisid", "sis", "id")
+    col_nombre = get_col_idx("nombre", "curso")
+    col_estado = get_col_idx("estado", "enviado", "eliminado", "baja")
+
+    if not col_sis:
+        raise HTTPException(status_code=400, detail="Falta columna SIS ID.")
+
+    if not col_estado:
+        from openpyxl.styles import Font
+        col_estado = ws.max_column + 1
+        ws.cell(row=header_row_idx, column=col_estado, value="Estado/Eliminado").font = Font(bold=True)
+
+    courses_to_process = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        sis = str(ws.cell(row=r_idx, column=col_sis).value or "").strip()
+        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        estado = str(ws.cell(row=r_idx, column=col_estado).value or "").strip().lower()
+
+        if not sis:
+            continue
+            
+        if "ok" in estado or "eliminado" in estado or "baja" in estado:
+            continue
+
+        courses_to_process.append({"r_idx": r_idx, "sis": sis, "nombre": nombre})
+
+    if len(courses_to_process) > 100:
+        raise HTTPException(status_code=400, detail=f"Demasiados cursos a eliminar ({len(courses_to_process)}). Máximo 100 por ejecución.")
+
+    if len(courses_to_process) > 0:
+        try:
+            await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"El archivo está bloqueado (cierra el Excel). Detalle: {e}")
+
+    for course_data in courses_to_process:
+        sis = course_data["sis"]
+        r_idx = course_data["r_idx"]
+        error = ""
+        
+        try:
+            # 1. Search canvas by SIS ID
+            canvas_courses = await canvas.paginate_limited(f"/accounts/{settings.canvas_account_id}/courses", {"search_term": sis, "per_page": 5}, max_records=5)
+            target_course = None
+            for c in canvas_courses:
+                if c.get("sis_course_id") == sis or str(c.get("id")) == sis:
+                    target_course = c
+                    break
+            
+            if target_course:
+                course_id = target_course["id"]
+                course_name = target_course.get("name", sis)
+                # 2. Delete Canvas
+                await canvas.delete(f"/courses/{course_id}", {"event": "delete"})
+                # 3. Delete Teams
+                team_id = await graph.search_group_by_name(course_name)
+                if team_id:
+                    await graph.delete(f"/groups/{team_id}")
+                else:
+                    error += " | Teams: Equipo no encontrado"
+            else:
+                error = "No encontrado en Canvas"
+                
+        except Exception as e:
+            error = f"Error: {str(e)}"
+            
+        if error and not error.startswith(" | Teams: Equipo no"):
+            ws.cell(row=r_idx, column=col_estado, value=error)
+            result.failed.append({"sis": sis, "error": error})
+        else:
+            ws.cell(row=r_idx, column=col_estado, value="OK (Eliminado)")
+            result.succeeded.append({"sis": sis})
+
+    if len(courses_to_process) > 0:
+        out_io = io.BytesIO()
+        wb.save(out_io)
+        out_io.seek(0)
+        try:
+            await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"No se pudo guardar: {e}")
+
+    return result
