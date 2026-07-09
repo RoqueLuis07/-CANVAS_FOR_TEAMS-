@@ -1701,7 +1701,7 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
             students_to_process += 1
             if len(student_details) < 3:
                 student_details.append({"nombre": nombre, "correo": correo})
-                sample_rows.append(row_vals[:min(5, len(row_vals))])
+                sample_rows.append(dict(zip(headers, row_vals)))
 
     return PreviewResponse(
         headers=headers[:min(5, len(headers))],

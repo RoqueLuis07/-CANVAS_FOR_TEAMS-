@@ -1,0 +1,405 @@
+
+
+let mi_materiasList = []; // from backend
+let mi_selectedMaterias = [];
+
+async function mi_onProgramChange() {
+    const prog = document.getElementById('mi_programa').value;
+    const searchInput = document.getElementById('mi_search');
+    const list = document.getElementById('mi_autocomplete_list');
+    
+    if (!prog) {
+        searchInput.disabled = true;
+        list.style.display = 'none';
+        return;
+    }
+    
+    searchInput.disabled = false;
+    searchInput.value = '';
+    list.style.display = 'none';
+    
+    try {
+        const res = await api.get('/api/matriculacion/materias?program=' + prog);
+        mi_materiasList = res || [];
+    } catch (e) {
+        toast('Error al cargar materias del programa: ' + e.message, 'danger');
+        mi_materiasList = [];
+    }
+}
+
+function mi_onSearchInput() {
+    const q = document.getElementById('mi_search').value.toLowerCase();
+    const list = document.getElementById('mi_autocomplete_list');
+    
+    if (q.length < 2) {
+        list.style.display = 'none';
+        return;
+    }
+    
+    const matches = mi_materiasList.filter(m => 
+        (m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) && 
+        !mi_selectedMaterias.find(sel => sel.id === m.id)
+    );
+    
+    if (matches.length === 0) {
+        list.style.display = 'none';
+        return;
+    }
+    
+    list.innerHTML = matches.map(m => `
+        <li class="list-group-item list-group-item-action cursor-pointer" onclick="mi_addMateria('${m.id}')">
+            <strong>${m.id}</strong> - ${m.name}
+        </li>
+    `).join('');
+    list.style.display = 'block';
+}
+
+function mi_addMateria(id) {
+    const m = mi_materiasList.find(x => x.id === id);
+    if (!m) return;
+    
+    if (!mi_selectedMaterias.find(sel => sel.id === id)) {
+        mi_selectedMaterias.push(m);
+        mi_renderSelected();
+    }
+    
+    document.getElementById('mi_search').value = '';
+    document.getElementById('mi_autocomplete_list').style.display = 'none';
+}
+
+function mi_removeMateria(id) {
+    mi_selectedMaterias = mi_selectedMaterias.filter(x => x.id !== id);
+    mi_renderSelected();
+}
+
+function mi_renderSelected() {
+    const container = document.getElementById('mi_tags_container');
+    const msg = document.getElementById('mi_empty_msg');
+    
+    if (mi_selectedMaterias.length === 0) {
+        container.innerHTML = '';
+        msg.style.display = 'block';
+        return;
+    }
+    
+    msg.style.display = 'none';
+    container.innerHTML = mi_selectedMaterias.map(m => `
+        <span class="badge bg-primary fs-6 d-flex align-items-center gap-2 p-2">
+            ${m.id} - ${m.name}
+            <i class="bi bi-x-circle-fill cursor-pointer text-white-50" onclick="mi_removeMateria('${m.id}')" title="Quitar"></i>
+        </span>
+    `).join('');
+}
+
+function mi_resetForm() {
+    document.getElementById('mi_correo').value = '';
+    document.getElementById('mi_sys').value = '';
+    document.getElementById('mi_programa').value = '';
+    document.getElementById('mi_search').value = '';
+    document.getElementById('mi_plataforma').value = 'both';
+    document.getElementById('mi_resultWrap').style.display = 'none';
+    mi_selectedMaterias = [];
+    mi_renderSelected();
+    mi_onProgramChange();
+}
+
+async function mi_doEnroll() {
+    const email = document.getElementById('mi_correo').value.trim();
+    const sys = document.getElementById('mi_sys').value.trim();
+    const prog = document.getElementById('mi_programa').value;
+    const plat = document.getElementById('mi_plataforma').value;
+    const btn = document.getElementById('btnMatriculacionInd');
+    const resultWrap = document.getElementById('mi_resultWrap');
+    
+    if (!email || !sys || !prog) {
+        toast('Complete los campos obligatorios (Correo, SYS, Programa).', 'warning');
+        return;
+    }
+    if (mi_selectedMaterias.length === 0) {
+        toast('Debe seleccionar al menos una materia.', 'warning');
+        return;
+    }
+    
+    setLoading(btn, true);
+    resultWrap.style.display = 'none';
+    
+    try {
+        const payload = {
+            email: email,
+            sys_id: sys,
+            program: prog,
+            materias: mi_selectedMaterias,
+            platforms: plat
+        };
+        
+        const res = await api.post('/api/matriculacion/individual', payload);
+        
+        let html = `<strong>Matriculación Completada</strong><ul class="mb-0 mt-2">`;
+        res.results.forEach(r => {
+            html += `<li><strong>${r.materia_name}</strong> - Canvas: ${r.canvas_status} | Teams: ${r.teams_status}</li>`;
+        });
+        html += `</ul>`;
+        
+        resultWrap.innerHTML = html;
+        resultWrap.className = 'alert alert-success mb-4';
+        resultWrap.style.display = 'block';
+        toast('Proceso completado', 'success');
+        
+        mi_loadHistory();
+    } catch (e) {
+        resultWrap.innerHTML = `<strong>Error:</strong> ${e.message}`;
+        resultWrap.className = 'alert alert-danger mb-4';
+        resultWrap.style.display = 'block';
+        toast('Error en matriculación', 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+async function mi_loadHistory() {
+    try {
+        const history = await api.get('/api/matriculacion/history');
+        const tbody = document.getElementById('mi_history_body');
+        if (!history || history.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No hay registros recientes</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = history.slice(0, 10).map(h => {
+            const dateStr = new Date(h.timestamp).toLocaleString();
+            let materiasHtml = h.results.map(r => `<div><span class="badge bg-secondary me-1">${r.materia_id}</span>${r.materia_name}</div>`).join('');
+            let canvasHtml = h.results.map(r => `<div>${r.canvas_status === 'OK' ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle-fill text-danger" title="'+r.canvas_status+'"></i>'}</div>`).join('');
+            let teamsHtml = h.results.map(r => `<div>${r.teams_status === 'OK' ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle-fill text-danger" title="'+r.teams_status+'"></i>'}</div>`).join('');
+            
+            return `<tr>
+                <td class="small text-muted">${dateStr}</td>
+                <td><strong>${h.email}</strong><br><small class="text-muted">SYS: ${h.sys_id}</small></td>
+                <td><span class="badge bg-info text-dark">${h.program}</span></td>
+                <td class="small">${materiasHtml}</td>
+                <td class="text-center">${canvasHtml}</td>
+                <td class="text-center">${teamsHtml}</td>
+            </tr>`;
+        }).join('');
+    } catch(e) {
+        console.error('Error loading history:', e);
+    }
+}
+
+// Global click to close autocomplete
+document.addEventListener('click', function(e) {
+    if(e.target.id !== 'mi_search') {
+        const list = document.getElementById('mi_autocomplete_list');
+        if(list) list.style.display = 'none';
+    }
+});
+
+// Load history on mount
+document.addEventListener('DOMContentLoaded', () => {
+    mi_loadHistory();
+});
+
+async function doEnrollUnified() {
+  const form = document.getElementById('enrollForm');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  
+  const btn = document.getElementById('enrollBtn');
+  setLoading(btn, true);
+  
+  const fd = new FormData(form);
+  const data = Object.fromEntries(fd.entries());
+  
+  try {
+    const res = await api.post('/sync/enroll-both', data);
+    toast('Usuario matriculado exitosamente!', 'success');
+    form.reset();
+  } catch(e) {
+    toast('Error: ' + e.message, 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+// Configurar Autocompletado
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('mat_url').value = localStorage.getItem('matUrl') || '';
+  setupAutocomplete('search_user', 'user_identifier', 'user_results', '/canvas/users', 
+    (u) => `<div class="autocomplete-title">${u.name}</div><div class="autocomplete-sub">${u.login_id || u.email || 'Sin email'}</div>`,
+    (u, input, hidden) => { input.value = u.name; hidden.value = u.login_id || u.email; }
+  );
+  
+  setupAutocomplete('search_course', 'canvas_course_id', 'course_results', '/canvas/courses', 
+    (c) => `<div class="autocomplete-title">${c.name}</div><div class="autocomplete-sub">ID: ${c.id} | SIS: ${c.sis_course_id || '-'}</div>`,
+    (c, input, hidden) => { input.value = c.name; hidden.value = c.id; }
+  );
+  
+  setupAutocomplete('search_team', 'teams_team_id', 'team_results', '/teams/teams', 
+    (t) => `<div class="autocomplete-title">${t.displayName}</div><div class="autocomplete-sub">ID: ${t.id}</div>`,
+    (t, input, hidden) => { input.value = t.displayName; hidden.value = t.id; }
+  );
+});
+
+// OneDrive Integration Logic
+
+async function fetchMatSheets() {
+  localStorage.setItem('matUrl', document.getElementById('mat_url').value);
+  const urlInput = document.getElementById('mat_url').value.trim();
+  if (!urlInput) {
+      return toast('Por favor, ingresa la URL primero.', 'warning');
+  }
+  
+  const btn = document.getElementById('btnLoadMatSheets');
+  const select = document.getElementById('mat_sheet');
+  const oldText = btn.innerHTML;
+  
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+  btn.disabled = true;
+  
+  try {
+      const res = await api.post('/excel/matriculaciones-onedrive/sheets', { url: urlInput });
+      select.innerHTML = '<option value="" disabled selected>Seleccione la pestaña de matriculaciones...</option>';
+      res.sheets.forEach(s => {
+          select.innerHTML += `<option value="${s}">${s}</option>`;
+      });
+      document.getElementById('matSheetWrap').style.display = 'block';
+      toast('Pestañas cargadas exitosamente', 'success');
+  } catch (e) {
+      toast('Error al obtener pestañas: ' + e.message, 'danger');
+  } finally {
+      btn.innerHTML = oldText;
+      btn.disabled = false;
+  }
+}
+
+
+async function enableMatProcessBtn() {
+    const val = document.getElementById('mat_sheet').value;
+    const url = document.getElementById('mat_url').value.trim();
+    document.getElementById('btnImportMat').disabled = !val;
+    document.getElementById('btnRollbackMat').disabled = !val;
+    
+    if (val && url) {
+        try {
+            const preview = await api.post('/excel/matriculaciones-onedrive/preview', { url: url, sheet_name: val });
+            document.getElementById('matPreviewWrap').style.display = 'block';
+            let head = preview.headers.map(h => `<th>${h}</th>`).join('');
+            document.getElementById('matPreviewHead').innerHTML = head;
+            let body = '';
+            preview.sample_rows.forEach(r => {
+                body += `<tr>${preview.headers.map(h => `<td>${r[h] || ''}</td>`).join('')}</tr>`;
+            });
+            document.getElementById('matPreviewBody').innerHTML = body;
+        } catch(e) {
+            console.error('Error in preview:', e);
+            document.getElementById('matPreviewWrap').style.display = 'none';
+        }
+    }
+}
+
+
+async function doImportMatriculaciones() {
+    const url = document.getElementById('mat_url').value.trim();
+    const sheet = document.getElementById('mat_sheet').value;
+    
+    if(!url || !sheet) return toast('Debe cargar la URL y seleccionar la pestaña', 'warning');
+    
+    const btn = document.getElementById('btnImportMat');
+    const resultWrap = document.getElementById('matResultWrap');
+    const resultText = document.getElementById('matResultText');
+    
+    const oldText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Procesando...';
+    btn.disabled = true;
+    document.getElementById('btnRollbackMat').disabled = true;
+    
+    resultWrap.style.display = 'block';
+    resultWrap.className = 'alert alert-info border-info';
+    resultText.innerHTML = '<b>Iniciando proceso de matriculaciones...</b> Esto puede demorar varios minutos dependiendo de la cantidad de registros. No cierre esta ventana.';
+    
+    try {
+        const res = await api.post('/excel/matriculaciones-onedrive', { url: url, sheet_name: sheet });
+        
+        resultWrap.className = res.failed.length > 0 ? 'alert alert-warning border-warning' : 'alert alert-success border-success';
+        
+        let html = `<b>Proceso Finalizado.</b><br>
+                    ✅ <b>Matriculaciones Exitosas:</b> ${res.succeeded.length}<br>
+                    ❌ <b>Errores:</b> ${res.failed.length}`;
+        
+        if (res.failed.length > 0) {
+            html += `<br><br><b>Detalle de errores:</b><ul class="mb-0 mt-1 small">`;
+            res.failed.slice(0, 10).forEach(f => {
+                html += `<li><b>${f.correo || f.nombre}:</b> ${f.error}</li>`;
+            });
+            if (res.failed.length > 10) html += `<li>...y ${res.failed.length - 10} más. Revisa el Excel en OneDrive para más detalles.</li>`;
+            html += `</ul>`;
+        }
+        
+        html += `<br><br><b>El archivo Excel en OneDrive ha sido actualizado con los resultados.</b>`;
+        resultText.innerHTML = html;
+        toast('Proceso completado.', 'info');
+        
+    } catch (e) {
+        resultWrap.className = 'alert alert-danger border-danger';
+        resultText.innerHTML = `<b>Error Crítico:</b> ${e.message}`;
+        toast('Error durante la importación', 'danger');
+    } finally {
+        btn.innerHTML = oldText;
+        btn.disabled = false;
+        document.getElementById('btnRollbackMat').disabled = false;
+    }
+}
+
+async function rollbackMatriculaciones() {
+    const url = document.getElementById('mat_url').value.trim();
+    const sheet = document.getElementById('mat_sheet').value;
+    
+    if(!url || !sheet) return toast('Debe cargar la URL y seleccionar la pestaña', 'warning');
+    
+    if (!confirm('¿Estás seguro de que deseas REVERTIR las matriculaciones? Esto buscará los usuarios marcados como "OK" en el Excel y los desmatriculará de Canvas y Teams. Esta acción no se puede deshacer.')) {
+        return;
+    }
+    
+    const btn = document.getElementById('btnRollbackMat');
+    const resultWrap = document.getElementById('matResultWrap');
+    const resultText = document.getElementById('matResultText');
+    
+    const oldText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Revirtiendo...';
+    btn.disabled = true;
+    document.getElementById('btnImportMat').disabled = true;
+    
+    resultWrap.style.display = 'block';
+    resultWrap.className = 'alert alert-danger border-danger';
+    resultText.innerHTML = '<b>Iniciando reversión...</b> Esto puede demorar varios minutos. No cierre esta ventana.';
+    
+    try {
+        const res = await api.post('/excel/rollback', { url: url, sheet_name: sheet });
+        
+        resultWrap.className = 'alert alert-warning border-warning';
+        
+        let html = `<b>Reversión Finalizada.</b><br>
+                    🔄 <b>Registros Revertidos (Desmatriculados):</b> ${res.succeeded.length}<br>
+                    ❌ <b>Errores al revertir:</b> ${res.failed.length}`;
+        
+        if (res.failed.length > 0) {
+            html += `<br><br><b>Detalle de errores:</b><ul class="mb-0 mt-1 small">`;
+            res.failed.slice(0, 10).forEach(f => {
+                html += `<li><b>${f.correo || f.nombre}:</b> ${f.error}</li>`;
+            });
+            if (res.failed.length > 10) html += `<li>...y ${res.failed.length - 10} más.</li>`;
+            html += `</ul>`;
+        }
+        
+        html += `<br><br><b>El archivo Excel en OneDrive ha sido actualizado eliminando el "OK".</b>`;
+        resultText.innerHTML = html;
+        toast('Reversión completada.', 'warning');
+        
+    } catch (e) {
+        resultWrap.className = 'alert alert-danger border-danger';
+        resultText.innerHTML = `<b>Error Crítico al revertir:</b> ${e.message}`;
+        toast('Error durante la reversión', 'danger');
+    } finally {
+        btn.innerHTML = oldText;
+        btn.disabled = false;
+        document.getElementById('btnImportMat').disabled = false;
+    }
+}

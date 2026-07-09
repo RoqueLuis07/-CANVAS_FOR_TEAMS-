@@ -49,9 +49,7 @@
                   </select>
                 </div>
                 
-                <div class="d-flex justify-content-end">
-                    <button type="button" class="btn btn-success" id="btnUploadCourses" onclick="doPreviewCourses()"><i class="bi bi-lightning-charge me-1"></i>Pre-visualizar</button>
-                </div>
+                
               </div>
             </div>
         </div>
@@ -579,7 +577,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function cancelPreviewCourses() {
     document.getElementById('coursesOdPreviewWrap').style.display = 'none';
-    document.getElementById('coursesOdFormWrap').style.display = 'block';
 }
 
 async function fetchCoursesSheets() {
@@ -631,7 +628,7 @@ async function doPreviewCourses() {
     return;
   }
 
-  const btn = document.getElementById('btnUploadCourses');
+  const btn = document.getElementById('btnConfirmCourses');
   setLoading(btn, true);
   toast('Analizando la planilla...', 'info');
 
@@ -679,7 +676,7 @@ async function doPreviewCourses() {
     window._coursesOdCurrentUrl = urlInput;
     window._coursesOdCurrentSheet = sheetInput;
     
-    document.getElementById('coursesOdFormWrap').style.display = 'none';
+    
     document.getElementById('coursesOdPreviewWrap').style.display = 'block';
   } catch (e) {
     toast('Error: ' + (e.detail || e.message || e), 'danger');
