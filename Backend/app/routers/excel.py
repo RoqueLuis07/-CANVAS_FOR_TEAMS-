@@ -1057,7 +1057,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                             sheet_cc_list.append(email)
 
         if not col_nombre or not col_cedula:
-            continue
+            raise HTTPException(status_code=400, detail="No se encontraron las columnas requeridas (\'Nombre\' y \'Cédula\') en la pestaña seleccionada.")
 
         next_col = ws.max_column + 1
             
@@ -1074,6 +1074,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             ws.cell(row=header_row_idx, column=col_enviado, value="Enviado").font = Font(bold=True)
             
         global_team_id = ""
+        title_val = str(ws.cell(row=1, column=1).value or "").strip()
         global_team_name = title_val
         if global_team_name and col_usuario:
             team_id_from_header = str(ws.cell(row=1, column=col_usuario).value or "").strip()
@@ -1264,6 +1265,9 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+
+    if not result.succeeded and not result.failed:
+        raise HTTPException(status_code=400, detail="No se procesó ninguna fila. Todas las filas ya estaban marcadas como procesadas, tenían correo asignado, o la planilla estaba vacía.")
 
     return result
 
