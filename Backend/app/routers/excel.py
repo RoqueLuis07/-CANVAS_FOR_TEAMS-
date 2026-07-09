@@ -2278,7 +2278,7 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Matricu
     header_row_idx = None
     for row_idx in range(1, min(10, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
-        if any("usuario" in v.lower() or "correo" in v.lower() or "cedula" in v.lower() for v in row_vals):
+        if any("usuario" in v.lower() or "correo" in v.lower() or "cedula" in v.lower() or "sis" in v.lower() or "alumno" in v.lower() for v in row_vals):
             header_row_idx = row_idx
             headers = row_vals
             break
@@ -2319,7 +2319,7 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
     for row_idx in range(1, min(10, ws.max_row + 1)):
         row_vals = [c.value for c in ws[row_idx]]
         row_strs = [str(v).strip().lower() for v in row_vals if v is not None]
-        if any(keyword in r for r in row_strs for keyword in ["usuario", "correo", "email", "cedula", "sis", "alumno", "rol", "canvas", "teams"]):
+        if any(keyword in r for r in row_strs for keyword in ["usuario", "correo", "email", "cedula", "sis", "alumno"]):
             header_row_idx = row_idx
             headers = {c.value: c.column for c in ws[row_idx] if c.value}
             break
