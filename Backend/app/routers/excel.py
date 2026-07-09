@@ -1034,7 +1034,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         return idx
             return None
 
-        col_nombre = get_col_idx("nombre")
+        col_nombre = get_col_idx("nombre", "alumno", "estudiante")
         col_cedula = get_col_idx("cedula", "c├®dula", "ci")
         col_correo = get_col_idx("correo")
         col_curso = get_col_idx("curso", "id curso", "canvas")
@@ -1057,7 +1057,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                             sheet_cc_list.append(email)
 
         if not col_nombre or not col_cedula:
-            raise HTTPException(status_code=400, detail="No se encontraron las columnas requeridas (\'Nombre\' y \'Cédula\') en la pestaña seleccionada.")
+            raise HTTPException(status_code=400, detail=f"No se encontraron las columnas requeridas (\'Nombre\' y \'Cédula\') en la pestaña seleccionada. Columnas detectadas: {list(headers_dict.keys()) if headers_dict else \'Ninguna\'}")
 
         next_col = ws.max_column + 1
             
@@ -1678,7 +1678,7 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
                     return idx
         return None
 
-    col_nombre = get_col_idx("nombre")
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
     col_enviado = get_col_idx("enviado", "estado")
 
@@ -1765,9 +1765,9 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
                     return idx
         return None
 
-    col_nombre = get_col_idx("nombre")
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
-    col_cedula = get_col_idx("cedula", "cédula", "ci")
+    col_cedula = get_col_idx("cedula", "cédula", "ci", "documento", "dni")
     col_enviado = get_col_idx("enviado", "estado")
     
     col_cc = get_col_idx("cc", "copia")
@@ -1913,7 +1913,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
                     return idx
         return None
 
-    col_nombre = get_col_idx("nombre")
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_cedula = get_col_idx("cedula", "cdula", "ci")
     col_correo = get_col_idx("correo", "email")
     col_plat = get_col_idx("plataforma")
@@ -2006,7 +2006,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     return idx
         return None
 
-    col_nombre = get_col_idx("nombre")
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_cedula = get_col_idx("cedula", "cdula", "ci")
     col_correo = get_col_idx("correo", "email")
     col_plat = get_col_idx("plataforma")
@@ -2767,8 +2767,8 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     return idx
         return None
 
-    col_nombre = get_col_idx("nombre")
-    col_cedula = get_col_idx("cedula", "cédula", "ci")
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
+    col_cedula = get_col_idx("cedula", "cédula", "ci", "documento", "dni")
     col_correo = get_col_idx("correo", "email")
     col_plataforma = get_col_idx("plataforma", "platform")
     
