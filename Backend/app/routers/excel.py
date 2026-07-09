@@ -2318,7 +2318,7 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
     user_col, canvas_col, teams_col, rol_col, env_col = None, None, None, None, None
     for h, col_idx in headers.items():
         n = _norm(h)
-        if "usuario" in n or "correo" in n or "email" in n or "cedula" in n:
+        if "usuario" in n or "correo" in n or "email" in n or "cedula" in n or "sis" in n or "alumno" in n:
             user_col = col_idx
         elif "curso" in n or "canvas" in n:
             canvas_col = col_idx
