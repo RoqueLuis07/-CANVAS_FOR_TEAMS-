@@ -2375,8 +2375,7 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
         ws.cell(row=header_row_idx, column=env_col, value="Enviado")
 
     # Import dependencies specifically inside function to avoid circular imports or missing vars
-    from app.routers.sync import _enroll_single
-    from app.models.sync import UnifiedEnrollment
+    from app.routers.sync import _enroll_single, UnifiedEnrollment
 
     tasks = []
     
