@@ -2525,6 +2525,22 @@ async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Carga Masiva Genérica (OneDrive)
 # ═══════════════════════════════════════════════════════════════════════════════
+@router.post("/excel/masivo/sheets", response_model=list[str])
+async def get_masivo_sheets(req: UrlOnlyRequest) -> list[str]:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        sheets = wb.sheetnames
+        wb.close()
+        return sheets
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
 
 @router.post("/excel/masivo/preview", summary="Previsualizar Carga Masiva de Usuarios")
 async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> dict:
