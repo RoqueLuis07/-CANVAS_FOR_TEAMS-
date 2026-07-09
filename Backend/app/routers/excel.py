@@ -2351,7 +2351,16 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
         rol_val = str(ws.cell(row=r_idx, column=rol_col).value or "estudiante").strip().lower() if rol_col else "estudiante"
         
         # Mapear rol
-        mapped_role = "teacher" if "prof" in rol_val or "own" in rol_val or "propiet" in rol_val else "student"
+        if "asistente" in rol_val or "ta" in rol_val:
+            mapped_role = "ta"
+        elif "diseñador" in rol_val or "designer" in rol_val:
+            mapped_role = "designer"
+        elif "observador" in rol_val or "observer" in rol_val:
+            mapped_role = "observer"
+        elif "prof" in rol_val or "own" in rol_val or "propiet" in rol_val:
+            mapped_role = "teacher"
+        else:
+            mapped_role = "student"
 
         enroll_item = UnifiedEnrollment(
             user_identifier=user_val,

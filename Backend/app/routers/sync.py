@@ -109,8 +109,14 @@ async def _enroll_single(item: UnifiedEnrollment):
     except Exception as e:
         return {"status": "error", "message": str(e), "item": item.dict()}
 
-    # 2. Canvas Enrollment
-    canvas_role = "TeacherEnrollment" if item.role == "teacher" else "StudentEnrollment"
+    canvas_roles = {
+        "teacher": "TeacherEnrollment",
+        "ta": "TaEnrollment",
+        "designer": "DesignerEnrollment",
+        "observer": "ObserverEnrollment",
+        "student": "StudentEnrollment"
+    }
+    canvas_role = canvas_roles.get(item.role, "StudentEnrollment")
     canvas_payload = {
         "enrollment": {
             "user_id": canvas_user_id,
