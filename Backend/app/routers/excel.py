@@ -124,7 +124,7 @@ def _find_header_row_and_headers(ws, max_scan_rows=15):
         valid_cols = [v for v in row_vals if v]
         if len(valid_cols) >= 2:
             row_str = " ".join(valid_cols).lower()
-            if any(keyword in row_str for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "ci", "id canvas", "id teams"]):
+            if any(keyword in row_str for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "cédula", "documento", "id canvas", "id teams"]):
                 headers_dict = {}
                 for col_idx, val in enumerate(row_vals, 1):
                     if val:
