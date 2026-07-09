@@ -2312,8 +2312,18 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
         raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
 
     ws = wb[req.sheet_name]
-    headers = {c.value: c.column for c in ws[1] if c.value}
     
+    # Find header row
+    header_row_idx = 1
+    headers = {}
+    for row_idx in range(1, min(10, ws.max_row + 1)):
+        row_vals = [c.value for c in ws[row_idx]]
+        row_strs = [str(v).strip().lower() for v in row_vals if v is not None]
+        if any(keyword in r for r in row_strs for keyword in ["usuario", "correo", "email", "cedula", "sis", "alumno", "rol", "canvas", "teams"]):
+            header_row_idx = row_idx
+            headers = {c.value: c.column for c in ws[row_idx] if c.value}
+            break
+
     # Identify columns
     user_col, canvas_col, teams_col, rol_col, env_col = None, None, None, None, None
     for h, col_idx in headers.items():
@@ -2333,7 +2343,7 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
         raise HTTPException(status_code=400, detail="El archivo debe tener al menos una columna de 'usuario' y una de 'curso/canvas' o 'equipo/teams'.")
     if not env_col:
         env_col = ws.max_column + 1
-        ws.cell(row=1, column=env_col, value="Enviado")
+        ws.cell(row=header_row_idx, column=env_col, value="Enviado")
 
     # Import dependencies specifically inside function to avoid circular imports or missing vars
     from app.routers.sync import _enroll_single
@@ -2383,7 +2393,7 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
             result.failed.append({"correo": user_val, "error": msg})
             ws.cell(row=r_idx, column=env_col, value=f"Error: {msg}").fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
-    for r_idx in range(2, ws.max_row + 1):
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         tasks.append(process_row(r_idx))
     
     # Process tasks in chunks to avoid rate limiting
