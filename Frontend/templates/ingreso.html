@@ -872,7 +872,7 @@ async function previewDocentes() {
     const sheet = document.getElementById('doc_sheet').value;
     if (!url || !sheet) return toast('Completa la URL y la pestaña', 'warning');
     
-    const btn = document.getElementById('btnPreviewDocentes');
+    const btn = document.getElementById('btnImportDocentes');
     setLoading(btn, true);
     
     try {
@@ -976,7 +976,7 @@ async function previewDiplomados() {
     const sheet = document.getElementById('diplomadoSheet').value;
     if (!url || !sheet) return toast('Completa la URL y la pestaña', 'warning');
     
-    const btn = document.getElementById('btnPreviewDiplomados');
+    const btn = document.getElementById('btnImportDiplomados');
     setLoading(btn, true);
     
     try {
@@ -1072,7 +1072,7 @@ async function previewMasivo() {
     const sheet = document.getElementById('masivoSheet').value;
     if (!url || !sheet) return toast('Completa la URL y la pestaña', 'warning');
     
-    const btn = document.getElementById('btnPreviewMasivo');
+    const btn = document.getElementById('btnImportMasivo');
     setLoading(btn, true);
     
     try {
