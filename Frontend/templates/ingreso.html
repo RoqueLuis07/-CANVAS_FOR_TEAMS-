@@ -404,18 +404,11 @@
 
 {% endblock %}
 {% block scripts %}
-    <!-- Jspreadsheet CE for Web Excel -->
-    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/index.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/jspreadsheet.min.css" type="text/css" />
+    <!-- Jspreadsheet CE for Web Excel (jsuites MUST load before jspreadsheet) -->
     <script src="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.css" type="text/css" />
-    
-        </div>
-        
-      </div>
-    </div>
-  </div>
-</div>
+    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/index.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/jspreadsheet.min.css" type="text/css" />
 
 <!-- Modal Ingreso Preview -->
 <div class="modal fade" id="modalIngresoPreview" tabindex="-1">
