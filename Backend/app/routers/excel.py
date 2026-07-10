@@ -11,6 +11,7 @@ import unicodedata
 from typing import Any
 
 import openpyxl
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import pandas as pd
@@ -133,6 +134,26 @@ def _find_header_row_and_headers(ws, max_scan_rows=15):
                 return row_idx, headers_dict, row_vals
                 
     return None, {}, []
+
+
+def _safe_set_cell(ws, row: int, column: int, value):
+    """Set a cell's value, unmerging its range first if it's part of one.
+
+    Plantillas de OneDrive suelen tener un título en la fila 1 combinado
+    (merge) a lo largo de varias columnas. Si ese merge llega a cubrir la
+    columna donde el sistema necesita escribir (ej. el ID del equipo de
+    Teams), openpyxl lanza AttributeError al intentar asignar `.value` en
+    una MergedCell. Deshacemos el merge puntual para evitar el crash.
+    """
+    cell = ws.cell(row=row, column=column)
+    if isinstance(cell, MergedCell):
+        for merged_range in list(ws.merged_cells.ranges):
+            if cell.coordinate in merged_range:
+                ws.unmerge_cells(str(merged_range))
+                break
+        cell = ws.cell(row=row, column=column)
+    cell.value = value
+    return cell
 
 
 # ── Template generation ───────────────────────────────────────────────────────
@@ -1065,15 +1086,15 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             
         if not col_usuario:
             col_usuario = next_col
-            ws.cell(row=header_row_idx, column=col_usuario, value="Usuario").font = Font(bold=True)
+            _safe_set_cell(ws, header_row_idx, col_usuario, "Usuario").font = Font(bold=True)
             next_col += 1
         if not col_contra:
             col_contra = next_col
-            ws.cell(row=header_row_idx, column=col_contra, value="Contrase├▒a").font = Font(bold=True)
+            _safe_set_cell(ws, header_row_idx, col_contra, "Contraseña").font = Font(bold=True)
             next_col += 1
         if not col_enviado:
             col_enviado = next_col
-            ws.cell(row=header_row_idx, column=col_enviado, value="Enviado").font = Font(bold=True)
+            _safe_set_cell(ws, header_row_idx, col_enviado, "Enviado").font = Font(bold=True)
             
         global_team_id = ""
         title_val = str(ws.cell(row=1, column=1).value or "").strip()
@@ -1108,7 +1129,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         )
                         global_team_id = new_team.get("id", "")
                     if global_team_id:
-                        ws.cell(row=1, column=col_usuario, value=global_team_id).font = Font(bold=True)
+                        _safe_set_cell(ws, 1, col_usuario, global_team_id).font = Font(bold=True)
                 except Exception as e:
                     print(f"Error pre-creando equipo: {e}")
         
