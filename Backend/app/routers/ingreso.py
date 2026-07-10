@@ -28,6 +28,7 @@ from app.models.canvas import BulkResult
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
 from app.services import user_service
+from app.services import email_service
 
 router = APIRouter(prefix="/ingreso", tags=["Nuevo Ingreso"])
 _ACCOUNT = settings.canvas_account_id
@@ -392,6 +393,24 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
                 except Exception as exc:
                     results["canvas_enrollments"].append({"course_id": course_id, "status": "error", "error": _err(exc)})
 
+    # ── Email de bienvenida ──────────────────────────────────────
+    canvas_ok = results.get("canvas", {}).get("status") in ("ok", "exists")
+    teams_ok = results.get("teams", {}).get("status") in ("ok", "exists")
+    if student.send_email and student.personal_email and (canvas_ok or teams_ok):
+        try:
+            await email_service.send_credentials_email(
+                to_email=student.personal_email,
+                full_name=creds["full_name"],
+                login_id=login_id,
+                password=creds["password"],
+                program_type=student.program_type,
+                program_name=student.program_name,
+                extra_cc=student.cc,
+            )
+            results["email"] = "sent"
+        except Exception as exc:
+            results["email"] = f"error: {_err(exc)}"
+
     return results
 
 
@@ -474,17 +493,24 @@ async def create_students_bulk(body: BulkStudentsIn) -> BulkResult:
 
 @router.post("/resend-credentials", summary="Reenviar credenciales a un usuario ya existente")
 async def resend_credentials(body: ResendCredentialsIn) -> dict[str, Any]:
-    """Recalcula las credenciales institucionales de un usuario ya creado.
-
-    El envío de correo no está implementado en este entorno (no hay cliente
-    SMTP configurado), así que se reporta honestamente en `email`.
-    """
+    """Recalcula las credenciales institucionales de un usuario ya creado
+    y reenvía el correo de bienvenida."""
     creds, _ = await user_service.generate_unique_credentials(body.full_name, body.cedula, body.platform)
-    return {
-        "student": body.full_name,
-        "credentials": creds,
-        "email": "error: el envío de correo no está configurado en este entorno",
-    }
+    result: dict[str, Any] = {"student": body.full_name, "credentials": creds}
+    try:
+        await email_service.send_credentials_email(
+            to_email=body.personal_email,
+            full_name=creds["full_name"],
+            login_id=creds["email"],
+            password=creds["password"],
+            program_type=body.program_type,
+            program_name=body.program_name,
+            extra_cc=body.cc,
+        )
+        result["email"] = "sent"
+    except Exception as exc:
+        result["email"] = f"error: {_err(exc)}"
+    return result
 
 
 @router.post("/bulk-resend", summary="Reenviar credenciales masivamente")

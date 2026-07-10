@@ -25,6 +25,7 @@ from app.models.canvas import BulkResult
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
 from app.services import user_service
+from app.services import email_service
 from app.services.teams_client import create_team_via_group
 from app.core import jobs
 
@@ -124,12 +125,19 @@ def _find_header_row_and_headers(ws, max_scan_rows=15):
     Escanea las primeras `max_scan_rows` buscando la fila de encabezados.
     Retorna (header_row_idx, dict_de_headers_normalizados, array_de_headers) o (None, {}, []).
     """
+    keywords = ["nombre", "curso", "usuario", "correo", "cedula", "cédula", "documento", "id canvas", "id teams"]
     for row_idx in range(1, min(max_scan_rows, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, min(50, ws.max_column + 1))]
         valid_cols = [v for v in row_vals if v]
         if len(valid_cols) >= 2:
             row_str = " ".join(valid_cols).lower()
-            if any(keyword in row_str for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "cédula", "documento", "id canvas", "id teams"]):
+            matches = sum(1 for keyword in keywords if keyword in row_str)
+            # Una fila de título (ej. "Nombre del Diplomado" en la fila 1, junto
+            # al ID del equipo) puede coincidir con una sola palabra clave por
+            # casualidad. Una fila de encabezados real siempre tiene varias
+            # columnas reconocibles, así que exigimos 2+ coincidencias o
+            # suficientes celdas no vacías para no confundirlas.
+            if matches >= 2 or (matches >= 1 and len(valid_cols) >= 4):
                 headers_dict = {}
                 for col_idx, val in enumerate(row_vals, 1):
                     if val:
@@ -691,7 +699,19 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                 skip_email = True
 
             if do_email and p_email and not skip_email:
-                entry["email"] = "error: el envío de correo no está configurado en este entorno"
+                try:
+                    await email_service.send_credentials_email(
+                        to_email=p_email,
+                        full_name=creds["full_name"],
+                        login_id=login_id,
+                        password=creds["password"],
+                        program_type=program_type,
+                        program_name=program_name,
+                        extra_cc=extra_cc,
+                    )
+                    entry["email"] = "sent"
+                except Exception as exc:
+                    entry["email"] = f"error: {exc}"
 
             result.succeeded.append(entry)
         except Exception as exc:
@@ -1123,7 +1143,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         global_team_name = title_val
         if global_team_name and col_usuario:
             team_id_from_header = str(ws.cell(row=1, column=col_usuario).value or "").strip()
-            if team_id_from_header and len(team_id_from_header) > 10:
+            if _UUID_RE.match(team_id_from_header):
                 global_team_id = team_id_from_header
             else:
                 try:
@@ -1283,7 +1303,21 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id})
 
                 if not error:
-                    ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
+                    email_note = ""
+                    if correo:
+                        try:
+                            await email_service.send_credentials_email(
+                                to_email=correo,
+                                full_name=creds["full_name"],
+                                login_id=login_id,
+                                password=pwd,
+                                program_type="diplomado",
+                                program_name=curso_nombre or global_team_name,
+                                extra_cc=sheet_cc_list,
+                            )
+                        except Exception as email_exc:
+                            email_note = f" (correo no enviado: {email_exc})"
+                    ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK{email_note}")
                     ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
                 else:
                     ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error}")
@@ -3256,6 +3290,10 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         email_sent = False
         if not error_msg and correo and correo != "None":
             try:
+                await email_service.send_credentials_email(
+                    to_email=correo, full_name=creds["full_name"],
+                    login_id=login_id, password=pwd,
+                )
                 email_sent = True
             except Exception as e:
                 error_msg = f"Creado OK, pero falló el correo: {e}"
