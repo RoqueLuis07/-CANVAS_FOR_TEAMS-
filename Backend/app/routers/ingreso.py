@@ -344,6 +344,7 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
                         "mailNickname": creds["login_id"].replace(".", "_"),
                         "usageLocation": settings.usage_location,
                         "accountEnabled": True,
+                        "jobTitle": "Docente" if student.role == "teacher" else "Alumno",
                         "passwordProfile": {
                             "forceChangePasswordNextSignIn": True,
                             "password": creds["password"],

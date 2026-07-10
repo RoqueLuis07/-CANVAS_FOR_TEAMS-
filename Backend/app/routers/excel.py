@@ -623,6 +623,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                         "mailNickname": creds["login_id"].replace(".", "_"),
                         "usageLocation": settings.usage_location,
                         "accountEnabled": True,
+                        "jobTitle": "Docente" if role == "teacher" else "Alumno",
                         "passwordProfile": {
                             "forceChangePasswordNextSignIn": True,
                             "password": creds["password"],
@@ -1148,6 +1149,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                         "usageLocation": settings.usage_location,
                         "accountEnabled": True,
+                        "jobTitle": "Alumno",
                         "passwordProfile": {
                             "forceChangePasswordNextSignIn": True,
                             "password": pwd,
@@ -2087,6 +2089,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
+                    "jobTitle": "Docente",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
@@ -2874,6 +2877,7 @@ async def import_diplomados_json(req: JsonDataRequest):
                     "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
+                    "jobTitle": "Alumno",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
@@ -3149,6 +3153,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
+                    "jobTitle": "Alumno",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
