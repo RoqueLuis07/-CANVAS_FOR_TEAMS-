@@ -35,6 +35,9 @@ router = APIRouter(tags=["Excel Import/Export"])
 _ACCOUNT = settings.canvas_account_id
 logger = logging.getLogger(__name__)
 
+# Propietarios que deben agregarse a todo Team de Diplomados nuevo, sin excepción.
+_DIPLOMADO_DEFAULT_OWNERS = ["ldure@usil.edu.py", "jfleitas@usil.edu.py", "ralvarez@usil.edu.py"]
+
 # Límites de seguridad
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_ROWS = 10000
@@ -1113,13 +1116,13 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         nickname = re.sub(r'[^a-zA-Z0-9]', '', global_team_name).lower()
                         if not nickname: nickname = f"grupo{int(time.time())}"
                         
-                        owner_ids = []
+                        owner_ids = list(_DIPLOMADO_DEFAULT_OWNERS)
                         try:
                             admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
                             if admin_user and admin_user.get("id"):
                                 owner_ids.append(admin_user["id"])
                         except: pass
-                        
+
                         new_team = await graph.create_team_via_group(
                             display_name=global_team_name,
                             mail_nickname=nickname,
@@ -1224,7 +1227,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                                 mail_nickname=nickname,
                                 description=f"Grupo para {curso_nombre}",
                                 visibility="Private",
-                                owner_ids=[]
+                                owner_ids=list(_DIPLOMADO_DEFAULT_OWNERS)
                             )
                             target_equipo = new_team.get("id")
                             
@@ -2951,7 +2954,7 @@ async def import_diplomados_json(req: JsonDataRequest):
                             mail_nickname=nickname,
                             description=f"Grupo para {curso_nombre}",
                             visibility="Private",
-                            owner_ids=[]
+                            owner_ids=list(_DIPLOMADO_DEFAULT_OWNERS)
                         )
                         target_equipo = new_team.get("id")
                 
