@@ -617,13 +617,13 @@ function startMatriculacionPolling(jobId, oldBtnText) {
     }, 2000); // Poll every 2 seconds
 }
 
-async function rollbackMatriculaciones() {
+async def rollbackMatriculaciones() {
     const url = document.getElementById('mat_url').value.trim();
     const sheet = document.getElementById('mat_sheet').value;
     
     if(!url || !sheet) return toast('Debe cargar la URL y seleccionar la pestaña', 'warning');
     
-    if (!confirm('¿Estás seguro de que deseas REVERTIR las matriculaciones? Esto buscará los usuarios marcados como "OK" en el Excel y los desmatriculará de Canvas y Teams. Esta acción no se puede deshacer.')) {
+    if (!confirm('¿Estás seguro de que deseas REVERTIR las matriculaciones? Esto buscará los usuarios marcados como "OK" en la pestaña seleccionada y los desmatriculará de Canvas y Teams. Esta acción no se puede deshacer.')) {
         return;
     }
     
@@ -638,39 +638,99 @@ async function rollbackMatriculaciones() {
     
     resultWrap.style.display = 'block';
     resultWrap.className = 'alert alert-danger border-danger';
-    resultText.innerHTML = '<b>Iniciando reversión...</b> Esto puede demorar varios minutos. No cierre esta ventana.';
+    resultText.innerHTML = '<b>Iniciando reversión en segundo plano...</b> Preparando archivo...';
     
     try {
         const res = await api.post('/excel/rollback', { url: url, sheet_name: sheet });
         
-        resultWrap.className = 'alert alert-warning border-warning';
-        
-        let html = `<b>Reversión Finalizada.</b><br>
-                    🔄 <b>Registros Revertidos (Desmatriculados):</b> ${res.succeeded.length}<br>
-                    ❌ <b>Errores al revertir:</b> ${res.failed.length}`;
-        
-        if (res.failed.length > 0) {
-            html += `<br><br><b>Detalle de errores:</b><ul class="mb-0 mt-1 small">`;
-            res.failed.slice(0, 10).forEach(f => {
-                html += `<li><b>${f.correo || f.nombre}:</b> ${f.error}</li>`;
-            });
-            if (res.failed.length > 10) html += `<li>...y ${res.failed.length - 10} más.</li>`;
-            html += `</ul>`;
+        if (res.job_id) {
+            toast('Reversión iniciada en segundo plano', 'warning');
+            startRollbackPolling(res.job_id, oldText);
+        } else {
+            throw new Error("No se recibió ID del trabajo de reversión.");
         }
-        
-        html += `<br><br><b>El archivo Excel en OneDrive ha sido actualizado eliminando el "OK".</b>`;
-        resultText.innerHTML = html;
-        toast('Reversión completada.', 'warning');
         
     } catch (e) {
         resultWrap.className = 'alert alert-danger border-danger';
-        resultText.innerHTML = `<b>Error Crítico al revertir:</b> ${e.message}`;
+        resultText.innerHTML = `<b>Error Crítico al iniciar reversión:</b> ${e.message}`;
         toast('Error durante la reversión', 'danger');
-    } finally {
         btn.innerHTML = oldText;
         btn.disabled = false;
         document.getElementById('btnImportMat').disabled = false;
     }
+}
+
+let rollbackPollInterval = null;
+
+function startRollbackPolling(jobId, oldBtnText) {
+    const resultWrap = document.getElementById('matResultWrap');
+    const resultText = document.getElementById('matResultText');
+    const btn = document.getElementById('btnRollbackMat');
+    
+    if (rollbackPollInterval) clearInterval(rollbackPollInterval);
+    
+    resultText.innerHTML = `
+        <div class="mb-2"><b>Revirtiendo registros...</b> (Job #${jobId})</div>
+        <div class="progress" style="height: 20px;">
+          <div id="rollbackProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-danger" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+        <div id="rollbackProgressDetail" class="mt-2 small text-muted">Inicializando reversión...</div>
+    `;
+    
+    rollbackPollInterval = setInterval(async () => {
+        try {
+            const job = await api.get(`/excel/jobs/${jobId}`);
+            
+            if (job) {
+                const total = job.data_json ? JSON.parse(job.data_json).total_to_process : 0;
+                const processed = job.result_count + job.error_count;
+                let percent = 0;
+                
+                if (total > 0) {
+                    percent = Math.round((processed / total) * 100);
+                } else if (job.status === 'completed') {
+                    percent = 100;
+                } else {
+                    percent = 10;
+                }
+                
+                const bar = document.getElementById('rollbackProgressBar');
+                if (bar) {
+                    bar.style.width = `${percent}%`;
+                    bar.innerText = `${percent}%`;
+                }
+                
+                const detail = document.getElementById('rollbackProgressDetail');
+                if (detail) {
+                    detail.innerHTML = `Desmatriculados: ${job.result_count} | Errores: ${job.error_count} ${total > 0 ? '| Total a revertir: ' + total : ''}`;
+                }
+                
+                if (job.status === 'completed' || job.status === 'failed') {
+                    clearInterval(rollbackPollInterval);
+                    btn.innerHTML = oldBtnText;
+                    btn.disabled = false;
+                    document.getElementById('btnImportMat').disabled = false;
+                    
+                    if (bar) {
+                        bar.classList.remove('progress-bar-animated');
+                        bar.classList.remove('progress-bar-striped');
+                    }
+                    
+                    if (job.status === 'completed') {
+                        resultWrap.className = job.error_count > 0 ? 'alert alert-warning border-warning' : 'alert alert-success border-success';
+                        detail.innerHTML += `<br><br><b>Reversión Finalizada.</b> ${job.error_message || ''}`;
+                        toast('Reversión completada.', 'success');
+                    } else {
+                        resultWrap.className = 'alert alert-danger border-danger';
+                        detail.innerHTML += `<br><br><b>Error general:</b> ${job.error_message}`;
+                        toast('La reversión falló.', 'danger');
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Error polling rollback job", e);
+        }
+    }, 2000);
 }
 </script>
 {% endblock %}

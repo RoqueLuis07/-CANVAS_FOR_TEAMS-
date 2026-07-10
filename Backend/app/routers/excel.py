@@ -2533,8 +2533,129 @@ async def get_job_status(job_id: int):
         raise HTTPException(status_code=404, detail="Job no encontrado.")
     return job
 
-@router.post("/excel/rollback", response_model=BulkResult)
-async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:
+async def _process_rollback_bg(job_id: int, req: DiplomadosUrlRequest, contents: bytes, encoded_url: str):
+    await jobs.start_job(job_id)
+    try:
+        import io, openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        await jobs.fail_job(job_id, f"El archivo no es un Excel válido: {e}")
+        return
+
+    if req.sheet_name not in wb.sheetnames:
+        await jobs.fail_job(job_id, f"La pestaña '{req.sheet_name}' no existe en el archivo.")
+        return
+
+    ws = wb[req.sheet_name]
+    
+    def _norm(s):
+        import unicodedata
+        return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
+        
+    header_row_idx = 1
+    headers = {}
+    for r in range(1, min(10, ws.max_row + 1)):
+        row_vals = [str(ws.cell(row=r, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        if any("nombre" in _norm(v) for v in row_vals):
+            header_row_idx = r
+            headers = {_norm(v): c for c, v in enumerate(row_vals, start=1) if v}
+            break
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_usuario = get_col_idx("usuario")
+    col_enviado = get_col_idx("enviado", "estado")
+    col_curso = get_col_idx("curso", "id curso", "canvas")
+    col_equipo = get_col_idx("equipo", "id equipo", "teams")
+    col_contra = get_col_idx("contrasena", "contraseña", "clave")
+
+    if not col_usuario or not col_enviado:
+        await jobs.fail_job(job_id, "No se encontraron las columnas necesarias (Usuario, Enviado/Estado).")
+        return
+
+    # Filter rows to rollback
+    valid_rows = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip().lower()
+        login_id = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        if login_id and login_id != "None" and ("ok" in enviado or "completado" in enviado or "creado" in enviado or "✅" in enviado):
+            valid_rows.append(r_idx)
+
+    success_count = 0
+    error_count = 0
+
+    async def process_rollback_row(r_idx):
+        nonlocal success_count, error_count
+        login_id = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
+        id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
+        
+        error = ""
+        uid = None
+        try:
+            user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
+            if user_data and user_data.get("id"):
+                uid = user_data["id"]
+        except: pass
+        
+        # Canvas Rollback
+        if id_curso and id_curso != "None":
+            try:
+                ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
+                if ex_c and len(ex_c) > 0:
+                    cid = ex_c[0]["id"]
+                    await canvas.remove_user_from_course(id_curso, str(cid))
+            except Exception as e:
+                error += f"CanvasUnenroll: {e} | "
+        
+        # Teams Rollback
+        if id_equipo and id_equipo != "None" and uid:
+            try:
+                await graph.remove_member_from_group(id_equipo, uid)
+                await graph.remove_owner_from_group(id_equipo, uid)
+            except Exception as e:
+                error += f"TeamsUnenroll: {e} | "
+                
+        if error:
+            error_count += 1
+        else:
+            ws.cell(row=r_idx, column=col_enviado, value="")
+            if col_contra:
+                ws.cell(row=r_idx, column=col_contra, value="")
+            ws.cell(row=r_idx, column=col_usuario, value="")
+            success_count += 1
+
+    import asyncio
+    batch_size = 5
+    for i in range(0, len(valid_rows), batch_size):
+        chunk = valid_rows[i:i+batch_size]
+        await asyncio.gather(*(process_rollback_row(r) for r in chunk))
+        
+        await jobs.update_job_progress(
+            job_id, 
+            success_count, 
+            error_count, 
+            data_json=f'{{"total_to_process": {len(valid_rows)}, "processed": {success_count + error_count}}}'
+        )
+
+    out_io = io.BytesIO()
+    wb.save(out_io)
+    out_io.seek(0)
+    
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+        await jobs.complete_job(job_id, success_count, error_count, "Reversión y guardado en OneDrive completados.")
+    except Exception as e:
+        await jobs.complete_job(job_id, success_count, error_count, f"Procesado, pero no se pudo guardar en OneDrive: {e}")
+
+
+@router.post("/excel/rollback")
+async def rollback_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks) -> dict:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
 
@@ -2544,125 +2665,15 @@ async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
 
-    try:
-        import io, openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
-        
-    result = BulkResult(succeeded=[], failed=[])
+    job_id = await jobs.create_job(
+        job_type="rollback_masivo_onedrive",
+        operation="rollback",
+        username="admin"
+    )
     
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        
-        def _norm(s):
-            return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
-            
-        header_row_idx = 1
-        headers = {}
-        for r in range(1, min(10, ws.max_row + 1)):
-            row_vals = [str(ws.cell(row=r, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
-            if any("nombre" in _norm(v) for v in row_vals):
-                header_row_idx = r
-                headers = {_norm(v): c for c, v in enumerate(row_vals, start=1) if v}
-                break
-
-        def get_col_idx(*keys):
-            for k in keys:
-                for h, idx in headers.items():
-                    if _norm(k) in h:
-                        return idx
-            return None
-
-        col_usuario = get_col_idx("usuario")
-        col_enviado = get_col_idx("enviado", "estado")
+    bg_tasks.add_task(_process_rollback_bg, job_id, req, contents, encoded_url)
     
-        col_cc = get_col_idx("cc", "copia")
-        sheet_cc_list = []
-        if col_cc:
-            for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-                cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
-                if cc_val:
-                    for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
-                        email = email.strip()
-                        if "@" in email and email not in sheet_cc_list:
-                            sheet_cc_list.append(email)
-        col_curso = get_col_idx("curso", "id curso", "canvas")
-        col_equipo = get_col_idx("equipo", "id equipo", "teams")
-        col_contra = get_col_idx("contrasena", "contraseña", "clave")
-        
-        if not col_usuario or not col_enviado:
-            continue
-            
-        async def process_rollback_row(r_idx):
-            enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
-            login_id = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
-            id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
-            id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
-            
-            if not enviado or not login_id or login_id == "None":
-                return
-                
-            enviado_lower = enviado.lower()
-            if "ok" in enviado_lower or "completado" in enviado_lower or "creado" in enviado_lower or "✅" in enviado_lower:
-                error = ""
-                # Get User ID for Teams
-                uid = None
-                try:
-                    user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
-                    if user_data and user_data.get("id"):
-                        uid = user_data["id"]
-                except: pass
-                
-                # Canvas Rollback
-                if id_curso and id_curso != "None":
-                    try:
-                        ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
-                        if ex_c and len(ex_c) > 0:
-                            cid = ex_c[0]["id"]
-                            await canvas.remove_user_from_course(id_curso, str(cid))
-                    except Exception as e:
-                        error += f"CanvasUnenroll: {e} | "
-                
-                # Teams Rollback
-                if id_equipo and id_equipo != "None" and uid:
-                    try:
-                        await graph.remove_member_from_group(id_equipo, uid)
-                        await graph.remove_owner_from_group(id_equipo, uid)
-                    except Exception as e:
-                        error += f"TeamsUnenroll: {e} | "
-                        
-                if error:
-                    result.failed.append({"input": {"usuario": login_id}, "error": error})
-                else:
-                    ws.cell(row=r_idx, column=col_enviado, value="")
-                    if col_contra:
-                        ws.cell(row=r_idx, column=col_contra, value="")
-                    ws.cell(row=r_idx, column=col_usuario, value="")
-                    result.succeeded.append({"usuario": login_id, "status": "reverted"})
-                    
-        import asyncio
-        tasks = []
-        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-            tasks.append(process_rollback_row(r_idx))
-            
-        if tasks:
-            batch_size = 5
-            for i in range(0, len(tasks), batch_size):
-                await asyncio.gather(*tasks[i:i+batch_size])
-
-    out_io = io.BytesIO()
-    wb.save(out_io)
-    out_io.seek(0)
-    try:
-        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo revertido en OneDrive. {e}")
-
-    background_tasks = BackgroundTasks() # We can't easily inject it into the function without modifying the signature, actually we should add BackgroundTasks to the parameters. Wait! We didn't add it in the signature.
-    # We will just not log history for rollback for simplicity, or we can add it safely.
-    
-    return result
+    return {"status": "success", "job_id": job_id, "message": "Proceso de reversión iniciado en segundo plano."}
 # ═══════════════════════════════════════════════════════════════════════════════
 # Carga Masiva Genérica (OneDrive)
 # ═══════════════════════════════════════════════════════════════════════════════
