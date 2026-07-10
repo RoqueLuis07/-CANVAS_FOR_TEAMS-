@@ -617,7 +617,7 @@ function startMatriculacionPolling(jobId, oldBtnText) {
     }, 2000); // Poll every 2 seconds
 }
 
-async def rollbackMatriculaciones() {
+async function rollbackMatriculaciones() {
     const url = document.getElementById('mat_url').value.trim();
     const sheet = document.getElementById('mat_sheet').value;
     
