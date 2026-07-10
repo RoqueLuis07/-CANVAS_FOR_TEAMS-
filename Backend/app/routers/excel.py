@@ -1150,6 +1150,28 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if "✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado_lower or "ya exist" in enviado_lower or (usuario_val and "@" in usuario_val):
                 if not enviado and col_enviado:
                     ws.cell(row=r_idx, column=col_enviado, value="✅ Existente")
+                # Alumno ya creado en una corrida anterior: igual verificamos que
+                # esté agregado al grupo de Teams correspondiente (como miembro),
+                # y lo agregamos si falta — un run previo pudo haber creado la
+                # cuenta pero fallado al matricularla en el grupo.
+                if usuario_val and "@" in usuario_val:
+                    try:
+                        target_equipo = id_equipo if (id_equipo and id_equipo != "None") else global_team_id
+                        if not target_equipo and curso_nombre:
+                            target_equipo = await graph.search_group_by_name(curso_nombre)
+                        if target_equipo:
+                            user_data = await graph.get(f"/users/{usuario_val}", params={"$select": "id"})
+                            uid = user_data.get("id") if user_data else None
+                            if uid:
+                                is_member = True
+                                try:
+                                    await graph.get(f"/groups/{target_equipo}/members/{uid}", params={"$select": "id"})
+                                except Exception:
+                                    is_member = False
+                                if not is_member:
+                                    await graph.add_member_to_group(target_equipo, uid)
+                    except Exception:
+                        pass
                 return
 
             creds, status = await user_service.generate_unique_credentials(nombre, cedula, "teams")
