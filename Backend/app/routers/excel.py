@@ -852,6 +852,9 @@ class MatriculacionesPreviewResponse(BaseModel):
 
 class UrlOnlyRequest(BaseModel):
     url: str
+
+class JsonDataRequest(BaseModel):
+    data: list[dict]
 class DocentesPreviewResponse(BaseModel):
     total_rows: int
     valid_rows: int
@@ -2674,6 +2677,268 @@ async def rollback_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks
     bg_tasks.add_task(_process_rollback_bg, job_id, req, contents, encoded_url)
     
     return {"status": "success", "job_id": job_id, "message": "Proceso de reversión iniciado en segundo plano."}
+async def _process_matriculaciones_json_bg(job_id: int, data: list[dict]):
+    from app.routers.sync import _enroll_single, UnifiedEnrollment
+    import asyncio
+    import json
+    
+    await jobs.start_job(job_id)
+    
+    success_count = 0
+    error_count = 0
+    results = []
+    
+    async def process_row(row):
+        nonlocal success_count, error_count
+        user_val = str(row.get("usuario") or "").strip()
+        canvas_val = str(row.get("curso") or "").strip()
+        teams_val = str(row.get("equipo") or "").strip()
+        rol_val = str(row.get("rol") or "estudiante").strip().lower()
+        
+        if not user_val:
+            return
+            
+        if "asistente" in rol_val or "ta" in rol_val:
+            mapped_role = "ta"
+        elif "diseñador" in rol_val or "designer" in rol_val:
+            mapped_role = "designer"
+        elif "observador" in rol_val or "observer" in rol_val:
+            mapped_role = "observer"
+        elif "prof" in rol_val or "own" in rol_val or "propiet" in rol_val:
+            mapped_role = "teacher"
+        else:
+            mapped_role = "student"
+
+        enroll_item = UnifiedEnrollment(
+            user_identifier=user_val,
+            canvas_course_id=canvas_val,
+            teams_team_id=teams_val,
+            role=mapped_role
+        )
+        
+        try:
+            enroll_res = await _enroll_single(enroll_item)
+            error_msg = ""
+            if "errores" in enroll_res and enroll_res["errores"]:
+                error_msg = " | ".join(enroll_res["errores"])
+            
+            if error_msg:
+                error_count += 1
+                results.append({"usuario": user_val, "status": f"❌ {error_msg}"})
+            else:
+                success_count += 1
+                results.append({"usuario": user_val, "status": "✅ OK"})
+        except Exception as e:
+            error_count += 1
+            results.append({"usuario": user_val, "status": f"❌ Error: {e}"})
+
+    batch_size = 5
+    for i in range(0, len(data), batch_size):
+        chunk = data[i:i+batch_size]
+        await asyncio.gather(*(process_row(r) for r in chunk))
+        
+        await jobs.update_job_progress(
+            job_id, 
+            success_count, 
+            error_count, 
+            data_json=json.dumps({"total_to_process": len(data), "processed": success_count + error_count, "results": results})
+        )
+
+    await jobs.complete_job(job_id, success_count, error_count, "Matriculación finalizada.")
+
+@router.post("/excel/matriculaciones/json")
+async def import_matriculaciones_json(req: JsonDataRequest, bg_tasks: BackgroundTasks) -> dict:
+    if not req.data:
+        raise HTTPException(status_code=400, detail="No hay datos para procesar.")
+        
+    job_id = await jobs.create_job(
+        job_type="matriculacion_masiva_json",
+        operation="import",
+        username="admin"
+    )
+    
+    bg_tasks.add_task(_process_matriculaciones_json_bg, job_id, req.data)
+    return {"status": "success", "job_id": job_id, "message": "Proceso iniciado."}
+
+async def _process_rollback_json_bg(job_id: int, data: list[dict]):
+    import asyncio
+    import json
+    await jobs.start_job(job_id)
+    
+    success_count = 0
+    error_count = 0
+    results = []
+    
+    async def process_rollback_row(row):
+        nonlocal success_count, error_count
+        login_id = str(row.get("usuario") or "").strip()
+        id_curso = str(row.get("curso") or "").strip()
+        id_equipo = str(row.get("equipo") or "").strip()
+        
+        if not login_id:
+            return
+            
+        error = ""
+        uid = None
+        try:
+            user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
+            if user_data and user_data.get("id"):
+                uid = user_data["id"]
+        except: pass
+        
+        # Canvas Rollback
+        if id_curso:
+            try:
+                ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
+                if ex_c and len(ex_c) > 0:
+                    cid = ex_c[0]["id"]
+                    await canvas.remove_user_from_course(id_curso, str(cid))
+            except Exception as e:
+                error += f"CanvasUnenroll: {e} | "
+        
+        # Teams Rollback
+        if id_equipo and uid:
+            try:
+                await graph.remove_member_from_group(id_equipo, uid)
+                await graph.remove_owner_from_group(id_equipo, uid)
+            except Exception as e:
+                error += f"TeamsUnenroll: {e} | "
+                
+        if error:
+            error_count += 1
+            results.append({"usuario": login_id, "status": f"❌ {error}"})
+        else:
+            success_count += 1
+            results.append({"usuario": login_id, "status": "✅ Revertido"})
+
+    batch_size = 5
+    for i in range(0, len(data), batch_size):
+        chunk = data[i:i+batch_size]
+        await asyncio.gather(*(process_rollback_row(r) for r in chunk))
+        
+        await jobs.update_job_progress(
+            job_id, 
+            success_count, 
+            error_count, 
+            data_json=json.dumps({"total_to_process": len(data), "processed": success_count + error_count, "results": results})
+        )
+
+    await jobs.complete_job(job_id, success_count, error_count, "Reversión completada.")
+
+@router.post("/excel/rollback/json")
+async def rollback_json(req: JsonDataRequest, bg_tasks: BackgroundTasks) -> dict:
+    if not req.data:
+        raise HTTPException(status_code=400, detail="No hay datos para procesar.")
+        
+    job_id = await jobs.create_job(
+        job_type="rollback_masivo_json",
+        operation="rollback",
+        username="admin"
+    )
+    
+    bg_tasks.add_task(_process_rollback_json_bg, job_id, req.data)
+    return {"status": "success", "job_id": job_id, "message": "Proceso de reversión iniciado."}
+
+@router.post("/excel/diplomados/json")
+async def import_diplomados_json(req: JsonDataRequest):
+    if not req.data:
+        raise HTTPException(status_code=400, detail="No hay datos para procesar.")
+    if len(req.data) > 50:
+        raise HTTPException(status_code=400, detail="Límite de 50 alumnos por lote para Diplomados excedido.")
+
+    result = BulkResult(succeeded=[], failed=[])
+    
+    from app.services.users import user_service
+    import re
+    import time
+    
+    for row in req.data:
+        nombre = str(row.get("nombre") or "").strip()
+        cedula = str(row.get("cedula") or "").strip()
+        curso_nombre = str(row.get("curso_nombre") or "").strip()
+        
+        if not nombre or not cedula:
+            continue
+            
+        try:
+            creds, status = await user_service.generate_unique_credentials(nombre, cedula, "teams")
+            login_id = creds["email"]
+            pwd = creds["password"]
+            
+            error = None
+            au_id = None
+            
+            # Azure AD Creation
+            parts = creds["full_name"].strip().split()
+            try:
+                au = await graph.post("/users", {
+                    "displayName": creds["full_name"],
+                    "givenName": parts[0],
+                    "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
+                    "userPrincipalName": login_id,
+                    "mailNickname": login_id.replace(".", "_").replace("@", "_"),
+                    "usageLocation": settings.usage_location,
+                    "accountEnabled": True,
+                    "passwordProfile": {
+                        "forceChangePasswordNextSignIn": True,
+                        "password": pwd,
+                    },
+                })
+                au_id = au.get("id")
+                await graph.assign_license(au_id, settings.azure_sku_students)
+            except Exception as e:
+                if "already exists" not in str(e).lower() and "Request_BadRequest" not in str(e):
+                    error = str(e)
+                else:
+                    error = "Ya existía en Azure AD" 
+                    
+            if not error or "Ya existía" in error:
+                # Group logic
+                target_equipo = None
+                if row.get("id_equipo"):
+                    target_equipo = row.get("id_equipo")
+                elif curso_nombre:
+                    existing_tid = await graph.search_group_by_name(curso_nombre)
+                    if existing_tid:
+                        target_equipo = existing_tid
+                    else:
+                        nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
+                        if not nickname: nickname = f"grupo{int(time.time())}"
+                        new_team = await graph.create_team_via_group(
+                            display_name=curso_nombre,
+                            mail_nickname=nickname,
+                            description=f"Grupo para {curso_nombre}",
+                            visibility="Private",
+                            owner_ids=[]
+                        )
+                        target_equipo = new_team.get("id")
+                
+                if target_equipo:
+                    uid = au_id
+                    if not uid:
+                        try:
+                            user_data = await graph.get(f"/users/{login_id}", params={"$select": "id"})
+                            if user_data and user_data.get("id"):
+                                uid = user_data["id"]
+                        except: pass
+                    
+                    if uid:
+                        try:
+                            await graph.post(f"/groups/{target_equipo}/members/$ref", {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{uid}"})
+                        except Exception as e:
+                            if "already exist" not in str(e).lower():
+                                error = f"{error or ''} | TeamsEnroll: {e}"
+                                
+            if not error or "Ya existía" in error:
+                result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id, "password": pwd})
+            else:
+                result.failed.append({"input": {"cedula": cedula}, "error": error, "nombre": creds["full_name"]})
+
+        except Exception as general_e:
+            result.failed.append({"input": {"cedula": cedula}, "error": str(general_e), "nombre": nombre})
+            
+    return result
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Carga Masiva Genérica (OneDrive)
 # ═══════════════════════════════════════════════════════════════════════════════

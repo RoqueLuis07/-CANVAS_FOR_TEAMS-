@@ -128,57 +128,30 @@
         
         
         </div></div></div></div>
-          <!-- Accordion Diplomados (OneDrive) -->
+          <!-- Accordion Diplomados -->
         <div class="accordion mb-4" id="accordionDiplomados">
           <div class="accordion-item border-success shadow-sm">
             <h2 class="accordion-header" id="headingDiplomados">
               <button class="accordion-button collapsed fw-bold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDiplomados" aria-expanded="false" aria-controls="collapseDiplomados" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1));">
-                <i class="bi bi-file-earmark-excel me-2 text-success"></i> Carga Diplomados (OneDrive)
+                <i class="bi bi-file-earmark-excel me-2 text-success"></i> Carga Diplomados (Web)
               </button>
             </h2>
             <div id="collapseDiplomados" class="accordion-collapse collapse" aria-labelledby="headingDiplomados" data-bs-parent="#accordionDiplomados">
               <div class="accordion-body p-4">
                 <div class="alert alert-success mb-4">
-                  <h6 class="alert-heading fw-bold mb-1"><i class="bi bi-info-circle me-2"></i>Estructura Requerida</h6>
+                  <h6 class="alert-heading fw-bold mb-1"><i class="bi bi-info-circle me-2"></i>Tabla de Datos</h6>
                   <p class="mb-0 small">
-                    El Excel debe estar en OneDrive y tener al menos las columnas: <strong>Nombre</strong> y <strong>Cédula</strong>.<br>
-                    Columnas opcionales: <em>Correo, Usuario, Contraseña, Enviado, ID Curso, ID Equipo</em>.
+                    Pega tus datos (Ctrl+C y Ctrl+V) desde tu Excel directamente aquí. Es <strong>obligatorio</strong> completar Nombre y Cédula.
                   </p>
                 </div>
                 
-                <div class="row g-3 mb-4">
-                  <div class="col-md-8">
-                    <label class="form-label fw-bold text-secondary">Enlace de Compartir (OneDrive) <span class="text-danger">*</span></label>
-                    <div class="input-group">
-                      <input type="url" id="diplomadoUrl" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/..." required>
-                      <button class="btn btn-success text-white fw-bold" type="button" id="btnLoadDiplomadoSheets" onclick="fetchDiplomadoSheets()"><i class="bi bi-cloud-arrow-down me-1"></i>Cargar Pestañas</button>
-                    </div>
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label fw-bold text-secondary">Seleccionar Pestaña <span class="text-danger">*</span></label>
-                    <select id="diplomadoSheet" class="form-select" onchange="previewDiplomados()" required>
-                      <option value="">Carga las pestañas primero...</option>
-                    </select>
-                  </div>
+                <div class="mb-4">
+                    <button class="btn btn-sm btn-outline-secondary mb-2" onclick="limpiarTablaDiplomados()">Limpiar Tabla</button>
+                    <div id="diplomadoSpreadsheet"></div>
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
-                  <button type="button" class="btn btn-success text-white" onclick="importDiplomados()" id="btnImportDiplomados" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
-                </div>
-                
-                <div id="diplomadoPreviewWrap" style="display:none;" class="mb-4">
-                  <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
-                  <div class="table-responsive bg-white rounded border">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light" id="diplomadoPreviewThead">
-                          <tr>
-                            <th>Nombre</th>
-                            <th>Cédula</th>
-                          </tr>
-                        </thead>
-                      <tbody id="diplomadoPreviewTbody"></tbody>
-                    </table>
-                  </div>
+                  <button type="button" class="btn btn-success text-white" onclick="importDiplomados()" id="btnImportDiplomados"><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
                 </div>
                 
                 <div id="diplomadoResultWrap" style="display:none;">
@@ -485,6 +458,59 @@ function toggleProg(pfx) {
     if (!inp) return;
     inp.disabled = t !== 'diplomado';
     if (inp.disabled) inp.value = '';
+}
+
+let diplomadoSpreadsheet = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    diplomadoSpreadsheet = jexcel(document.getElementById('diplomadoSpreadsheet'), {
+        data: [
+            ['', '', '', '', '', ''],
+            ['', '', '', '', '', ''],
+            ['', '', '', '', '', ''],
+            ['', '', '', '', '', ''],
+            ['', '', '', '', '', '']
+        ],
+        columns: [
+            { type: 'text', title: 'Nombre', width: 250 },
+            { type: 'text', title: 'Cédula', width: 120 },
+            { type: 'text', title: 'Correo', width: 200 },
+            { type: 'text', title: 'ID Curso', width: 120 },
+            { type: 'text', title: 'ID Equipo', width: 120 },
+            { type: 'text', title: 'Nombre Curso', width: 200 }
+        ],
+        minDimensions: [6, 15],
+        allowInsertRow: true,
+        allowDeleteRow: true,
+        wordWrap: true,
+        defaultColAlign: 'left',
+    });
+});
+
+function limpiarTablaDiplomados() {
+    if (confirm('¿Vaciar toda la tabla?')) {
+        diplomadoSpreadsheet.setData([['','','','','','']]);
+    }
+}
+
+function getDiplomadosData() {
+    const rawData = diplomadoSpreadsheet.getData();
+    const validData = [];
+    rawData.forEach(row => {
+        const nombre = (row[0] || '').trim();
+        const cedula = (row[1] || '').trim();
+        if (nombre && cedula) {
+            validData.push({
+                nombre: nombre,
+                cedula: cedula,
+                correo: (row[2] || '').trim(),
+                id_curso: (row[3] || '').trim(),
+                id_equipo: (row[4] || '').trim(),
+                curso_nombre: (row[5] || '').trim()
+            });
+        }
+    });
+    return validData;
 }
 
 function getCCs(prefix) {
@@ -939,90 +965,30 @@ async function importDocentes() {
 }
 
 
-async function fetchDiplomadoSheets() {
-    const url = document.getElementById('diplomadoUrl').value;
-    const select = document.getElementById('diplomadoSheet');
-    const btn = document.getElementById('btnLoadDiplomadoSheets');
-    if (!url) return toast('Ingresa la URL primero', 'warning');
-    
-    const oldText = btn.innerHTML;
-    btn.innerHTML = '...';
-    btn.disabled = true;
-    
-    try {
-        const sheets = await api.post('/excel/diplomados/sheets', { url: url });
-        if (sheets && sheets.length > 0) {
-            select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
-            sheets.forEach(s => {
-                const opt = document.createElement('option');
-                opt.value = s;
-                opt.textContent = s;
-                select.appendChild(opt);
-            });
-            toast('Pestañas cargadas', 'success');
-        } else {
-            select.innerHTML = '<option value="">No se encontraron pestañas</option>';
-        }
-    } catch (e) {
-        toast('Error: ' + e.message, 'danger');
-    } finally {
-        btn.innerHTML = oldText;
-        btn.disabled = false;
-    }
-}
-
-async function previewDiplomados() {
-    const url = document.getElementById('diplomadoUrl').value;
-    const sheet = document.getElementById('diplomadoSheet').value;
-    if (!url || !sheet) return toast('Completa la URL y la pestaña', 'warning');
-    
-    const btn = document.getElementById('btnImportDiplomados');
-    setLoading(btn, true);
-    
-    try {
-        const res = await api.post('/excel/diplomados/preview', { url: url, sheet_name: sheet });
-        const thead = document.getElementById('diplomadoPreviewThead');
-        const tbody = document.getElementById('diplomadoPreviewTbody');
-        
-        thead.innerHTML = `<tr>${res.headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-        
-        tbody.innerHTML = res.sample_rows.map(r => {
-            return `<tr>${res.headers.map(h => `<td>${r[h] || '-'}</td>`).join('')}</tr>`;
-        }).join('');
-        document.getElementById('diplomadoPreviewWrap').style.display = 'block';
-        document.getElementById('btnImportDiplomados').disabled = false;
-        toast(`Previsualizando muestra (alumnos a procesar: ${res.students_to_process})`, 'success');
-    } catch (e) {
-        toast(e.message, 'danger');
-    } finally {
-        setLoading(btn, false);
-    }
-}
-
 async function importDiplomados() {
-    const url = document.getElementById('diplomadoUrl').value;
-    const sheet = document.getElementById('diplomadoSheet').value;
-    if (!url || !sheet) return;
+    const data = getDiplomadosData();
+    if (data.length === 0) return toast('Debe cargar al menos un alumno válido con Nombre y Cédula', 'warning');
     
-    if (!confirm('¿Iniciar proceso para Diplomados?')) return;
+    if (!confirm(`¿Iniciar proceso para ${data.length} alumnos de Diplomados?`)) return;
     
     const btn = document.getElementById('btnImportDiplomados');
     setLoading(btn, true);
     
     try {
-        const res = await api.post('/excel/diplomados', { url: url, sheet_name: sheet });
+        const res = await api.post('/excel/diplomados/json', { data: data });
         document.getElementById('diplomadoSuccessCount').innerText = res.succeeded.length;
         document.getElementById('diplomadoErrorCount').innerText = res.failed.length;
         
         document.getElementById('diplomadoSuccessList').innerHTML = res.succeeded.map(r => 
             `<li class="list-group-item py-1 small">
-                <strong>${r.nombre}</strong> (${r.login_id})
+                <strong>${r.nombre}</strong> (${r.login_id})<br>
+                <span class="text-muted">Password: ${r.password || 'Misma'}</span>
             </li>`
         ).join('');
         
         document.getElementById('diplomadoErrorList').innerHTML = res.failed.map(r => 
             `<li class="list-group-item py-1 small text-danger">
-                ${JSON.stringify(r.input || r)}: ${r.error}
+                ${r.nombre || 'Desconocido'}: ${r.error}
             </li>`
         ).join('');
         
