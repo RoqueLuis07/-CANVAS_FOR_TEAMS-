@@ -121,38 +121,50 @@
   </div>
 </div>
 
-<!-- Accordion Matriculación Masiva -->
+<!-- Accordion Matriculación Masiva (OneDrive) -->
 <div class="accordion mb-4" id="accordionMatriculaciones">
   <div class="accordion-item border-primary shadow-sm">
     <h2 class="accordion-header" id="headingMatriculaciones">
       <button class="accordion-button collapsed fw-bold text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMatriculaciones" aria-expanded="false" aria-controls="collapseMatriculaciones" style="background: linear-gradient(135deg, rgba(13, 110, 253, 0.1), rgba(13, 110, 253, 0.05));">
-        <i class="bi bi-file-earmark-spreadsheet me-2 text-primary"></i> Matriculación Masiva
+        <i class="bi bi-file-earmark-spreadsheet me-2 text-primary"></i> Matriculación Masiva desde OneDrive
       </button>
     </h2>
     <div id="collapseMatriculaciones" class="accordion-collapse collapse" aria-labelledby="headingMatriculaciones" data-bs-parent="#accordionMatriculaciones">
       <div class="accordion-body p-4">
-        
-        <div class="card bg-dark text-light border-secondary mb-4 shadow">
-            <div class="card-header border-secondary d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 text-info"><i class="fas fa-table me-2"></i>1. Datos de Matriculación</h5>
-                <button class="btn btn-sm btn-outline-info" onclick="limpiarTabla()">
-                    <i class="fas fa-eraser me-1"></i> Limpiar Tabla
-                </button>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Enlace del Excel (OneDrive) <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-link-45deg text-secondary"></i></span>
+            <input type="url" class="form-control" id="mat_url" placeholder="https://uamericana-my.sharepoint.com/:x:/g/personal/..." required>
+            <button class="btn btn-outline-primary" type="button" id="btnLoadMatSheets" onclick="fetchMatSheets()">
+              Cargar Pestañas
+            </button>
+          </div>
+          <div class="form-text">Asegúrate de que el enlace sea de "Cualquier persona con el vínculo puede editar".</div>
+        </div>
+
+        <div id="matSheetWrap" style="display:none;" class="mb-4 bg-light p-3 rounded border">
+          <label class="form-label fw-semibold text-primary">Pestaña a procesar <span class="text-danger">*</span></label>
+          <select id="mat_sheet" class="form-select border-primary" onchange="enableMatProcessBtn()">
+            <option value="" disabled selected>Seleccione la pestaña de matriculaciones...</option>
+          </select>
+          <div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>Asegúrate de que la primera fila contenga: Usuario (o correo/cédula), Curso (o ID), Equipo (o ID) y Rol.</div>
+        </div>
+
+        <div id="matPreviewWrap" style="display:none;" class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="form-label fw-semibold mb-0">Previsualización (Primeras filas)</label>
+            <div>
+              <span class="badge bg-success me-2" id="matPreviewToProcess">0 a procesar</span>
+              <span class="badge bg-warning text-dark" id="matPreviewSkipped">0 ya existentes</span>
             </div>
-            <div class="card-body">
-                <p class="text-muted small mb-3">
-                    Puedes <strong>Copiar</strong> (Ctrl+C) los datos desde tu Excel local y <strong>Pegarlos</strong> (Ctrl+V) en esta tabla. 
-                    Asegúrate de respetar las columnas definidas. Si necesitas más filas, se agregarán automáticamente al pegar.
-                </p>
-                
-                <div class="table-responsive bg-white rounded p-1 mb-3">
-                    <div id="spreadsheet"></div>
-                </div>
-                
-                <div class="alert alert-info py-2 small mb-0 border-info">
-                    <i class="fas fa-info-circle me-1"></i> <strong>Nota:</strong> Los encabezados de las columnas no deben ser modificados. Pega tus datos a partir de la fila 1.
-                </div>
-            </div>
+          </div>
+          <div class="table-responsive border rounded bg-white">
+            <table class="table table-sm table-striped mb-0 text-nowrap" id="matPreviewTable">
+              <thead><tr id="matPreviewHead"></tr></thead>
+              <tbody id="matPreviewBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <div id="matResultWrap" style="display:none;" class="alert alert-info border-info">
@@ -164,7 +176,7 @@
           <i class="bi bi-arrow-counterclockwise me-1"></i>Revertir Operación
         </button>
         <button type="button" class="btn btn-secondary" data-bs-toggle="collapse" data-bs-target="#collapseMatriculaciones">Cancelar</button>
-        <button type="button" class="btn btn-success" id="btnImportMat" onclick="doImportMatriculaciones()">
+        <button type="button" class="btn btn-success" id="btnImportMat" onclick="doImportMatriculaciones()" disabled>
           <i class="bi bi-play-circle me-1"></i>Procesar Matriculaciones
         </button>
         </div>
@@ -177,45 +189,10 @@
 {% endblock %}
 
 {% block scripts %}
-    <!-- Jspreadsheet CE for Web Excel (jsuites MUST load before jspreadsheet) -->
-    <script src="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.css" type="text/css" />
-    <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/index.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/jspreadsheet.min.css" type="text/css" />
-
 <script>
 
 let mi_materiasList = []; // from backend
 let mi_selectedMaterias = [];
-let matPollInterval = null;
-let spreadsheet = null;
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar Jspreadsheet
-    spreadsheet = jspreadsheet(document.getElementById('spreadsheet'), {
-        data: [
-            ['', '', '', 'estudiante'],
-            ['', '', '', 'estudiante'],
-            ['', '', '', 'estudiante'],
-            ['', '', '', 'estudiante'],
-            ['', '', '', 'estudiante']
-        ],
-        columns: [
-            { type: 'text', title: 'Usuario (Correo o Cédula)', width: 250 },
-            { type: 'text', title: 'ID Curso Canvas', width: 150 },
-            { type: 'text', title: 'ID Equipo Teams', width: 150 },
-            { type: 'dropdown', title: 'Rol', width: 120, source: ['estudiante', 'profesor', 'observador', 'ta', 'diseñador'] }
-        ],
-        minDimensions: [5, 15],
-        allowInsertRow: true,
-        allowInsertColumn: false,
-        allowDeleteRow: true,
-        allowDeleteColumn: false,
-        wordWrap: true,
-        defaultColAlign: 'left',
-    });
-    mi_loadHistory();
-});
 
 async function mi_onProgramChange() {
     const prog = document.getElementById('mi_programa').value;
@@ -407,44 +384,133 @@ document.addEventListener('click', function(e) {
     }
 });
 
-function limpiarTabla() {
-    if (confirm('¿Estás seguro de que deseas vaciar toda la tabla?')) {
-        spreadsheet.setData([['','','','','']]);
+// Load history on mount
+document.addEventListener('DOMContentLoaded', () => {
+    mi_loadHistory();
+});
+
+async function doEnrollUnified() {
+  const form = document.getElementById('enrollForm');
+  if (!form.checkValidity()) { form.reportValidity(); return; }
+  
+  const btn = document.getElementById('enrollBtn');
+  setLoading(btn, true);
+  
+  const fd = new FormData(form);
+  const data = Object.fromEntries(fd.entries());
+  
+  try {
+    const res = await api.post('/sync/enroll-both', data);
+    toast('Usuario matriculado exitosamente!', 'success');
+    form.reset();
+  } catch(e) {
+    toast('Error: ' + e.message, 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+// Configurar Autocompletado
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('mat_url').value = localStorage.getItem('matUrl') || '';
+  setupAutocomplete('search_user', 'user_identifier', 'user_results', '/canvas/users', 
+    (u) => `<div class="autocomplete-title">${u.name}</div><div class="autocomplete-sub">${u.login_id || u.email || 'Sin email'}</div>`,
+    (u, input, hidden) => { input.value = u.name; hidden.value = u.login_id || u.email; }
+  );
+  
+  setupAutocomplete('search_course', 'canvas_course_id', 'course_results', '/canvas/courses', 
+    (c) => `<div class="autocomplete-title">${c.name}</div><div class="autocomplete-sub">ID: ${c.id} | SIS: ${c.sis_course_id || '-'}</div>`,
+    (c, input, hidden) => { input.value = c.name; hidden.value = c.id; }
+  );
+  
+  setupAutocomplete('search_team', 'teams_team_id', 'team_results', '/teams/teams', 
+    (t) => `<div class="autocomplete-title">${t.displayName}</div><div class="autocomplete-sub">ID: ${t.id}</div>`,
+    (t, input, hidden) => { input.value = t.displayName; hidden.value = t.id; }
+  );
+});
+
+// OneDrive Integration Logic
+
+async function fetchMatSheets() {
+  localStorage.setItem('matUrl', document.getElementById('mat_url').value);
+  const urlInput = document.getElementById('mat_url').value.trim();
+  if (!urlInput) {
+      return toast('Por favor, ingresa la URL primero.', 'warning');
+  }
+  
+  const btn = document.getElementById('btnLoadMatSheets');
+  const select = document.getElementById('mat_sheet');
+  const oldText = btn.innerHTML;
+  
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+  btn.disabled = true;
+  
+  try {
+      const res = await api.post('/excel/matriculaciones-onedrive/sheets', { url: urlInput });
+      select.innerHTML = '<option value="" disabled selected>Seleccione la pestaña de matriculaciones...</option>';
+      res.sheets.forEach(s => {
+          select.innerHTML += `<option value="${s}">${s}</option>`;
+      });
+      document.getElementById('matSheetWrap').style.display = 'block';
+      toast('Pestañas cargadas exitosamente', 'success');
+  } catch (e) {
+      toast('Error al obtener pestañas: ' + e.message, 'danger');
+  } finally {
+      btn.innerHTML = oldText;
+      btn.disabled = false;
+  }
+}
+
+
+async function enableMatProcessBtn() {
+    const val = document.getElementById('mat_sheet').value;
+    const url = document.getElementById('mat_url').value.trim();
+    document.getElementById('btnImportMat').disabled = !val;
+    document.getElementById('btnRollbackMat').disabled = !val;
+    
+    if (val && url) {
+        try {
+            const preview = await api.post('/excel/matriculaciones-onedrive/preview', { url: url, sheet_name: val });
+            document.getElementById('matPreviewWrap').style.display = 'block';
+            
+            document.getElementById('matPreviewToProcess').innerText = `${preview.students_to_process} a procesar`;
+            document.getElementById('matPreviewSkipped').innerText = `${preview.students_already_processed} omitidos (ya listos/error)`;
+
+            let head = preview.headers.map(h => `<th>${h}</th>`).join('');
+            document.getElementById('matPreviewHead').innerHTML = head;
+            let body = '';
+            preview.sample_rows.forEach(r => {
+                let rowHtml = '';
+                preview.headers.forEach(h => {
+                    let cellVal = r[h] || '';
+                    if (h.toLowerCase().includes('estado') || h.toLowerCase().includes('enviado')) {
+                        if (cellVal.toLowerCase() === 'ok' || cellVal.toLowerCase().includes('matriculado')) {
+                            cellVal = `<span class="badge bg-warning text-dark">${cellVal}</span>`;
+                        } else if (cellVal.toLowerCase().includes('error')) {
+                            cellVal = `<span class="badge bg-danger">${cellVal}</span><span class="badge bg-success ms-1">Reintento</span>`;
+                        } else {
+                            cellVal = `<span class="badge bg-success">A procesar</span>`;
+                        }
+                    }
+                    rowHtml += `<td>${cellVal}</td>`;
+                });
+                body += `<tr>${rowHtml}</tr>`;
+            });
+            document.getElementById('matPreviewBody').innerHTML = body;
+        } catch(e) {
+            console.error('Error in preview:', e);
+            document.getElementById('matPreviewWrap').style.display = 'none';
+        }
     }
 }
 
-function obtenerDatosValidos() {
-    const rawData = spreadsheet.getData();
-    const validData = [];
-    
-    // Filtrar filas vacías y transformar a JSON
-    rawData.forEach(row => {
-        const usuario = (row[0] || '').trim();
-        const curso = (row[1] || '').trim();
-        const equipo = (row[2] || '').trim();
-        const rol = (row[3] || 'estudiante').trim();
-        
-        if (usuario && (curso || equipo)) {
-            validData.push({
-                usuario: usuario,
-                curso: curso,
-                equipo: equipo,
-                rol: rol
-            });
-        }
-    });
-    
-    return validData;
-}
+let matPollInterval = null;
 
 async function doImportMatriculaciones() {
-    const data = obtenerDatosValidos();
+    const url = document.getElementById('mat_url').value.trim();
+    const sheet = document.getElementById('mat_sheet').value;
     
-    if (data.length === 0) return toast('La tabla está vacía o no tiene datos válidos.', 'warning');
-    
-    if (!confirm(`¿Estás seguro de que deseas INICIAR las matriculaciones masivas para ${data.length} registros?`)) {
-        return;
-    }
+    if(!url || !sheet) return toast('Debe cargar la URL y seleccionar la pestaña', 'warning');
     
     const btn = document.getElementById('btnImportMat');
     const resultWrap = document.getElementById('matResultWrap');
@@ -460,11 +526,10 @@ async function doImportMatriculaciones() {
     resultText.innerHTML = '<b>Iniciando proceso en segundo plano...</b> Preparando archivo...';
     
     try {
-        // We will call the new JSON endpoint
-        const res = await api.post('/excel/matriculaciones/json', { data: data });
+        const res = await api.post('/excel/matriculaciones-onedrive', { url: url, sheet_name: sheet });
         
         if (res.job_id) {
-            toast('Proceso iniciado en segundo plano', 'info');
+            toast('Trabajo iniciado en segundo plano', 'info');
             startMatriculacionPolling(res.job_id, oldText);
         } else {
             throw new Error("No se recibió ID del trabajo.");
@@ -537,20 +602,6 @@ function startMatriculacionPolling(jobId, oldBtnText) {
                     if (job.status === 'completed') {
                         resultWrap.className = job.error_count > 0 ? 'alert alert-warning border-warning' : 'alert alert-success border-success';
                         detail.innerHTML += `<br><br><b>Finalizado.</b> ${job.error_message || ''}`;
-                        
-                        if (job.data_json) {
-                            try {
-                                const jobData = JSON.parse(job.data_json);
-                                if (jobData.results && jobData.results.length > 0) {
-                                    detail.innerHTML += `<div class="mt-3 bg-white text-dark p-2 rounded" style="max-height: 200px; overflow-y: auto;">
-                                        <ul class="list-unstyled mb-0 small">
-                                            ${jobData.results.map(r => `<li><strong>${r.usuario}:</strong> ${r.status}</li>`).join('')}
-                                        </ul>
-                                    </div>`;
-                                }
-                            } catch(e) {}
-                        }
-                        
                         toast('Proceso completado.', 'success');
                     } else {
                         resultWrap.className = 'alert alert-danger border-danger';
@@ -567,11 +618,12 @@ function startMatriculacionPolling(jobId, oldBtnText) {
 }
 
 async function rollbackMatriculaciones() {
-    const data = obtenerDatosValidos();
+    const url = document.getElementById('mat_url').value.trim();
+    const sheet = document.getElementById('mat_sheet').value;
     
-    if (data.length === 0) return toast('La tabla está vacía o no tiene datos válidos.', 'warning');
+    if(!url || !sheet) return toast('Debe cargar la URL y seleccionar la pestaña', 'warning');
     
-    if (!confirm(`¿Estás seguro de que deseas REVERTIR (desmatricular) los ${data.length} registros presentes en la tabla? Esta acción los eliminará de Canvas y Teams.`)) {
+    if (!confirm('¿Estás seguro de que deseas REVERTIR las matriculaciones? Esto buscará los usuarios marcados como "OK" en la pestaña seleccionada y los desmatriculará de Canvas y Teams. Esta acción no se puede deshacer.')) {
         return;
     }
     
@@ -589,7 +641,7 @@ async function rollbackMatriculaciones() {
     resultText.innerHTML = '<b>Iniciando reversión en segundo plano...</b> Preparando archivo...';
     
     try {
-        const res = await api.post('/excel/rollback/json', { data: data });
+        const res = await api.post('/excel/rollback', { url: url, sheet_name: sheet });
         
         if (res.job_id) {
             toast('Reversión iniciada en segundo plano', 'warning');
@@ -667,20 +719,6 @@ function startRollbackPolling(jobId, oldBtnText) {
                     if (job.status === 'completed') {
                         resultWrap.className = job.error_count > 0 ? 'alert alert-warning border-warning' : 'alert alert-success border-success';
                         detail.innerHTML += `<br><br><b>Reversión Finalizada.</b> ${job.error_message || ''}`;
-                        
-                        if (job.data_json) {
-                            try {
-                                const jobData = JSON.parse(job.data_json);
-                                if (jobData.results && jobData.results.length > 0) {
-                                    detail.innerHTML += `<div class="mt-3 bg-white text-dark p-2 rounded" style="max-height: 200px; overflow-y: auto;">
-                                        <ul class="list-unstyled mb-0 small">
-                                            ${jobData.results.map(r => `<li><strong>${r.usuario}:</strong> ${r.status}</li>`).join('')}
-                                        </ul>
-                                    </div>`;
-                                }
-                            } catch(e) {}
-                        }
-                        
                         toast('Reversión completada.', 'success');
                     } else {
                         resultWrap.className = 'alert alert-danger border-danger';
