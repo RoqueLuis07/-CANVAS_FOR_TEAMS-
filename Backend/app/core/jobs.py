@@ -83,10 +83,11 @@ async def create_job(
 
         cursor.execute("""
             INSERT INTO jobs (job_type, operation, username, details, data_json, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')
+            VALUES (%s, %s, %s, %s, %s, 'pending')
+            RETURNING id
         """, (job_type, operation, username, details, data_json))
 
-        job_id = cursor.lastrowid
+        job_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
 
@@ -134,11 +135,11 @@ async def complete_job(
 
         cursor.execute("""
             UPDATE jobs
-            SET status = ?,
+            SET status = %s,
                 completed_at = CURRENT_TIMESTAMP,
-                result_count = ?,
-                error_count = ?,
-                error_message = ?
+                result_count = %s,
+                error_count = %s,
+                error_message = %s
             WHERE id = %s
         """, (status, result_count, error_count, error_message, job_id))
 
@@ -161,7 +162,7 @@ async def fail_job(job_id: int, error_message: str):
             UPDATE jobs
             SET status = 'failed',
                 completed_at = CURRENT_TIMESTAMP,
-                error_message = ?
+                error_message = %s
             WHERE id = %s
         """, (error_message, job_id))
 
@@ -193,23 +194,23 @@ async def get_jobs(
         params = []
 
         if job_type:
-            where_clauses.append("job_type = ?")
+            where_clauses.append("job_type = %s")
             params.append(job_type)
 
         if username:
-            where_clauses.append("username = ?")
+            where_clauses.append("username = %s")
             params.append(username)
 
         if status:
-            where_clauses.append("status = ?")
+            where_clauses.append("status = %s")
             params.append(status)
 
         if date_from:
-            where_clauses.append("DATE(created_at) >= ?")
+            where_clauses.append("DATE(created_at) >= %s")
             params.append(date_from)
 
         if date_to:
-            where_clauses.append("DATE(created_at) <= ?")
+            where_clauses.append("DATE(created_at) <= %s")
             params.append(date_to)
 
         where_clause = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
@@ -224,7 +225,7 @@ async def get_jobs(
             SELECT * FROM jobs
             {where_clause}
             ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
+            LIMIT %s OFFSET %s
             """,
             params + [limit, offset]
         )
@@ -272,10 +273,10 @@ async def get_jobs_stats(date_from: str = None, date_to: str = None) -> dict:
         if date_from or date_to:
             clauses = []
             if date_from:
-                clauses.append("DATE(created_at) >= ?")
+                clauses.append("DATE(created_at) >= %s")
                 params.append(date_from)
             if date_to:
-                clauses.append("DATE(created_at) <= ?")
+                clauses.append("DATE(created_at) <= %s")
                 params.append(date_to)
             where_clause = " WHERE " + " AND ".join(clauses)
 
