@@ -1058,7 +1058,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                             sheet_cc_list.append(email)
 
         if not col_nombre or not col_cedula:
-            detected = list(headers_dict.keys()) if headers_dict else ['Ninguna']
+            detected = list(headers.keys()) if headers else ['Ninguna']
             raise HTTPException(status_code=400, detail=f"No se encontraron las columnas requeridas ('Nombre' y 'Cédula') en la pestaña seleccionada. Columnas detectadas: {detected}")
 
         next_col = ws.max_column + 1
