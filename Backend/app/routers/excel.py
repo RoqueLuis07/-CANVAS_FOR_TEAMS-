@@ -11,6 +11,7 @@ import unicodedata
 from typing import Any
 
 import openpyxl
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import pandas as pd
@@ -24,6 +25,7 @@ from app.models.canvas import BulkResult
 from app.services import canvas_client as canvas
 from app.services import teams_client as graph
 from app.services import user_service
+from app.services import email_service
 from app.services.teams_client import create_team_via_group
 from app.core import jobs
 
@@ -33,6 +35,9 @@ def _err(exc: Exception) -> str:
 router = APIRouter(tags=["Excel Import/Export"])
 _ACCOUNT = settings.canvas_account_id
 logger = logging.getLogger(__name__)
+
+# Propietarios que deben agregarse a todo Team de Diplomados nuevo, sin excepción.
+_DIPLOMADO_DEFAULT_OWNERS = ["ldure@usil.edu.py", "jfleitas@usil.edu.py", "ralvarez@usil.edu.py"]
 
 # Límites de seguridad
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -120,12 +125,19 @@ def _find_header_row_and_headers(ws, max_scan_rows=15):
     Escanea las primeras `max_scan_rows` buscando la fila de encabezados.
     Retorna (header_row_idx, dict_de_headers_normalizados, array_de_headers) o (None, {}, []).
     """
+    keywords = ["nombre", "curso", "usuario", "correo", "cedula", "cédula", "documento", "id canvas", "id teams"]
     for row_idx in range(1, min(max_scan_rows, ws.max_row + 1)):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, min(50, ws.max_column + 1))]
         valid_cols = [v for v in row_vals if v]
         if len(valid_cols) >= 2:
             row_str = " ".join(valid_cols).lower()
-            if any(keyword in row_str for keyword in ["nombre", "curso", "usuario", "correo", "cedula", "cédula", "documento", "id canvas", "id teams"]):
+            matches = sum(1 for keyword in keywords if keyword in row_str)
+            # Una fila de título (ej. "Nombre del Diplomado" en la fila 1, junto
+            # al ID del equipo) puede coincidir con una sola palabra clave por
+            # casualidad. Una fila de encabezados real siempre tiene varias
+            # columnas reconocibles, así que exigimos 2+ coincidencias o
+            # suficientes celdas no vacías para no confundirlas.
+            if matches >= 2 or (matches >= 1 and len(valid_cols) >= 4):
                 headers_dict = {}
                 for col_idx, val in enumerate(row_vals, 1):
                     if val:
@@ -133,6 +145,45 @@ def _find_header_row_and_headers(ws, max_scan_rows=15):
                 return row_idx, headers_dict, row_vals
                 
     return None, {}, []
+
+
+def _safe_set_cell(ws, row: int, column: int, value):
+    """Set a cell's value, unmerging its range first if it's part of one.
+
+    Plantillas de OneDrive suelen tener un título en la fila 1 combinado
+    (merge) a lo largo de varias columnas. Si ese merge llega a cubrir la
+    columna donde el sistema necesita escribir (ej. el ID del equipo de
+    Teams), openpyxl lanza AttributeError al intentar asignar `.value` en
+    una MergedCell. Deshacemos el merge puntual para evitar el crash.
+    """
+    cell = ws.cell(row=row, column=column)
+    if isinstance(cell, MergedCell):
+        for merged_range in list(ws.merged_cells.ranges):
+            if cell.coordinate in merged_range:
+                ws.unmerge_cells(str(merged_range))
+                break
+        cell = ws.cell(row=row, column=column)
+    cell.value = value
+    return cell
+
+
+_UUID_RE = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+
+
+def _find_row1_title(ws, max_scan_cols: int = 30) -> str:
+    """Return the diplomado/curso title stored in row 1, wherever it is.
+
+    Distintas plantillas insertan columnas nuevas (Fecha, Telefono,
+    Vendedor, etc.) antes del título, corriéndolo de la columna A hacia
+    la derecha. En vez de asumir que siempre está en la columna 1,
+    recorremos la fila y devolvemos la primera celda con texto que no
+    sea, a su vez, el ID (GUID) del equipo de Teams.
+    """
+    for c in range(1, min(max_scan_cols, ws.max_column) + 1):
+        v = str(ws.cell(row=1, column=c).value or "").strip()
+        if v and not _UUID_RE.match(v):
+            return v
+    return ""
 
 
 # ── Template generation ───────────────────────────────────────────────────────
@@ -623,6 +674,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                         "mailNickname": creds["login_id"].replace(".", "_"),
                         "usageLocation": settings.usage_location,
                         "accountEnabled": True,
+                        "jobTitle": "Docente" if role == "teacher" else "Alumno",
                         "passwordProfile": {
                             "forceChangePasswordNextSignIn": True,
                             "password": creds["password"],
@@ -647,7 +699,19 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                 skip_email = True
 
             if do_email and p_email and not skip_email:
-                entry["email"] = "error: el envío de correo no está configurado en este entorno"
+                try:
+                    await email_service.send_credentials_email(
+                        to_email=p_email,
+                        full_name=creds["full_name"],
+                        login_id=login_id,
+                        password=creds["password"],
+                        program_type=program_type,
+                        program_name=program_name,
+                        extra_cc=extra_cc,
+                    )
+                    entry["email"] = "sent"
+                except Exception as exc:
+                    entry["email"] = f"error: {exc}"
 
             result.succeeded.append(entry)
         except Exception as exc:
@@ -1043,7 +1107,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         
         col_usuario = get_col_idx("usuario")
         col_contra = get_col_idx("contrasena", "contrase├▒a", "clave")
-        col_enviado = get_col_idx("enviado", "estado")
+        col_enviado = get_col_idx("estado", "enviado")
     
         col_cc = get_col_idx("cc", "copia")
         sheet_cc_list = []
@@ -1064,22 +1128,22 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             
         if not col_usuario:
             col_usuario = next_col
-            ws.cell(row=header_row_idx, column=col_usuario, value="Usuario").font = Font(bold=True)
+            _safe_set_cell(ws, header_row_idx, col_usuario, "Usuario").font = Font(bold=True)
             next_col += 1
         if not col_contra:
             col_contra = next_col
-            ws.cell(row=header_row_idx, column=col_contra, value="Contrase├▒a").font = Font(bold=True)
+            _safe_set_cell(ws, header_row_idx, col_contra, "Contraseña").font = Font(bold=True)
             next_col += 1
         if not col_enviado:
             col_enviado = next_col
-            ws.cell(row=header_row_idx, column=col_enviado, value="Enviado").font = Font(bold=True)
+            _safe_set_cell(ws, header_row_idx, col_enviado, "Enviado").font = Font(bold=True)
             
         global_team_id = ""
-        title_val = str(ws.cell(row=1, column=1).value or "").strip()
+        title_val = _find_row1_title(ws)
         global_team_name = title_val
         if global_team_name and col_usuario:
             team_id_from_header = str(ws.cell(row=1, column=col_usuario).value or "").strip()
-            if team_id_from_header and len(team_id_from_header) > 10:
+            if _UUID_RE.match(team_id_from_header):
                 global_team_id = team_id_from_header
             else:
                 try:
@@ -1091,13 +1155,13 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         nickname = re.sub(r'[^a-zA-Z0-9]', '', global_team_name).lower()
                         if not nickname: nickname = f"grupo{int(time.time())}"
                         
-                        owner_ids = []
+                        owner_ids = list(_DIPLOMADO_DEFAULT_OWNERS)
                         try:
                             admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
                             if admin_user and admin_user.get("id"):
                                 owner_ids.append(admin_user["id"])
                         except: pass
-                        
+
                         new_team = await graph.create_team_via_group(
                             display_name=global_team_name,
                             mail_nickname=nickname,
@@ -1107,7 +1171,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         )
                         global_team_id = new_team.get("id", "")
                     if global_team_id:
-                        ws.cell(row=1, column=col_usuario, value=global_team_id).font = Font(bold=True)
+                        _safe_set_cell(ws, 1, col_usuario, global_team_id).font = Font(bold=True)
                 except Exception as e:
                     print(f"Error pre-creando equipo: {e}")
         
@@ -1128,6 +1192,28 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if "✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado_lower or "ya exist" in enviado_lower or (usuario_val and "@" in usuario_val):
                 if not enviado and col_enviado:
                     ws.cell(row=r_idx, column=col_enviado, value="✅ Existente")
+                # Alumno ya creado en una corrida anterior: igual verificamos que
+                # esté agregado al grupo de Teams correspondiente (como miembro),
+                # y lo agregamos si falta — un run previo pudo haber creado la
+                # cuenta pero fallado al matricularla en el grupo.
+                if usuario_val and "@" in usuario_val:
+                    try:
+                        target_equipo = id_equipo if (id_equipo and id_equipo != "None") else global_team_id
+                        if not target_equipo and curso_nombre:
+                            target_equipo = await graph.search_group_by_name(curso_nombre)
+                        if target_equipo:
+                            user_data = await graph.get(f"/users/{usuario_val}", params={"$select": "id"})
+                            uid = user_data.get("id") if user_data else None
+                            if uid:
+                                is_member = True
+                                try:
+                                    await graph.get(f"/groups/{target_equipo}/members/{uid}", params={"$select": "id"})
+                                except Exception:
+                                    is_member = False
+                                if not is_member:
+                                    await graph.add_member_to_group(target_equipo, uid)
+                    except Exception:
+                        pass
                 return
 
             creds, status = await user_service.generate_unique_credentials(nombre, cedula, "teams")
@@ -1148,6 +1234,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                         "usageLocation": settings.usage_location,
                         "accountEnabled": True,
+                        "jobTitle": "Alumno",
                         "passwordProfile": {
                             "forceChangePasswordNextSignIn": True,
                             "password": pwd,
@@ -1179,7 +1266,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                                 mail_nickname=nickname,
                                 description=f"Grupo para {curso_nombre}",
                                 visibility="Private",
-                                owner_ids=[]
+                                owner_ids=list(_DIPLOMADO_DEFAULT_OWNERS)
                             )
                             target_equipo = new_team.get("id")
                             
@@ -1216,7 +1303,21 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id})
 
                 if not error:
-                    ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
+                    email_note = ""
+                    if correo:
+                        try:
+                            await email_service.send_credentials_email(
+                                to_email=correo,
+                                full_name=creds["full_name"],
+                                login_id=login_id,
+                                password=pwd,
+                                program_type="diplomado",
+                                program_name=curso_nombre or global_team_name,
+                                extra_cc=sheet_cc_list,
+                            )
+                        except Exception as email_exc:
+                            email_note = f" (correo no enviado: {email_exc})"
+                    ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK{email_note}")
                     ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
                 else:
                     ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error}")
@@ -1680,7 +1781,7 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
 
     col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
 
     students_to_process = 0
     students_already_processed = 0
@@ -1768,7 +1869,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
     col_cedula = get_col_idx("cedula", "cédula", "ci", "documento", "dni")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
@@ -1920,7 +2021,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     col_curso = get_col_idx("curso", "id curso", "canvas")
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
     col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
@@ -2016,7 +2117,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     
     col_usuario = get_col_idx("usuario")
     col_contra = get_col_idx("contrasena", "contrasea", "clave")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
@@ -2087,6 +2188,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
+                    "jobTitle": "Docente",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
@@ -2567,7 +2669,7 @@ async def _process_rollback_bg(job_id: int, req: DiplomadosUrlRequest, contents:
         return None
 
     col_usuario = get_col_idx("usuario")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     col_curso = get_col_idx("curso", "id curso", "canvas")
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
     col_contra = get_col_idx("contrasena", "contraseña", "clave")
@@ -2874,6 +2976,7 @@ async def import_diplomados_json(req: JsonDataRequest):
                     "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
+                    "jobTitle": "Alumno",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
@@ -2904,7 +3007,7 @@ async def import_diplomados_json(req: JsonDataRequest):
                             mail_nickname=nickname,
                             description=f"Grupo para {curso_nombre}",
                             visibility="Private",
-                            owner_ids=[]
+                            owner_ids=list(_DIPLOMADO_DEFAULT_OWNERS)
                         )
                         target_equipo = new_team.get("id")
                 
@@ -3084,7 +3187,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     
     col_usuario = get_col_idx("usuario")
     col_contra = get_col_idx("contrasena", "contraseña", "clave")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
 
     next_col = ws.max_column + 1
     if not col_usuario:
@@ -3149,6 +3252,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "mailNickname": login_id.replace(".", "_").replace("@", "_"),
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
+                    "jobTitle": "Alumno",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
@@ -3186,6 +3290,10 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         email_sent = False
         if not error_msg and correo and correo != "None":
             try:
+                await email_service.send_credentials_email(
+                    to_email=correo, full_name=creds["full_name"],
+                    login_id=login_id, password=pwd,
+                )
                 email_sent = True
             except Exception as e:
                 error_msg = f"Creado OK, pero falló el correo: {e}"

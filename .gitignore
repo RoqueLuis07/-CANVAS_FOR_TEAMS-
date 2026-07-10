@@ -12,8 +12,10 @@ dist/
 # Logs
 *.log
 
-# SQLite runtime files
-data/
+# SQLite runtime files (repo-root only — do not match Backend/app/data,
+# which holds versioned source data like catalogo_materias.json)
+/data/
+/Backend/data/
 *.db
 *.db-shm
 *.db-wal
