@@ -75,6 +75,7 @@ async def ui_offboarding(request: Request):
         "unified_offboarding.html",
         {
             "request": request,
+            "user": _current_user(request),
             "page_title": "Desvinculación Unificada",
             "active_page": "egreso"
         }

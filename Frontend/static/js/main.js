@@ -81,7 +81,7 @@ async function onGlobalSearch(q) {
 
       const html = [
         ...users.map(u => `
-          <a href="/ui/canvas/users" class="gs-item">
+          <a href="/ui/unified-users?q=${encodeURIComponent(u.login_id || u.email || '')}" class="gs-item">
             <i class="bi bi-person text-muted"></i>
             <div>
               <div class="gs-label">${esc(u.name)}</div>
@@ -247,6 +247,21 @@ function confirmAction(msg, cb, title = '¿Confirmar acción?', danger = false) 
 }
 
 /* ── Bulk delete with double confirmation ── */
+const _bulkDeleteHandlers = {};
+
+function registerBulkDelete(containerId, handler) {
+  _bulkDeleteHandlers[containerId] = handler;
+}
+
+function bulkDelete(containerId) {
+  const handler = _bulkDeleteHandlers[containerId];
+  if (!handler) {
+    toast('El borrado masivo no está configurado para esta tabla.', 'danger');
+    return;
+  }
+  handler(getSelectedIds(containerId));
+}
+
 function bulkDeleteConfirm(containerId) {
   const ids   = getSelectedIds(containerId);
   const count = ids.length;
@@ -1081,7 +1096,7 @@ document.getElementById('cmdPaletteInput')?.addEventListener('input', function(e
       
       const html = [
         ...users.map(u => `
-          <a href="/ui/canvas/users?q=${encodeURIComponent(u.login_id || u.email)}" class="list-group-item list-group-item-action border-0 py-3 d-flex align-items-center gap-3">
+          <a href="/ui/unified-users?q=${encodeURIComponent(u.login_id || u.email)}" class="list-group-item list-group-item-action border-0 py-3 d-flex align-items-center gap-3">
             <div class="bg-primary bg-opacity-10 text-primary rounded p-2"><i class="bi bi-person-fill fs-5"></i></div>
             <div><div class="fw-bold">${esc(u.name)}</div><div class="small text-muted">${esc(u.login_id || u.email || '')}</div></div>
             <span class="badge bg-primary bg-opacity-10 text-primary ms-auto rounded-pill px-3 py-2">Usuario</span>

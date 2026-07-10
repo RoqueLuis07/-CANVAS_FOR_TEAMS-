@@ -413,6 +413,26 @@ async def get_courses(search: str = ""):
         return []
 
 
+@router.get("/find_user", summary="Buscar usuario en Canvas por nombre/cédula/correo (usado por Egreso)")
+async def find_user(query: str = ""):
+    """Busca un usuario en Canvas para prellenar el formulario de Desvinculación."""
+    query = query.strip()
+    if len(query) < 3:
+        raise HTTPException(status_code=400, detail="La búsqueda requiere al menos 3 caracteres")
+    try:
+        users = await canvas.get(f"/accounts/{_ACCOUNT}/users", {"search_term": query, "per_page": 1})
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=_err(exc))
+    if not users:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado en Canvas")
+    u = users[0]
+    return {
+        "name": u.get("name"),
+        "sis_user_id": u.get("sis_user_id"),
+        "email": u.get("email") or u.get("login_id"),
+    }
+
+
 @router.post("/preview", response_model=CredentialPreview, summary="Previsualizar credenciales")
 async def preview_credentials(body: StudentIn):
     """Genera y muestra las credenciales que se asignarían al usuario, sin crear nada."""
@@ -446,6 +466,37 @@ async def create_students_bulk(body: BulkStudentsIn) -> BulkResult:
             result.succeeded.append(data)
         except Exception as exc:
             result.failed.append({"student": student.full_name, "error": str(exc)})
+
+    await asyncio.gather(*[_run(s) for s in body.students])
+    return result
+
+
+@router.post("/resend-credentials", summary="Reenviar credenciales a un usuario ya existente")
+async def resend_credentials(body: ResendCredentialsIn) -> dict[str, Any]:
+    """Recalcula las credenciales institucionales de un usuario ya creado.
+
+    El envío de correo no está implementado en este entorno (no hay cliente
+    SMTP configurado), así que se reporta honestamente en `email`.
+    """
+    creds, _ = await user_service.generate_unique_credentials(body.full_name, body.cedula, body.platform)
+    return {
+        "student": body.full_name,
+        "credentials": creds,
+        "email": "error: el envío de correo no está configurado en este entorno",
+    }
+
+
+@router.post("/bulk-resend", summary="Reenviar credenciales masivamente")
+async def bulk_resend(body: BulkResendIn) -> BulkResult:
+    """Reenvía credenciales a múltiples usuarios en paralelo."""
+    result = BulkResult()
+
+    async def _run(student: ResendCredentialsIn):
+        try:
+            data = await resend_credentials(student)
+            result.succeeded.append(data)
+        except Exception as exc:
+            result.failed.append({"student": student.full_name, "error": _err(exc)})
 
     await asyncio.gather(*[_run(s) for s in body.students])
     return result
