@@ -49,6 +49,12 @@
 
   const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+  const _qParam = new URLSearchParams(location.search).get('q');
+  if (_qParam) {
+    document.getElementById('unifiedSearchInput').value = _qParam;
+    searchUnified();
+  }
+
   // ==========================================
   // CONTROLADOR PRINCIPAL: BÚSQUEDA
   // ==========================================

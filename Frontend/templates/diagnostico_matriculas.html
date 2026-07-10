@@ -108,21 +108,21 @@
             log('copyToClipboard()', 'fail', `Error: ${e.message}`);
         }
 
-        // Test 6: Página enrollments.html
+        // Test 6: Página unified_enrollments.html
         try {
-            const enrollPageRes = await fetch('/ui/canvas/enrollments');
+            const enrollPageRes = await fetch('/ui/unified-enrollments');
             if (enrollPageRes.ok) {
                 const enrollPageHtml = await enrollPageRes.text();
-                if (enrollPageHtml.includes('loadCourseOptions')) {
-                    log('Página enrollments.html', 'pass', 'Página cargable y contiene loadCourseOptions()');
+                if (enrollPageHtml.includes('mi_onProgramChange')) {
+                    log('Página unified_enrollments.html', 'pass', 'Página cargable y contiene mi_onProgramChange()');
                 } else {
-                    log('Página enrollments.html', 'fail', 'Página no contiene loadCourseOptions()');
+                    log('Página unified_enrollments.html', 'fail', 'Página no contiene mi_onProgramChange()');
                 }
             } else {
-                log('Página enrollments.html', 'fail', `Error ${enrollPageRes.status}`);
+                log('Página unified_enrollments.html', 'fail', `Error ${enrollPageRes.status}`);
             }
         } catch(e) {
-            log('Página enrollments.html', 'fail', `Error: ${e.message}`);
+            log('Página unified_enrollments.html', 'fail', `Error: ${e.message}`);
         }
 
         // Test 7: DOM ready
@@ -132,7 +132,7 @@
             log('DOM Estado', 'warn', `Documento aún cargando (${document.readyState})`);
         }
 
-        log('DIAGNÓSTICO', 'pass', '✓ Diagnóstico completado. Si todos los tests pasaron, ve a http://localhost:3000/ui/canvas/enrollments');
+        log('DIAGNÓSTICO', 'pass', '✓ Diagnóstico completado. Si todos los tests pasaron, ve a http://localhost:3000/ui/unified-enrollments');
     }
 
     // Run diagnostics when page loads

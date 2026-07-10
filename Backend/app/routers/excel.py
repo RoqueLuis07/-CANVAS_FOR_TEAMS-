@@ -571,10 +571,10 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
             if not full_name or not cedula:
                 raise ValueError("Nombre Completo y Cédula son obligatorios")
 
-            creds, status = await user_service.generate_unique_credentials(full_name, cedula, platform)
             role         = (_get(row, "rol_student_teacher", "rol", "role") or "student").lower()
             platform     = (_get(row, "plataforma_both_canvas_teams", "plataforma", "platform") or "both").lower()
             program_type = (_get(row, "tipo_programa_grado_mba_diplomado", "tipo_programa", "program_type") or "grado").lower()
+            creds, status = await user_service.generate_unique_credentials(full_name, cedula, platform)
             program_name = _get(row, "nombre_del_programa", "nombre_programa", "program_name") or ""
             do_email     = (_get(row, "enviar_correo_true_false", "enviar_correo", "send_email") or "true").lower() not in ("false", "0", "no")
             cc_raw       = _get(row, "cc_correos_separados_por_coma", "cc") or ""
@@ -647,11 +647,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                 skip_email = True
 
             if do_email and p_email and not skip_email:
-                try:
-                    pass
-                    entry["email"] = "sent"
-                except Exception as exc:
-                    entry["email"] = f"error: {exc}"
+                entry["email"] = "error: el envío de correo no está configurado en este entorno"
 
             result.succeeded.append(entry)
         except Exception as exc:
@@ -1214,14 +1210,13 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     if "already exist" not in str(e).lower():
                         error = str(error) + f" | TeamsEnroll: {e}" if error else f"TeamsEnroll: {e}"
             
-            email_sent = False
             if not error or "Creado OK" in str(error) or "Ya existía" in str(error):
                 ws.cell(row=r_idx, column=col_usuario, value=login_id)
                 ws.cell(row=r_idx, column=col_contra, value=pwd)
                 result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id})
-                
-                if email_sent:
-                    ws.cell(row=r_idx, column=col_enviado, value="✅")
+
+                if not error:
+                    ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
                     ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
                 else:
                     ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error}")
@@ -1887,8 +1882,8 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
 @router.post("/excel/docentes-onedrive/preview", summary="Previsualizar Docentes desde OneDrive")
 async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPreviewResponse:
     if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL invlida.")
-    
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
     encoded_url = _encode_share_url(req.url)
     try:
         contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
@@ -1898,18 +1893,18 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
     except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo no es un Excel vlido.")
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
 
     if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaa '{req.sheet_name}' no existe.")
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
 
     ws = wb[req.sheet_name]
-    
+
     header_row_idx, headers, _ = _find_header_row_and_headers(ws)
 
-    
+
     if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontraron las columnas de 'Nombre' y 'Cdula'.")
+        raise HTTPException(status_code=400, detail="No se encontraron las columnas de 'Nombre' y 'Cédula'.")
 
     def get_col_idx(*keys):
         for k in keys:
@@ -1977,8 +1972,8 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
 @router.post("/excel/docentes-onedrive", summary="Alta Docentes OneDrive")
 async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL invlida.")
-    
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
     encoded_url = _encode_share_url(req.url)
     try:
         contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
@@ -1988,21 +1983,21 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
     except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel vlido.")
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
 
     _ACCOUNT_LOCAL = settings.canvas_account_id
     result = BulkResult()
 
     if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaa '{req.sheet_name}' no existe.")
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
 
     ws = wb[req.sheet_name]
-    
+
     header_row_idx, headers, _ = _find_header_row_and_headers(ws)
 
-    
+
     if not header_row_idx:
-        raise HTTPException(status_code=400, detail="Columnas de Nombre y Cdula no encontradas.")
+        raise HTTPException(status_code=400, detail="Columnas de Nombre y Cédula no encontradas.")
 
     def get_col_idx(*keys):
         for k in keys:
@@ -2078,11 +2073,11 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         
         entry = {"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id}
         error = ""
-        
+        parts = creds["full_name"].strip().split()
+
         # Azure AD
         azure_id = None
         if plat in ("teams", "both"):
-            parts = creds["full_name"].strip().split()
             try:
                 au = await graph.post("/users", {
                     "displayName": creds["full_name"],
@@ -2129,7 +2124,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ Error: {error}")
             ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
             result.failed.append({"correo": str(ws.cell(row=r_idx, column=col_correo).value), "error": error})
-            return
+            continue
 
         # Bidirectional Canvas Logic (Name <-> ID)
         if plat in ("canvas", "both"):
@@ -2249,13 +2244,13 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 error += f"CanvasEnroll: {str(e)} | "
                 
         if error:
-            ws.cell(row=r_idx, column=col_enviado, value=f"?O Error: {error}")
+            ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ Error: {error}")
             ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
             result.failed.append({"correo": login_id, "error": error})
         else:
             ws.cell(row=r_idx, column=col_usuario, value=login_id)
             ws.cell(row=r_idx, column=col_contra, value=pwd)
-            ws.cell(row=r_idx, column=col_enviado, value="? OK")
+            ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
             ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
             result.succeeded.append(entry)
 
@@ -3241,7 +3236,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
     return result
 
-@router.post("/courses/delete/preview")
+@router.post("/excel/courses/delete/preview")
 async def preview_delete_courses_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
@@ -3311,7 +3306,7 @@ async def preview_delete_courses_onedrive(req: DiplomadosUrlRequest) -> PreviewR
         students_already_processed=courses_skipped
     )
 
-@router.post("/courses/delete/import")
+@router.post("/excel/courses/delete/import")
 async def import_delete_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")

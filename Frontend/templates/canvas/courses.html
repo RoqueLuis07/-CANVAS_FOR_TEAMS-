@@ -889,7 +889,7 @@ async function fetchDeleteSheets() {
     setLoading(btn, true);
 
     try {
-        const sheets = await api.post('/excel/sheets', { url: urlInput });
+        const sheets = await api.post('/excel/courses/sheets', { url: urlInput });
         const select = document.getElementById('deleteOdSheet');
         select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
         sheets.forEach(s => {
