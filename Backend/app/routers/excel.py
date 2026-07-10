@@ -159,6 +159,25 @@ def _safe_set_cell(ws, row: int, column: int, value):
     return cell
 
 
+_UUID_RE = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+
+
+def _find_row1_title(ws, max_scan_cols: int = 30) -> str:
+    """Return the diplomado/curso title stored in row 1, wherever it is.
+
+    Distintas plantillas insertan columnas nuevas (Fecha, Telefono,
+    Vendedor, etc.) antes del título, corriéndolo de la columna A hacia
+    la derecha. En vez de asumir que siempre está en la columna 1,
+    recorremos la fila y devolvemos la primera celda con texto que no
+    sea, a su vez, el ID (GUID) del equipo de Teams.
+    """
+    for c in range(1, min(max_scan_cols, ws.max_column) + 1):
+        v = str(ws.cell(row=1, column=c).value or "").strip()
+        if v and not _UUID_RE.match(v):
+            return v
+    return ""
+
+
 # ── Template generation ───────────────────────────────────────────────────────
 
 _HEADER_FILL  = PatternFill("solid", fgColor="1A2035")
@@ -1068,7 +1087,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         
         col_usuario = get_col_idx("usuario")
         col_contra = get_col_idx("contrasena", "contrase├▒a", "clave")
-        col_enviado = get_col_idx("enviado", "estado")
+        col_enviado = get_col_idx("estado", "enviado")
     
         col_cc = get_col_idx("cc", "copia")
         sheet_cc_list = []
@@ -1100,7 +1119,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             _safe_set_cell(ws, header_row_idx, col_enviado, "Enviado").font = Font(bold=True)
             
         global_team_id = ""
-        title_val = str(ws.cell(row=1, column=1).value or "").strip()
+        title_val = _find_row1_title(ws)
         global_team_name = title_val
         if global_team_name and col_usuario:
             team_id_from_header = str(ws.cell(row=1, column=col_usuario).value or "").strip()
@@ -1728,7 +1747,7 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
 
     col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
 
     students_to_process = 0
     students_already_processed = 0
@@ -1816,7 +1835,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
     col_cedula = get_col_idx("cedula", "cédula", "ci", "documento", "dni")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
@@ -1968,7 +1987,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     col_curso = get_col_idx("curso", "id curso", "canvas")
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
     col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
@@ -2064,7 +2083,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     
     col_usuario = get_col_idx("usuario")
     col_contra = get_col_idx("contrasena", "contrasea", "clave")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
@@ -2616,7 +2635,7 @@ async def _process_rollback_bg(job_id: int, req: DiplomadosUrlRequest, contents:
         return None
 
     col_usuario = get_col_idx("usuario")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
     col_curso = get_col_idx("curso", "id curso", "canvas")
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
     col_contra = get_col_idx("contrasena", "contraseña", "clave")
@@ -3134,7 +3153,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     
     col_usuario = get_col_idx("usuario")
     col_contra = get_col_idx("contrasena", "contraseña", "clave")
-    col_enviado = get_col_idx("enviado", "estado")
+    col_enviado = get_col_idx("estado", "enviado")
 
     next_col = ws.max_column + 1
     if not col_usuario:
