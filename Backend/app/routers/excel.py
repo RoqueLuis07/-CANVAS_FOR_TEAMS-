@@ -25,6 +25,7 @@ from app.services import canvas_client as canvas
 from app.services import teams_client as graph
 from app.services import user_service
 from app.services.teams_client import create_team_via_group
+from app.core import jobs
 
 def _err(exc: Exception) -> str:
     return getattr(exc, "detail", str(exc))
@@ -2370,25 +2371,16 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Preview
         student_details=[]
     )
 
-@router.post("/excel/matriculaciones-onedrive", response_model=BulkResult)
-async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
-    if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL inválida.")
-    
-    encoded_url = _encode_share_url(req.url)
-    try:
-        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error descargando archivo de OneDrive: {e}")
-
+async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, contents: bytes, encoded_url: str):
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
     except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+        await jobs.complete_job(job_id, "failed", 0, 0, f"El archivo no es un Excel válido: {e}")
+        return
 
-    result = BulkResult()
     if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+        await jobs.complete_job(job_id, "failed", 0, 0, f"La pestaña '{req.sheet_name}' no existe.")
+        return
 
     ws = wb[req.sheet_name]
     
@@ -2419,25 +2411,38 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
             env_col = col_idx
 
     if not user_col or not (canvas_col or teams_col):
-        raise HTTPException(status_code=400, detail="El archivo debe tener al menos una columna de 'usuario' y una de 'curso/canvas' o 'equipo/teams'.")
+        await jobs.complete_job(job_id, "failed", 0, 0, "Falta columna de 'usuario' o 'curso/canvas' o 'equipo/teams'.")
+        return
+        
     if not env_col:
         env_col = ws.max_column + 1
         ws.cell(row=header_row_idx, column=env_col, value="Enviado")
 
-    # Import dependencies specifically inside function to avoid circular imports or missing vars
     from app.routers.sync import _enroll_single, UnifiedEnrollment
 
     tasks = []
+    success_count = 0
+    error_count = 0
+    total_to_process = ws.max_row - header_row_idx
     
-    async def process_row(r_idx):
+    # Pre-calcular tareas válidas (filas)
+    valid_rows = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         user_val = str(ws.cell(row=r_idx, column=user_col).value or "").strip()
         if not user_val:
-            return None
-            
+            continue
         estado_val = str(ws.cell(row=r_idx, column=env_col).value or "").strip().lower()
         if estado_val == "ok" or "matriculado" in estado_val:
-            return None
-        
+            continue
+        valid_rows.append(r_idx)
+    
+    if not valid_rows:
+        await jobs.complete_job(job_id, "completed", 0, 0, "No hay filas nuevas para procesar.")
+        return
+
+    async def process_row(r_idx):
+        nonlocal success_count, error_count
+        user_val = str(ws.cell(row=r_idx, column=user_col).value or "").strip()
         canvas_val = str(ws.cell(row=r_idx, column=canvas_col).value or "").strip() if canvas_col else ""
         teams_val = str(ws.cell(row=r_idx, column=teams_col).value or "").strip() if teams_col else ""
         rol_val = str(ws.cell(row=r_idx, column=rol_col).value or "estudiante").strip().lower() if rol_col else "estudiante"
@@ -2464,24 +2469,30 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
         try:
             enroll_res = await _enroll_single(enroll_item)
             if enroll_res.get("status") == "success":
-                result.succeeded.append({"correo": user_val, "mensaje": "Matriculado"})
+                success_count += 1
                 ws.cell(row=r_idx, column=env_col, value="OK").fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
             else:
                 msg = enroll_res.get("message", "Error desconocido")
-                result.failed.append({"correo": user_val, "error": msg})
+                error_count += 1
                 ws.cell(row=r_idx, column=env_col, value=f"Error: {msg}").fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
         except Exception as ex:
             msg = str(ex)
-            result.failed.append({"correo": user_val, "error": msg})
+            error_count += 1
             ws.cell(row=r_idx, column=env_col, value=f"Error: {msg}").fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
-    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        tasks.append(process_row(r_idx))
-    
-    # Process tasks in chunks to avoid rate limiting
+    # Process in chunks and update DB progress periodically
     batch_size = 5
-    for i in range(0, len(tasks), batch_size):
-        await asyncio.gather(*(t for t in tasks[i:i+batch_size] if t is not None))
+    for i in range(0, len(valid_rows), batch_size):
+        chunk = valid_rows[i:i+batch_size]
+        await asyncio.gather(*(process_row(r) for r in chunk))
+        
+        # Report progress to DB every batch
+        await jobs.update_job_progress(
+            job_id, 
+            success_count, 
+            error_count, 
+            data_json=f'{{"total_to_process": {len(valid_rows)}, "processed": {success_count + error_count}}}'
+        )
 
     # Save to OneDrive
     out_io = io.BytesIO()
@@ -2490,10 +2501,37 @@ async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> BulkResu
     
     try:
         await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+        await jobs.complete_job(job_id, "completed", success_count, error_count, "Guardado en OneDrive correctamente.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"No se pudo guardar en OneDrive: {e}")
+        await jobs.complete_job(job_id, "completed", success_count, error_count, f"Procesado, pero no se pudo guardar en OneDrive: {e}")
 
-    return result
+@router.post("/excel/matriculaciones-onedrive")
+async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks) -> dict:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+    
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error descargando archivo de OneDrive: {e}")
+
+    job_id = await jobs.create_job(
+        job_type="matriculacion_masiva_onedrive",
+        operation="import",
+        username="admin" # Ideally from auth token
+    )
+    
+    bg_tasks.add_task(_process_matriculaciones_bg, job_id, req, contents, encoded_url)
+    
+    return {"status": "success", "job_id": job_id, "message": "Proceso de matriculación iniciado en segundo plano."}
+
+@router.get("/excel/jobs/{job_id}")
+async def get_job_status(job_id: int):
+    job = await jobs.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado.")
+    return job
 
 @router.post("/excel/rollback", response_model=BulkResult)
 async def rollback_onedrive(req: UrlOnlyRequest) -> BulkResult:

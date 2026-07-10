@@ -347,3 +347,58 @@ async def get_jobs_stats(date_from: str = None, date_to: str = None) -> dict:
     except Exception as e:
         logger.error(f"Error getting job stats: {e}")
         return {}
+
+async def get_job(job_id: int) -> dict:
+    """Get a specific job by ID."""
+    try:
+        conn = psycopg2.connect(settings.supabase_database_url)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "job_type": row["job_type"],
+                "operation": row["operation"],
+                "username": row["username"],
+                "status": row["status"],
+                "result_count": row["result_count"],
+                "error_count": row["error_count"],
+                "error_message": row["error_message"],
+                "details": row["details"],
+                "data_json": row["data_json"]
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Error getting job {job_id}: {e}")
+        return None
+
+async def update_job_progress(job_id: int, result_count: int, error_count: int, data_json: str = None):
+    """Update progress for a running job without completing it."""
+    try:
+        conn = psycopg2.connect(settings.supabase_database_url)
+        cursor = conn.cursor()
+        
+        if data_json is not None:
+            cursor.execute("""
+                UPDATE jobs
+                SET result_count = %s, error_count = %s, data_json = %s
+                WHERE id = %s
+            """, (result_count, error_count, data_json, job_id))
+        else:
+            cursor.execute("""
+                UPDATE jobs
+                SET result_count = %s, error_count = %s
+                WHERE id = %s
+            """, (result_count, error_count, job_id))
+            
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error updating job progress {job_id}: {e}")
+
