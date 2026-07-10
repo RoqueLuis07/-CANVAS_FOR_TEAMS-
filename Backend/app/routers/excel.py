@@ -1137,7 +1137,24 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         if not col_enviado:
             col_enviado = next_col
             _safe_set_cell(ws, header_row_idx, col_enviado, "Enviado").font = Font(bold=True)
-            
+
+        # Si la planilla tiene una columna "Enviado" propia del usuario,
+        # separada de "Estado" (que es la que el sistema prioriza para
+        # decidir si ya se procesó una fila), la mantenemos sincronizada
+        # con el mismo estado en vez de dejarla vacía/manual.
+        col_enviado_mirror = None
+        for h, idx in headers.items():
+            if idx != col_enviado and "enviado" in h:
+                col_enviado_mirror = idx
+                break
+
+        def _set_estado(r_idx, value, color):
+            cell = ws.cell(row=r_idx, column=col_enviado, value=value)
+            cell.font = Font(color=color, bold=True)
+            if col_enviado_mirror:
+                mirror_cell = ws.cell(row=r_idx, column=col_enviado_mirror, value=value)
+                mirror_cell.font = Font(color=color, bold=True)
+
         global_team_id = ""
         title_val = _find_row1_title(ws)
         global_team_name = title_val
@@ -1191,7 +1208,11 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             enviado_lower = enviado.lower()
             if "✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado_lower or "ya exist" in enviado_lower or (usuario_val and "@" in usuario_val):
                 if not enviado and col_enviado:
-                    ws.cell(row=r_idx, column=col_enviado, value="✅ Existente")
+                    _set_estado(r_idx, "✅ Existente", "00B050")
+                elif col_enviado_mirror:
+                    mirror_val = str(ws.cell(row=r_idx, column=col_enviado_mirror).value or "").strip()
+                    if not mirror_val:
+                        _set_estado(r_idx, enviado, "00B050")
                 # Alumno ya creado en una corrida anterior: igual verificamos que
                 # esté agregado al grupo de Teams correspondiente (como miembro),
                 # y lo agregamos si falta — un run previo pudo haber creado la
@@ -1303,14 +1324,11 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id})
 
                 if not error:
-                    ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
-                    ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
+                    _set_estado(r_idx, "✅ OK", "00B050")
                 else:
-                    ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error}")
-                    ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
+                    _set_estado(r_idx, f"⚠️ {error}", "D97706")
             else:
-                ws.cell(row=r_idx, column=col_enviado, value=f"❌ Error: {error}")
-                ws.cell(row=r_idx, column=col_enviado).font = Font(color="FF0000")
+                _set_estado(r_idx, f"❌ Error: {error}", "FF0000")
                 result.failed.append({"input": {"cedula": cedula}, "error": error})
 
         tasks = []

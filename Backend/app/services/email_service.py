@@ -22,7 +22,7 @@ _BASE_CC = ["lflorentin@usil.edu.py", "comercialcredenciales@usil.edu.py", "rest
 # CC adicional según el tipo de programa, replicando "Envio Credenciales"
 # (grado) vs "Envio Credenciales UBS" (diplomados) de la planilla de referencia.
 _PROGRAM_CC: dict[str, list[str]] = {
-    "diplomado": ["ubs@usil.edu.py"],
+    "diplomado": ["ubs@usil.edu.py", "glezcano@usil.edu.py"],
     "grado": ["gradocredenciales@usil.edu.py"],
 }
 
