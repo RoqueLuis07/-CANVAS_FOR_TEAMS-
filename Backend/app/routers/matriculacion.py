@@ -8,6 +8,7 @@ from datetime import datetime
 
 from app.services import canvas_client as canvas
 from app.services import teams_client as teams
+from app.core import jobs
 
 router = APIRouter(tags=["Matriculaciones Individuales"])
 
@@ -132,45 +133,49 @@ async def matriculate_individual(req: IndividualEnrollmentRequest,):
             "teams_status": teams_status
         })
         
-    # Log History
-    log_history(req, results)
+    # Log History in SQLite Jobs
+    error_count = sum(1 for r in results if 'Error' in r['canvas_status'] or 'Error' in r['teams_status'])
+    job_id = await jobs.create_job(
+        job_type="matriculacion_individual",
+        operation="matriculacion",
+        username="sistema",
+        details=f"Matriculación de {req.email}",
+        data_json=json.dumps({"req": req.dict(), "results": results})
+    )
+    if job_id:
+        await jobs.start_job(job_id)
+        await jobs.complete_job(
+            job_id=job_id,
+            result_count=len(results),
+            error_count=error_count
+        )
     
     return {"status": "success", "results": results}
 
-def log_history(req, results):
-    log_file = os.path.join(os.path.dirname(__file__), "..", "data", "matriculaciones_history.json")
-    history = []
-    if os.path.exists(log_file):
-        with open(log_file, "r", encoding="utf-8") as f:
-            try:
-                history = json.load(f)
-            except json.JSONDecodeError:
-                history = []
-                
-    history.append({
-        "timestamp": datetime.now().isoformat(),
-        "email": req.email,
-        "sys_id": req.sys_id,
-        "program": req.program,
-        "platforms": req.platforms,
-        "results": results
-    })
-    
-    # Keep only the last 100 entries to prevent huge file
-    history = history[-100:]
-    
-    with open(log_file, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
-
 @router.get("/api/matriculacion/history")
 async def get_history():
-    log_file = os.path.join(os.path.dirname(__file__), "..", "data", "matriculaciones_history.json")
-    if not os.path.exists(log_file):
-        return []
-    with open(log_file, "r", encoding="utf-8") as f:
+    result = await jobs.get_jobs(job_type="matriculacion_individual", limit=100)
+    history = []
+    for job in result.get("jobs", []):
         try:
-            history = json.load(f)
-            # Return sorted by timestamp descending
-            return sorted(history, key=lambda x: x.get("timestamp", ""), reverse=True)
-        except json.JSONDecodeError:
-            return []
+            data = json.loads(job["data_json"]) if job.get("data_json") else {}
+            req_data = data.get("req", {})
+            
+            created_at = job["created_at"]
+            if hasattr(created_at, "isoformat"):
+                timestamp = created_at.isoformat()
+            else:
+                timestamp = str(created_at)
+                
+            history.append({
+                "timestamp": timestamp,
+                "email": req_data.get("email", ""),
+                "sys_id": req_data.get("sys_id", ""),
+                "program": req_data.get("program", ""),
+                "platforms": req_data.get("platforms", ""),
+                "results": data.get("results", [])
+            })
+        except Exception as e:
+            print(f"Error parsing job history: {e}")
+            
+    return history

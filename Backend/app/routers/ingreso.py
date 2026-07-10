@@ -256,17 +256,7 @@ async def _check_account(body: AccountCheckIn) -> dict[str, Any]:
     return result
 
 
-async def _generate_unique_credentials(full_name: str, cedula: str, platform: str) -> dict:
-    creds = generate_credentials(full_name, cedula, settings.institutional_domain)
-    
-    # 1. Verificar si ya existe por cédula (no cambiar correo si es el mismo usuario)
-    try:
-        if platform in ("canvas", "both"):
-            exists, info = await _canvas_user_exists(cedula, creds["email"])
-            if exists and info.get("found_by") == "cedula":
-                return creds
-    except Exception:
-        pass
+
 async def _create_student(student: StudentIn) -> dict[str, Any]:
     """Crea un usuario en Canvas y/o Teams según la plataforma indicada.
 
