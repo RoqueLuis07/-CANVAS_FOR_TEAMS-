@@ -123,8 +123,10 @@ def _build_diplomado_message(
       <p>{programa_line}</p>
 
       <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
-        <p style="margin:0 0 8px;"><strong>Microsoft Teams</strong> es la plataforma oficial donde podrá acceder a sus clases virtuales, materiales académicos y comunicarse con sus docentes y compañeros.</p>
-        <p style="margin:0;">Acceda desde el siguiente enlace:<br><a href="{_DIPLOMADO_TEAMS_LINK}">{_DIPLOMADO_TEAMS_LINK}</a></p>
+        <p style="margin:0 0 12px;"><strong>Microsoft Teams</strong> es la plataforma oficial donde podrá acceder a sus clases virtuales, materiales académicos y comunicarse con sus docentes y compañeros.</p>
+        <p style="margin:0;">
+          <a href="{_DIPLOMADO_TEAMS_LINK}" style="display:inline-block; background:#4b53bc; color:#ffffff; text-decoration:none; font-weight:bold; padding:10px 22px; border-radius:6px;">Acceder a Microsoft Teams</a>
+        </p>
       </div>
 
       <p>A continuación, con las siguientes credenciales podrá ingresar a <strong>Microsoft Teams</strong>:</p>
