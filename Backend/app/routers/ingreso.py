@@ -75,7 +75,7 @@ class StudentIn(BaseModel):
         cleaned = v.replace("-", "").replace(".", "")
         if not cleaned.isdigit():
             raise ValueError("La cédula debe contener solo números")
-        return v
+        return cleaned
 
     @field_validator("personal_email")
     @classmethod
@@ -134,7 +134,7 @@ class ResendCredentialsIn(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("La cédula es requerida")
-        return v
+        return v.replace("-", "").replace(".", "")
 
     @field_validator("personal_email")
     @classmethod
@@ -173,7 +173,7 @@ class AccountCheckIn(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("La cédula es requerida para la verificación")
-        return v
+        return v.replace("-", "").replace(".", "")
 
 
 class BulkAccountCheckIn(BaseModel):

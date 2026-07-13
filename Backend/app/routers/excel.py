@@ -58,6 +58,13 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
 
 
+def _clean_cedula(v: str) -> str:
+    """Quita puntos/guiones/espacios de una cédula leída de Excel (ej. '3.517.784'
+    → '3517784'), para que el formato de credenciales (cedula-Iniciales) sea
+    siempre consistente sin importar cómo esté formateada la celda de origen."""
+    return re.sub(r"[.\-\s]", "", v or "")
+
+
 def _validate_file(file: UploadFile) -> None:
     """Validar tipo y tamaño del archivo."""
     # Validar tipo MIME
@@ -613,7 +620,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
     async def _process(row: dict):
         try:
             full_name = _get(row, "nombre_completo", "nombre", "full_name")
-            cedula    = _get(row, "cedula", "ci")
+            cedula    = _clean_cedula(_get(row, "cedula", "ci") or "")
             p_email   = _get(row, "correo_personal", "personal_email")
 
             if not full_name or not cedula:
@@ -1168,7 +1175,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         
         async def process_row(r_idx):
             nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-            cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+            cedula = _clean_cedula(str(ws.cell(row=r_idx, column=col_cedula).value or "").strip())
             correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
             id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
             id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
@@ -2308,7 +2315,8 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
     col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
     col_enviado = get_col_idx("estado", "enviado")
-    
+    col_usuario = get_col_idx("usuario")
+
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
     if col_cc:
@@ -2323,7 +2331,7 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
     rows = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-        cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+        cedula = _clean_cedula(str(ws.cell(row=r_idx, column=col_cedula).value or "").strip())
         
         if not nombre or not cedula or cedula == "None":
             continue
@@ -2333,9 +2341,13 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
         id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
         id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
         
+        usuario_preview = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
         if col_enviado:
             enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
-            if "?" in enviado or enviado.lower() in ["si", "yes", "true", "enviado"]:
+            enviado_lower = enviado.lower()
+            if ("✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"]
+                    or "creado ok" in enviado_lower or "ya exist" in enviado_lower
+                    or (usuario_preview and "@" in usuario_preview)):
                 continue
 
         rows.append({
@@ -2434,20 +2446,24 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     users_to_process = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-        cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+        cedula = _clean_cedula(str(ws.cell(row=r_idx, column=col_cedula).value or "").strip())
         
         if not nombre or not cedula or cedula == "None":
             continue
             
         enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
-        if "?" in enviado or enviado.lower() in ["si", "yes", "true", "enviado", "ok"]:
+        enviado_lower = enviado.lower()
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
+        if ("✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"]
+                or "creado ok" in enviado_lower or "ya exist" in enviado_lower
+                or (usuario_val and "@" in usuario_val)):
             continue
-            
+
         users_to_process.append(r_idx)
 
     for r_idx in users_to_process:
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-        cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+        cedula = _clean_cedula(str(ws.cell(row=r_idx, column=col_cedula).value or "").strip())
         correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
         plat = str(ws.cell(row=r_idx, column=col_plat).value or default_plat).strip().lower() if col_plat else default_plat
         id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
@@ -3241,7 +3257,7 @@ async def import_diplomados_json(req: JsonDataRequest):
     
     for row in req.data:
         nombre = str(row.get("nombre") or "").strip()
-        cedula = str(row.get("cedula") or "").strip()
+        cedula = _clean_cedula(str(row.get("cedula") or "").strip())
         curso_nombre = str(row.get("curso_nombre") or "").strip()
         
         if not nombre or not cedula:
@@ -3501,7 +3517,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
     async def process_row(r_idx):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
-        cedula = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
+        cedula = _clean_cedula(str(ws.cell(row=r_idx, column=col_cedula).value or "").strip())
         correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
         plat_val = str(ws.cell(row=r_idx, column=col_plataforma).value or default_plat).strip().lower() if col_plataforma else default_plat
         
