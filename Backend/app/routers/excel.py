@@ -588,20 +588,17 @@ async def template_ingreso():
                  "Rol * (student / teacher)",
                  "Tipo Programa * (grado / mba / diplomado)",
                  "Nombre del Programa",
-                 "Plataforma (both / canvas / teams)",
-                 "Enviar Correo (true / false)",
-                 "CC (correos separados por coma)"],
+                 "Plataforma (both / canvas / teams)"],
         examples=[
             ["Karen Gonzalez", "6868066", "karen@gmail.com",
-             "student", "grado", "", "both", "true", ""],
+             "student", "grado", "", "both"],
             ["Juan Perez", "1234567", "juan@gmail.com",
-             "student", "mba", "Master in Business Administration", "both", "true",
-             "director@usil.edu.py"],
+             "student", "mba", "Master in Business Administration", "both"],
             ["Prof. Maria Lopez", "9999999", "maria@gmail.com",
              "teacher", "diplomado", "Diplomado en Gestión Empresarial",
-             "teams", "true", ""],
+             "teams"],
         ],
-        col_widths=[28, 14, 28, 26, 36, 36, 30, 26, 36],
+        col_widths=[28, 14, 28, 26, 36, 36, 30],
     )
     return _wb_response(wb, "plantilla_nuevo_ingreso.xlsx")
 
@@ -627,15 +624,13 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
             program_type = (_get(row, "tipo_programa_grado_mba_diplomado", "tipo_programa", "program_type") or "grado").lower()
             creds, status = await user_service.generate_unique_credentials(full_name, cedula, platform)
             program_name = _get(row, "nombre_del_programa", "nombre_programa", "program_name") or ""
-            do_email     = (_get(row, "enviar_correo_true_false", "enviar_correo", "send_email") or "true").lower() not in ("false", "0", "no")
-            cc_raw       = _get(row, "cc_correos_separados_por_coma", "cc") or ""
-            extra_cc     = [e.strip() for e in cc_raw.split(",") if e.strip()]
             # login = email institucional para ambas plataformas (alumnos y docentes)
             # SIS   = cédula siempre (identificador institucional)
             login_id = creds["email"]
 
             entry: dict[str, Any] = {
                 "student": full_name, "role": role,
+                "personal_email": p_email,
                 "credentials": {**creds, "login_id": login_id},
             }
 
@@ -689,30 +684,9 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                     else:
                         entry["teams"] = {"status": "error", "error": exc.detail if isinstance(exc, HTTPException) else str(exc)}
 
-            is_existing_canvas = entry.get("canvas", {}).get("msg") == "Ya existía en Canvas"
-            is_existing_teams = entry.get("teams", {}).get("msg") == "Ya existía en Azure AD"
-            
-            skip_email = False
-            if platform in ("canvas", "both") and is_existing_canvas:
-                skip_email = True
-            if platform in ("teams", "both") and is_existing_teams:
-                skip_email = True
-
-            if do_email and p_email and not skip_email:
-                try:
-                    await email_service.send_credentials_email(
-                        to_email=p_email,
-                        full_name=creds["full_name"],
-                        login_id=login_id,
-                        password=creds["password"],
-                        program_type=program_type,
-                        program_name=program_name,
-                        extra_cc=extra_cc,
-                    )
-                    entry["email"] = "sent"
-                except Exception as exc:
-                    entry["email"] = f"error: {exc}"
-
+            # El correo de credenciales no se envía aquí: es una acción aparte,
+            # disparada manualmente (POST /ingreso/resend-credentials o
+            # /ingreso/bulk-resend) con los datos de `entry["credentials"]`.
             result.succeeded.append(entry)
         except Exception as exc:
             result.failed.append({
@@ -3568,31 +3542,20 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         final_error = []
         if error_teams: final_error.append(error_teams)
         if error_canvas: final_error.append(error_canvas)
-        
+
         error_msg = " | ".join(final_error)
 
-        email_sent = False
-        if not error_msg and correo and correo != "None":
-            try:
-                await email_service.send_credentials_email(
-                    to_email=correo, full_name=creds["full_name"],
-                    login_id=login_id, password=pwd,
-                )
-                email_sent = True
-            except Exception as e:
-                error_msg = f"Creado OK, pero falló el correo: {e}"
-        elif not error_msg and (not correo or correo == "None"):
+        # El correo de credenciales NO se envía aquí: es una acción separada,
+        # disparada manualmente con el botón "Enviar Credenciales"
+        # (POST /excel/masivo/send-credentials).
+        if not error_msg and (not correo or correo == "None"):
             error_msg = "Creado OK (Sin correo personal)"
 
         if not error_msg or "Creado OK" in error_msg or "Ya existía" in error_msg:
             ws.cell(row=r_idx, column=col_usuario, value=login_id)
             ws.cell(row=r_idx, column=col_contra, value=pwd)
-            
-            if error_msg and "falló el correo" in error_msg:
-                ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error_msg}")
-                ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
-                result.succeeded.append({"correo": login_id, "mensaje": "Creado sin correo"})
-            elif error_msg and "Ya existía" in error_msg:
+
+            if error_msg and "Ya existía" in error_msg:
                 ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error_msg}")
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
                 result.succeeded.append({"correo": login_id, "mensaje": "Ya existía"})
@@ -3627,6 +3590,125 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo en OneDrive: {e}")
 
     return result
+
+
+@router.post("/excel/masivo/send-credentials", summary="Enviar correo de credenciales a usuarios ya creados (Carga Masiva)")
+async def send_masivo_credentials(req: DiplomadosUrlRequest) -> BulkResult:
+    """Envía el correo de credenciales a los usuarios de una Carga Masiva que ya
+    tienen cuenta creada (Usuario + Contraseña ya generados) y que todavía no la
+    recibieron. Acción separada de la creación de cuentas (misma lógica que
+    Diplomados/Docentes)."""
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    result = BulkResult()
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
+    col_correo = get_col_idx("correo", "email")
+    col_usuario = get_col_idx("usuario")
+    col_contra = get_col_idx("contrasena", "contraseña", "clave")
+
+    if not col_usuario or not col_contra:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontraron las columnas de Usuario/Contraseña. Primero procesa la planilla con 'Carga Masiva'.",
+        )
+    if not col_correo:
+        raise HTTPException(status_code=400, detail="No se encontró una columna de Correo para enviar las credenciales.")
+
+    col_correo_enviado = get_col_idx("correo enviado", "credenciales enviadas")
+    if not col_correo_enviado:
+        col_correo_enviado = ws.max_column + 1
+        _safe_set_cell(ws, header_row_idx, col_correo_enviado, "Correo Enviado").font = Font(bold=True)
+
+    rows_to_send = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
+        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "").strip().lower()
+
+        if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
+            continue  # cuenta no creada todavía
+        if not correo_val or "@" not in correo_val:
+            continue  # sin correo personal para enviar
+        if ya_enviado and ("✅" in ya_enviado or ya_enviado in ("si", "yes", "true", "enviado")):
+            continue  # ya se le envió
+
+        rows_to_send.append(r_idx)
+
+    if len(rows_to_send) > 50:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Límite de seguridad excedido: intentas enviar {len(rows_to_send)} correos a la vez (máximo 50 permitidos).",
+        )
+
+    async def send_row(r_idx):
+        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
+        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
+
+        try:
+            await email_service.send_credentials_email(
+                to_email=correo_val,
+                full_name=nombre or usuario_val,
+                login_id=usuario_val,
+                password=contra_val,
+            )
+            ws.cell(row=r_idx, column=col_correo_enviado, value="✅ Enviado")
+            ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="00B050", bold=True)
+            result.succeeded.append({"correo": correo_val, "usuario": usuario_val})
+        except Exception as exc:
+            ws.cell(row=r_idx, column=col_correo_enviado, value=f"❌ Error: {exc}")
+            ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="FF0000")
+            result.failed.append({"correo": correo_val, "error": str(exc)})
+
+    batch_size = 5
+    for i in range(0, len(rows_to_send), batch_size):
+        await asyncio.gather(*(send_row(r) for r in rows_to_send[i:i + batch_size]))
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+
+    if not result.succeeded and not result.failed:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay usuarios pendientes de envío: o no tienen cuenta creada todavía, o ya se les envió el correo, o no tienen correo personal cargado.",
+        )
+
+    return result
+
 
 @router.post("/excel/courses/delete/preview")
 async def preview_delete_courses_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:

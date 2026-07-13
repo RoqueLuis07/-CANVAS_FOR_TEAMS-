@@ -242,9 +242,11 @@
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
+                  <button type="button" class="btn btn-outline-primary" onclick="sendMasivoCredentials()" id="btnSendMasivoCredentials" disabled><i class="bi bi-envelope-check me-2"></i>Enviar Credenciales</button>
                   <button type="button" class="btn btn-primary" onclick="importMasivo()" id="btnImportMasivo" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
                 </div>
-                
+                <div id="masivoSendResult" class="mb-4"></div>
+
                 <div id="masivoPreviewWrap" style="display:none;" class="mb-4">
                   <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-table me-2"></i>Vista Previa (Muestra)</h6>
                   <div class="table-responsive bg-white rounded border">
@@ -504,7 +506,7 @@ async function updateEmailPreview() {
         try {
             const res = await api.post('/ingreso/preview', {
                 full_name: fullName, cedula: cedula, personal_email: 'test@usil.edu.py',
-                role: 'student', platform: plat, program_type: 'grado', send_email: false, cc: []
+                role: 'student', platform: plat, program_type: 'grado', cc: []
             });
             document.getElementById('ci_email_generated').innerText = "Email institucional: " + res.institutional_email;
         } catch (err) {}
@@ -571,7 +573,6 @@ async function doCrearInd() {
             platform:     document.getElementById('ci_plataforma').value,
             program_type: document.getElementById('ci_tipo').value,
             program_name: document.getElementById('ci_programa').value,
-            send_email:   false,
             cc:           []
         });
         renderCreateSingle(res);
@@ -676,7 +677,7 @@ async function doPreview() {
             cedula:         document.getElementById('pv_cedula').value,
             personal_email: 'preview@usil.edu.py',
             role:           document.getElementById('pv_rol').value,
-            platform:       'both', program_type: 'grado', send_email: false, cc: []
+            platform:       'both', program_type: 'grado', cc: []
         });
         
         let html = '<div class="alert alert-success border-0 shadow-sm">';
@@ -727,7 +728,6 @@ function openExcelCrear() {
         platform: r.platform || 'both',
         program_type: r.program_type || 'grado',
         program_name: r.program_name || '',
-        send_email: true,
         cc: []
       }));
       
@@ -762,6 +762,8 @@ function openExcelCrear() {
   });
 }
 
+let lastCreatedStudents = [];
+
 async function confirmIngresoPreview() {
     if (!pendingStudents || pendingStudents.length === 0) return;
     const btn = document.getElementById('btnConfirmIngreso');
@@ -772,9 +774,30 @@ async function confirmIngresoPreview() {
         // Mostrar resultados como antes
         let successHtml = `<ul>${res.succeeded.map(s => `<li>${s.student}: OK</li>`).join('')}</ul>`;
         let errHtml = res.failed.length > 0 ? `<div class="text-danger">Fallos:</div><ul>${res.failed.map(f => `<li>${f.student}: ${f.error}</li>`).join('')}</ul>` : '';
-        document.getElementById('previewResult').innerHTML = `<div class="alert alert-success">Completado!</div>${successHtml}${errHtml}`;
+        const succeededNames = new Set(res.succeeded.map(s => s.student));
+        lastCreatedStudents = pendingStudents.filter(s => succeededNames.has(s.full_name));
+        const sendBtnHtml = lastCreatedStudents.length
+            ? `<button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="sendLastCreatedCredentials()" id="btnSendLastCreated"><i class="bi bi-envelope-check me-2"></i>Enviar Credenciales a los Creados (${lastCreatedStudents.length})</button>`
+            : '';
+        document.getElementById('previewResult').innerHTML = `<div class="alert alert-success">Completado!</div>${successHtml}${errHtml}${sendBtnHtml}`;
         document.getElementById('previewResult').style.display = 'block';
         toast('Proceso finalizado.', 'success');
+    } catch (err) {
+        toast('Error: ' + err.message, 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+async function sendLastCreatedCredentials() {
+    if (!lastCreatedStudents.length) return;
+    if (!confirm(`¿Enviar el correo de credenciales a los ${lastCreatedStudents.length} usuarios recién creados?`)) return;
+    const btn = document.getElementById('btnSendLastCreated');
+    setLoading(btn, true);
+    try {
+        const res = await api.post('/ingreso/bulk-resend', { students: lastCreatedStudents });
+        toast(`Envío de credenciales: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
+        btn.disabled = true;
     } catch (err) {
         toast('Error: ' + err.message, 'danger');
     } finally {
@@ -1138,9 +1161,33 @@ async function previewMasivo() {
         }).join('');
         document.getElementById('masivoPreviewWrap').style.display = 'block';
         document.getElementById('btnImportMasivo').disabled = false;
+        document.getElementById('btnSendMasivoCredentials').disabled = false;
         toast(`Previsualizando muestra (filas a procesar: ${res.students_to_process})`, 'success');
     } catch (e) {
         toast(e.message, 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+async function sendMasivoCredentials() {
+    const url = document.getElementById('masivoUrl').value;
+    const sheet = document.getElementById('masivoSheet').value;
+    if (!url || !sheet) return;
+    if (!confirm('¿Enviar el correo de credenciales a los usuarios ya creados que todavía no lo recibieron?')) return;
+
+    const btn = document.getElementById('btnSendMasivoCredentials');
+    const resultDiv = document.getElementById('masivoSendResult');
+    setLoading(btn, true);
+    resultDiv.innerHTML = '';
+
+    try {
+        const res = await api.post('/excel/masivo/send-credentials', { url: url, sheet_name: sheet });
+        resultDiv.innerHTML = `<div class="alert alert-info py-2 small mb-0">Correos enviados: <strong>${res.succeeded.length}</strong> · Errores: <strong>${res.failed.length}</strong></div>`;
+        toast(`Envío de credenciales: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
+    } catch (e) {
+        resultDiv.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${e.message}</div>`;
+        toast('Error: ' + e.message, 'danger');
     } finally {
         setLoading(btn, false);
     }

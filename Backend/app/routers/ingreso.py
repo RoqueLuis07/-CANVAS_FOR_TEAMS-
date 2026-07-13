@@ -4,7 +4,9 @@ Flujo principal:
   1. Generar credenciales institucionales a partir del nombre + cédula.
   2. Crear cuenta en Canvas LMS (si platform incluye 'canvas').
   3. Crear cuenta en Azure AD / Microsoft Teams (si platform incluye 'teams').
-  4. Enviar email de bienvenida con las credenciales (si send_email=True).
+  4. El envío del correo de credenciales es una acción aparte, disparada por
+     el usuario con los botones "Reenviar Credenciales" (/resend-credentials,
+     /bulk-resend) — nunca ocurre automáticamente al crear la cuenta.
 
 Endpoints públicos:
   POST /ingreso/preview             – Previsualizar credenciales sin crear nada.
@@ -51,7 +53,6 @@ class StudentIn(BaseModel):
     platform: str = "both"
     program_type: str = "grado"
     program_name: str = ""
-    send_email: bool = True
     cc: list[str] = []
     courses: list[str] = []
 
@@ -266,8 +267,10 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
     2. Pre-verifica existencia antes de intentar crear (evita duplicados).
     3. Crea en Canvas si platform in ('canvas', 'both').
     4. Crea en Teams/Azure AD si platform in ('teams', 'both').
-    5. Envía email de bienvenida si send_email=True.
-    6. Matricula en los cursos de Canvas si se proveyeron en `courses`.
+    5. Matricula en los cursos de Canvas si se proveyeron en `courses`.
+
+    El envío del correo de credenciales NO ocurre acá: es una acción aparte
+    (ver /resend-credentials, /bulk-resend).
 
     Returns:
         Diccionario con estado de cada plataforma y las credenciales generadas.
@@ -393,23 +396,10 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
                 except Exception as exc:
                     results["canvas_enrollments"].append({"course_id": course_id, "status": "error", "error": _err(exc)})
 
-    # ── Email de bienvenida ──────────────────────────────────────
-    canvas_ok = results.get("canvas", {}).get("status") in ("ok", "exists")
-    teams_ok = results.get("teams", {}).get("status") in ("ok", "exists")
-    if student.send_email and student.personal_email and (canvas_ok or teams_ok):
-        try:
-            await email_service.send_credentials_email(
-                to_email=student.personal_email,
-                full_name=creds["full_name"],
-                login_id=login_id,
-                password=creds["password"],
-                program_type=student.program_type,
-                program_name=student.program_name,
-                extra_cc=student.cc,
-            )
-            results["email"] = "sent"
-        except Exception as exc:
-            results["email"] = f"error: {_err(exc)}"
+    # El correo de credenciales NO se envía automáticamente al crear la cuenta:
+    # es una acción separada, disparada manualmente con el botón "Enviar
+    # Credenciales" (POST /ingreso/resend-credentials o /ingreso/bulk-resend).
+    results["credentials"] = creds
 
     return results
 
@@ -650,7 +640,6 @@ async def bulk_file_create(file: UploadFile = File(...)) -> BulkResult:
                 platform=str(row[4]).strip().lower() if len(row) > 4 and row[4] else "both",
                 program_type=str(row[5]).strip().lower() if len(row) > 5 and row[5] else "grado",
                 program_name=str(row[6]).strip() if len(row) > 6 and row[6] else "",
-                send_email=True,
                 cc=[],
             )
             data = await _create_student(student_data)
