@@ -39,6 +39,12 @@ _DIPLOMADO_ATTACHMENTS = [
     _DIPLOMADO_ATTACHMENTS_DIR / "3° Descargar grabacion en TEAMS - Instructivo.pdf",
 ]
 
+# Datos de contacto de TI UBS, tal como aparecen en el correo real que el
+# equipo venía enviando a mano (mismo texto, mismo WhatsApp).
+_DIPLOMADO_CONTACT_EMAILS = ["lflorentin@usil.edu.py", "glezcano@usil.edu.py"]
+_DIPLOMADO_WHATSAPP = "0991 856 488"
+_DIPLOMADO_TEAMS_LINK = "https://teams.cloud.microsoft/"
+
 
 def default_cc_for_program(program_type: str | None) -> list[str]:
     extra = _PROGRAM_CC.get((program_type or "").strip().lower(), [])
@@ -52,6 +58,18 @@ def attachments_for_program(program_type: str | None) -> list[Path]:
     if (program_type or "").strip().lower() != "diplomado":
         return []
     return [p for p in _DIPLOMADO_ATTACHMENTS if p.is_file()]
+
+
+def _attach_files(msg: MIMEMultipart, attachments: list[Path] | None) -> None:
+    for path in attachments or []:
+        try:
+            ctype, _ = mimetypes.guess_type(path.name)
+            maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
+            part = MIMEApplication(path.read_bytes(), _subtype=subtype)
+            part.add_header("Content-Disposition", "attachment", filename=path.name)
+            msg.attach(part)
+        except Exception as exc:
+            logger.warning("No se pudo adjuntar %s al correo de credenciales: %s", path, exc)
 
 
 def _build_credentials_message(
@@ -82,17 +100,72 @@ def _build_credentials_message(
     body = MIMEMultipart("alternative")
     body.attach(MIMEText(html, "html"))
     msg.attach(body)
+    _attach_files(msg, attachments)
+    return msg
 
-    for path in attachments or []:
-        try:
-            ctype, _ = mimetypes.guess_type(path.name)
-            maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
-            part = MIMEApplication(path.read_bytes(), _subtype=subtype)
-            part.add_header("Content-Disposition", "attachment", filename=path.name)
-            msg.attach(part)
-        except Exception as exc:
-            logger.warning("No se pudo adjuntar %s al correo de credenciales: %s", path, exc)
 
+def _build_diplomado_message(
+    *, to_email: str, cc: list[str], full_name: str, login_id: str, password: str,
+    program_name: str = "", attachments: list[Path] | None = None,
+) -> MIMEMultipart:
+    """Réplica exacta del correo que TI UBS venía enviando a mano para
+    Diplomados (bienvenida a la USIL Business School, acceso a Microsoft
+    Teams, contacto de TI y WhatsApp)."""
+    msg = MIMEMultipart("mixed")
+    subject_program = program_name or "tu programa"
+    msg["Subject"] = f"Credenciales de acceso – {subject_program} – TI UBS"
+    msg["From"] = settings.smtp_from
+    msg["To"] = to_email
+    if cc:
+        msg["Cc"] = ", ".join(cc)
+
+    contact_lines = "".join(
+        f'<p style="margin:2px 0;">Correo: <a href="mailto:{addr}">{addr}</a></p>'
+        for addr in _DIPLOMADO_CONTACT_EMAILS
+    )
+    contact_inline = " | ".join(
+        f'<a href="mailto:{addr}">{addr}</a>' for addr in _DIPLOMADO_CONTACT_EMAILS
+    )
+    programa_line = f"Usted se encuentra inscrito en el <strong>{program_name}</strong>." if program_name else ""
+
+    html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">
+      <p>Estimado(a) {full_name},</p>
+      <p>Le damos la bienvenida a la <strong>USIL Business School (UBS)</strong>.</p>
+      <p>{programa_line}</p>
+
+      <div style="border:1px solid #d0d5dd; border-radius:8px; padding:12px 16px; margin:16px 0;">
+        <p style="margin:0 0 8px;"><strong>Microsoft Teams</strong> es la plataforma oficial donde podrá acceder a sus clases virtuales, materiales académicos y comunicarse con sus docentes y compañeros.</p>
+        <p style="margin:0;">Acceda desde el siguiente enlace:<br><a href="{_DIPLOMADO_TEAMS_LINK}">{_DIPLOMADO_TEAMS_LINK}</a></p>
+      </div>
+
+      <p>A continuación, con las siguientes credenciales podrá ingresar a <strong>Microsoft Teams</strong>:</p>
+
+      <div style="border:1px solid #d0d5dd; border-radius:8px; padding:12px 16px; margin:16px 0;">
+        <p style="margin:0;"><strong>Usuario:</strong> {login_id}</p>
+        <p style="margin:0;"><strong>Contraseña:</strong> {password}</p>
+      </div>
+
+      <div style="border:1px solid #d0d5dd; border-radius:8px; padding:12px 16px; margin:16px 0;">
+        <p style="margin:0 0 8px;">En caso de inconvenientes con el acceso a Teams, puede contactar al área de Tecnología de la Información (TI):</p>
+        {contact_lines}
+        <p style="margin:2px 0;">WhatsApp corporativo: {_DIPLOMADO_WHATSAPP}</p>
+      </div>
+
+      <p>Adjunto encontrará los instructivos de Teams.</p>
+      <p>Quedamos atentos a cualquier consulta relacionada con TI y le deseamos mucho éxito en sus estudios.</p>
+
+      <hr style="border:none; border-top:1px solid #d0d5dd; margin:20px 0;">
+      <p style="margin:0;"><strong>Área de Tecnología de la Información (TI UBS)</strong><br>
+      USIL Business School – Universidad San Ignacio de Loyola<br>
+      Correo: {contact_inline}<br>
+      WhatsApp corporativo: {_DIPLOMADO_WHATSAPP}</p>
+    </div>
+    """
+    body = MIMEMultipart("alternative")
+    body.attach(MIMEText(html, "html"))
+    msg.attach(body)
+    _attach_files(msg, attachments)
     return msg
 
 
@@ -127,7 +200,8 @@ async def send_credentials_email(
         raise ValueError("Correo personal inválido o vacío.")
 
     cc = list(dict.fromkeys([*default_cc_for_program(program_type), *(extra_cc or [])]))
-    msg = _build_credentials_message(
+    builder = _build_diplomado_message if (program_type or "").strip().lower() == "diplomado" else _build_credentials_message
+    msg = builder(
         to_email=to_email, cc=cc, full_name=full_name, login_id=login_id,
         password=password, program_name=program_name,
         attachments=attachments_for_program(program_type),
