@@ -1410,6 +1410,13 @@ async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
         col_correo_enviado = ws.max_column + 1
         _safe_set_cell(ws, header_row_idx, col_correo_enviado, "Correo Enviado").font = Font(bold=True)
 
+    # Muchas planillas ya traen su propia columna "Enviado" (marcada a mano o
+    # por un proceso externo, antes de que existiera este sistema). Si existe
+    # y ya dice que se envió, la respetamos como señal de "ya enviado" además
+    # de nuestra propia columna "Correo Enviado" — para no reenviar algo que
+    # ya salió por otra vía.
+    col_enviado_legacy = headers.get("enviado")
+
     title_val = _find_row1_title(ws)
 
     col_cc = get_col_idx("cc", "copia")
@@ -1423,19 +1430,24 @@ async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
                     if "@" in email and email not in sheet_cc_list:
                         sheet_cc_list.append(email)
 
+    def _looks_sent(raw: str) -> bool:
+        v = raw.strip().lower()
+        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
+
     rows_to_send = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
         contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
         correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
-        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "").strip().lower()
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "")
+        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
 
         if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
             continue  # cuenta no creada todavía
         if not correo_val or "@" not in correo_val:
             continue  # sin correo personal para enviar
-        if ya_enviado and ("✅" in ya_enviado or ya_enviado in ("si", "yes", "true", "enviado")):
-            continue  # ya se le envió
+        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
+            continue  # ya se le envió (por este sistema o por el proceso anterior)
 
         rows_to_send.append(r_idx)
 
@@ -1464,6 +1476,9 @@ async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
             )
             ws.cell(row=r_idx, column=col_correo_enviado, value="✅ Enviado")
             ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="00B050", bold=True)
+            if col_enviado_legacy:
+                ws.cell(row=r_idx, column=col_enviado_legacy, value="✅ Enviado")
+                ws.cell(row=r_idx, column=col_enviado_legacy).font = Font(color="00B050", bold=True)
             result.succeeded.append({"correo": correo_val, "usuario": usuario_val})
         except Exception as exc:
             ws.cell(row=r_idx, column=col_correo_enviado, value=f"❌ Error: {exc}")
@@ -1549,6 +1564,11 @@ async def send_docentes_credentials(req: DiplomadosUrlRequest) -> BulkResult:
         col_correo_enviado = ws.max_column + 1
         _safe_set_cell(ws, header_row_idx, col_correo_enviado, "Correo Enviado").font = Font(bold=True)
 
+    # Respeta una columna "Enviado" preexistente (marcada a mano o por un
+    # proceso externo, antes de este sistema) además de nuestra "Correo
+    # Enviado", para no reenviar algo que ya salió por otra vía.
+    col_enviado_legacy = headers.get("enviado")
+
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list: list[str] = []
     if col_cc:
@@ -1560,19 +1580,24 @@ async def send_docentes_credentials(req: DiplomadosUrlRequest) -> BulkResult:
                     if "@" in email and email not in sheet_cc_list:
                         sheet_cc_list.append(email)
 
+    def _looks_sent(raw: str) -> bool:
+        v = raw.strip().lower()
+        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
+
     rows_to_send = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
         contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
         correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
-        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "").strip().lower()
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "")
+        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
 
         if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
             continue  # cuenta no creada todavía
         if not correo_val or "@" not in correo_val:
             continue  # sin correo personal para enviar
-        if ya_enviado and ("✅" in ya_enviado or ya_enviado in ("si", "yes", "true", "enviado")):
-            continue  # ya se le envió
+        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
+            continue  # ya se le envió (por este sistema o por el proceso anterior)
 
         rows_to_send.append(r_idx)
 
@@ -1600,6 +1625,9 @@ async def send_docentes_credentials(req: DiplomadosUrlRequest) -> BulkResult:
             )
             ws.cell(row=r_idx, column=col_correo_enviado, value="✅ Enviado")
             ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="00B050", bold=True)
+            if col_enviado_legacy:
+                ws.cell(row=r_idx, column=col_enviado_legacy, value="✅ Enviado")
+                ws.cell(row=r_idx, column=col_enviado_legacy).font = Font(color="00B050", bold=True)
             result.succeeded.append({"correo": correo_val, "usuario": usuario_val})
         except Exception as exc:
             ws.cell(row=r_idx, column=col_correo_enviado, value=f"❌ Error: {exc}")
@@ -3650,19 +3678,29 @@ async def send_masivo_credentials(req: DiplomadosUrlRequest) -> BulkResult:
         col_correo_enviado = ws.max_column + 1
         _safe_set_cell(ws, header_row_idx, col_correo_enviado, "Correo Enviado").font = Font(bold=True)
 
+    # Respeta una columna "Enviado" preexistente (marcada a mano o por un
+    # proceso externo, antes de este sistema) además de nuestra "Correo
+    # Enviado", para no reenviar algo que ya salió por otra vía.
+    col_enviado_legacy = headers.get("enviado")
+
+    def _looks_sent(raw: str) -> bool:
+        v = raw.strip().lower()
+        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
+
     rows_to_send = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
         contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
         correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
-        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "").strip().lower()
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "")
+        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
 
         if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
             continue  # cuenta no creada todavía
         if not correo_val or "@" not in correo_val:
             continue  # sin correo personal para enviar
-        if ya_enviado and ("✅" in ya_enviado or ya_enviado in ("si", "yes", "true", "enviado")):
-            continue  # ya se le envió
+        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
+            continue  # ya se le envió (por este sistema o por el proceso anterior)
 
         rows_to_send.append(r_idx)
 
@@ -3687,6 +3725,9 @@ async def send_masivo_credentials(req: DiplomadosUrlRequest) -> BulkResult:
             )
             ws.cell(row=r_idx, column=col_correo_enviado, value="✅ Enviado")
             ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="00B050", bold=True)
+            if col_enviado_legacy:
+                ws.cell(row=r_idx, column=col_enviado_legacy, value="✅ Enviado")
+                ws.cell(row=r_idx, column=col_enviado_legacy).font = Font(color="00B050", bold=True)
             result.succeeded.append({"correo": correo_val, "usuario": usuario_val})
         except Exception as exc:
             ws.cell(row=r_idx, column=col_correo_enviado, value=f"❌ Error: {exc}")
