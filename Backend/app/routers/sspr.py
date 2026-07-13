@@ -28,16 +28,20 @@ async def process_sspr(
 ):
     """Procesa la solicitud de reseteo de contraseña."""
     try:
+        cedula = cedula.strip()
+        if not cedula.isdigit():
+            raise ValueError("La cédula debe contener solo números.")
+
         # 1. Buscar en Canvas por sis_login_id (Cédula)
         canvas_users = await canvas_client.get("/accounts/1/users", params={"search_term": f"sis_login_id:{cedula}"})
         if not canvas_users:
             raise ValueError("No se encontró ningún estudiante con esa cédula.")
-            
+
         canvas_user = canvas_users[0]
-        
+
         # Validar el email personal en Canvas (si se guardó ahí) o permitir que busque en Azure
         canvas_email = canvas_user.get("email", "").lower()
-        
+
         # 2. Buscar en Teams por UPN o extensión
         teams_users = await teams_client.paginate("/users", {"$filter": f"employeeId eq '{cedula}' or mailNickname eq '{cedula}' or startswith(userPrincipalName, '{cedula}')"})
         

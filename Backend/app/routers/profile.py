@@ -309,8 +309,20 @@ class ResetPasswordPayload(BaseModel):
 
 @router.post("/teams/reset-password", summary="Restablecer contraseña de Teams")
 async def reset_password(body: ResetPasswordPayload, current_user: dict = Depends(get_current_user)):
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres.")
+
     email = current_user["email"]
-    user = await graph.get(f"/users/{email}")
+    try:
+        user = await graph.get(f"/users/{email}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"No se pudo consultar el usuario en Azure AD: {exc}")
+
+    if not user or not user.get("id"):
+        raise HTTPException(status_code=404, detail=f"No se encontró el usuario '{email}' en Azure AD.")
+
     payload = {
         "passwordProfile": {
             "forceChangePasswordNextSignIn": True,

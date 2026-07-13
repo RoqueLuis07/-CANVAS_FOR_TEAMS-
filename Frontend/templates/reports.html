@@ -194,10 +194,10 @@ async function loadTeamsActivity() {
         }
         body.innerHTML = res.rows.map(r => `
             <tr>
-                <td class="font-monospace small">${r['User Principal Name'] || r['user_principal_name'] || '-'}</td>
-                <td>${r['Team Chat Message Count'] || '-'}</td>
-                <td>${r['Meetings Organized Count'] || '-'}</td>
-                <td>${r['Calls Organized Count'] || '-'}</td>
+                <td class="font-monospace small">${r['User Principal Name'] || '-'}</td>
+                <td>${r['Team Chat Message Count'] || '0'}</td>
+                <td>${r['Meeting Count'] || '0'}</td>
+                <td>${r['Call Count'] || '0'}</td>
             </tr>
         `).join('');
     } catch (e) {

@@ -26,7 +26,7 @@ async def orphaned_licenses():
                 "id": u.get("id"),
                 "displayName": u.get("displayName"),
                 "userPrincipalName": u.get("userPrincipalName"),
-                "licenses": [lic.get("skuId") for lic in (u.get("assignedLicenses") or [])],
+                "licenses": u.get("licenseNames") or [lic.get("skuId") for lic in (u.get("assignedLicenses") or [])],
             }
             for u in users
         ],

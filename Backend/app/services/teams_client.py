@@ -468,7 +468,21 @@ async def list_disabled_users_with_licenses() -> list[dict]:
         "$select": "id,displayName,userPrincipalName,accountEnabled,assignedLicenses",
         "$filter": "accountEnabled eq false",
     })
-    return [u for u in users if u.get("assignedLicenses")]
+    licensed = [u for u in users if u.get("assignedLicenses")]
+    if not licensed:
+        return licensed
+
+    sku_names = {
+        sku["skuId"]: sku.get("skuPartNumber", sku["skuId"])
+        for sku in await get_subscribed_skus()
+        if sku.get("skuId")
+    }
+    for u in licensed:
+        u["licenseNames"] = [
+            sku_names.get(lic.get("skuId"), lic.get("skuId"))
+            for lic in u.get("assignedLicenses", [])
+        ]
+    return licensed
 
 
 async def get_inactive_users(min_days_inactive: int = 60) -> list[dict]:
@@ -539,11 +553,12 @@ async def search_sent_email(to_email: str, since_iso: str) -> bool:
     if not mailbox:
         raise ValueError("SMTP_USER no está configurado; no hay buzón sobre el cual verificar.")
 
+    safe_email = to_email.replace("'", "''")
     headers = _headers()
     headers["ConsistencyLevel"] = "eventual"
     params = {
         "$filter": (
-            f"toRecipients/any(r:r/emailAddress/address eq '{to_email}') "
+            f"toRecipients/any(r:r/emailAddress/address eq '{safe_email}') "
             f"and sentDateTime ge {since_iso}"
         ),
         "$select": "id,subject,sentDateTime",

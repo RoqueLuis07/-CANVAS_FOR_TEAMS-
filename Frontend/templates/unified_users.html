@@ -431,7 +431,7 @@
     btn.disabled = true;
 
     try {
-      await api.post('/teams/teams/' + team_id + '/members/bulk-remove', { team_id: team_id, user_ids: [user_id] });
+      await api.post('/teams/teams/' + team_id + '/members/bulk-remove', { user_ids: [user_id] });
       toast('Usuario removido del equipo en Teams', 'success');
 
       const row = btn.closest('.teams-row');

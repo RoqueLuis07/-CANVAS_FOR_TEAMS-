@@ -63,7 +63,7 @@ def init_jobs_db():
     conn.commit()
     conn.close()
 
-    logger.info(f"Jobs database initialized: {JOBS_DB}")
+    logger.info("Jobs database initialized")
 
 
 async def create_job(

@@ -157,6 +157,15 @@ async def count_azure_users() -> int:
         return 0
 
 
+def _stable_id(text: str) -> int:
+    """ID numérico determinístico y estable entre corridas (a diferencia de
+    Python `hash()`, que está aleatorizado por proceso salvo PYTHONHASHSEED=0),
+    usado para tablas con PRIMARY KEY sin default/serial donde la clave lógica
+    real es otra columna (ej: sync_metadata.sync_type)."""
+    import zlib
+    return zlib.crc32(text.encode()) & 0x7FFFFFFF
+
+
 async def mark_synced(sync_type: str) -> bool:
     """Mark a sync as completed."""
     try:
@@ -164,9 +173,12 @@ async def mark_synced(sync_type: str) -> bool:
             conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO sync_metadata (sync_type, last_sync, status)
-                VALUES (?, ?, 'completed')
-            """, (sync_type, datetime.utcnow()))
+                INSERT INTO sync_metadata (id, sync_type, last_sync, status)
+                VALUES (%s, %s, %s, 'completed')
+                ON CONFLICT (sync_type) DO UPDATE SET
+                    last_sync = EXCLUDED.last_sync,
+                    status = EXCLUDED.status
+            """, (_stable_id(sync_type), sync_type, datetime.utcnow()))
             conn.commit()
             # conn.close()
             return True
@@ -185,7 +197,7 @@ async def get_last_sync(sync_type: str) -> datetime | None:
             conn = _get_conn()
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT last_sync FROM sync_metadata WHERE sync_type = ?
+                SELECT last_sync FROM sync_metadata WHERE sync_type = %s
             """, (sync_type,))
             result = cursor.fetchone()
             # conn.close()
@@ -193,7 +205,10 @@ async def get_last_sync(sync_type: str) -> datetime | None:
 
         async with _db_lock:
             result = await asyncio.to_thread(_get)
-        return datetime.fromisoformat(result) if result else None
+        if not result:
+            return None
+        # psycopg2 ya devuelve un datetime nativo para columnas TIMESTAMP.
+        return result if isinstance(result, datetime) else datetime.fromisoformat(result)
     except Exception as e:
         logger.error(f"Error getting last sync: {e}")
         return None
@@ -224,7 +239,11 @@ async def upsert_courses(courses: list) -> int:
             for course in courses:
                 cursor.execute("""
                     INSERT INTO canvas_courses (id, name, course_code, updated_at)
-                    VALUES (?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        course_code = EXCLUDED.course_code,
+                        updated_at = EXCLUDED.updated_at
                 """, (
                     course.get('id'),
                     course.get('name', ''),
@@ -256,7 +275,12 @@ async def upsert_canvas_users(users: list) -> int:
                 try:
                     cursor.execute("""
                         INSERT INTO canvas_users (id, name, email, login_id, updated_at)
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            name = EXCLUDED.name,
+                            email = EXCLUDED.email,
+                            login_id = EXCLUDED.login_id,
+                            updated_at = EXCLUDED.updated_at
                     """, (
                         user.get('id'),
                         user.get('name', ''),
@@ -266,6 +290,7 @@ async def upsert_canvas_users(users: list) -> int:
                     ))
                     count += 1
                 except Exception as e:
+                    conn.rollback()
                     logger.warning(f"Skipping user {user.get('id')}: {e}")
                     continue
 
@@ -324,7 +349,8 @@ async def delete_canvas_user(user_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM canvas_users WHERE id = %s", (user_id,))
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM canvas_users WHERE id = %s", (user_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:
@@ -357,7 +383,8 @@ async def delete_course(course_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM canvas_courses WHERE id = %s", (course_id,))
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM canvas_courses WHERE id = %s", (course_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:
@@ -395,6 +422,7 @@ async def upsert_azure_users(users: list) -> int:
                     ))
                     count += 1
                 except Exception as ue:
+                    conn.rollback()
                     logger.warning(f"Skipping Azure user {user.get('id')}: {ue}")
             conn.commit()
             # conn.close()
@@ -442,7 +470,8 @@ async def delete_azure_user(user_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM azure_users WHERE id = %s", (user_id,))
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM azure_users WHERE id = %s", (user_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:
@@ -478,6 +507,7 @@ async def upsert_enrollments(enrollments: list) -> int:
                     ))
                     count += 1
                 except Exception as ue:
+                    conn.rollback()
                     logger.warning(f"Skipping enrollment {e.get('id')}: {ue}")
             conn.commit()
             # conn.close()
@@ -494,7 +524,8 @@ async def delete_enrollment(enrollment_id: str) -> bool:
     try:
         def _del():
             conn = _get_conn()
-            conn.execute("DELETE FROM canvas_enrollments WHERE id = %s", (enrollment_id,))
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM canvas_enrollments WHERE id = %s", (enrollment_id,))
             conn.commit()
             # conn.close()
         async with _db_lock:

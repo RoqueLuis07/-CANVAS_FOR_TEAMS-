@@ -34,7 +34,7 @@ def init_audit_db():
     conn.commit()
     conn.close()
 
-    logger.info(f"Audit database initialized: {AUDIT_DB}")
+    logger.info("Audit database initialized")
 
 
 async def log_activity(
@@ -53,7 +53,7 @@ async def log_activity(
 
         cursor.execute("""
             INSERT INTO audit_logs (username, endpoint, method, status_code, ip_address, user_agent, details)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (username, endpoint, method, status_code, ip_address, user_agent, details))
 
         conn.commit()
@@ -79,7 +79,7 @@ async def get_audit_logs(limit: int = 100, offset: int = 0):
         cursor.execute("""
             SELECT * FROM audit_logs
             ORDER BY timestamp DESC
-            LIMIT ? OFFSET ?
+            LIMIT %s OFFSET %s
         """, (limit, offset))
 
         logs = []
@@ -118,8 +118,8 @@ async def clear_old_logs(days: int = 90):
 
         cursor.execute("""
             DELETE FROM audit_logs
-            WHERE timestamp < datetime('now', ? || ' days')
-        """, (f"-{days}",))
+            WHERE timestamp < NOW() - (%s * INTERVAL '1 day')
+        """, (days,))
 
         deleted = cursor.rowcount
         conn.commit()
