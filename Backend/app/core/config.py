@@ -39,16 +39,11 @@ class Settings(BaseSettings):
     usage_location: str = "PY"
     teams_url: str = "https://teams.microsoft.com"
 
-    # SMTP (envío de correos de bienvenida/credenciales)
-    smtp_server: str = ""
-    smtp_port: int = 587
-    smtp_user: str = ""
-    smtp_password: str = ""
+    # Envío de correos de bienvenida/credenciales — Microsoft Graph sendMail,
+    # autenticado con las credenciales de Azure de arriba (requiere el
+    # permiso de aplicación 'Mail.Send' con consentimiento de administrador).
+    # SMTP_FROM es el buzón desde el que se envía.
     smtp_from: str = "it@usil.edu.py"
-
-    @property
-    def smtp_configured(self) -> bool:
-        return bool(self.smtp_server and self.smtp_user and self.smtp_password)
 
 
 

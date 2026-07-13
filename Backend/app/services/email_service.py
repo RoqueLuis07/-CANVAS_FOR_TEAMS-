@@ -1,21 +1,26 @@
-"""Envío de correos de credenciales (SMTP).
+"""Envío de correos de credenciales (Microsoft Graph API — sendMail).
 
 Replica el flujo de "Envío de Credenciales" / "Envío de Credenciales UBS"
 del proceso manual anterior (referencias_excel/alumnos para crear.xlsm):
 el alumno/docente recibe sus credenciales institucionales en su correo
 personal, con copia a un conjunto de direcciones institucionales que
 depende del tipo de programa.
+
+El envío usa la API de Microsoft Graph (POST /users/{mailbox}/sendMail)
+en vez de SMTP directo: reutiliza las mismas credenciales de la app
+registration (AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET) que ya se usan
+para Canvas/Teams, sin depender de MFA ni de una contraseña de buzón.
+Requiere el permiso de aplicación 'Mail.Send' con consentimiento de
+administrador en Azure Portal.
 """
-import asyncio
 import logging
 import mimetypes
-import smtplib
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 
+from fastapi import HTTPException
+
 from app.core.config import settings
+from app.services import teams_client as graph
 
 logger = logging.getLogger(__name__)
 
@@ -60,29 +65,22 @@ def attachments_for_program(program_type: str | None) -> list[Path]:
     return [p for p in _DIPLOMADO_ATTACHMENTS if p.is_file()]
 
 
-def _attach_files(msg: MIMEMultipart, attachments: list[Path] | None) -> None:
+def _read_attachments(attachments: list[Path] | None) -> list[tuple[str, bytes, str]]:
+    out = []
     for path in attachments or []:
         try:
             ctype, _ = mimetypes.guess_type(path.name)
-            maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
-            part = MIMEApplication(path.read_bytes(), _subtype=subtype)
-            part.add_header("Content-Disposition", "attachment", filename=path.name)
-            msg.attach(part)
+            out.append((path.name, path.read_bytes(), ctype or "application/octet-stream"))
         except Exception as exc:
             logger.warning("No se pudo adjuntar %s al correo de credenciales: %s", path, exc)
+    return out
 
 
 def _build_credentials_message(
-    *, to_email: str, cc: list[str], full_name: str, login_id: str, password: str,
-    program_name: str = "", attachments: list[Path] | None = None,
-) -> MIMEMultipart:
-    msg = MIMEMultipart("mixed")
-    msg["Subject"] = "Tus credenciales de acceso institucional — USIL"
-    msg["From"] = settings.smtp_from
-    msg["To"] = to_email
-    if cc:
-        msg["Cc"] = ", ".join(cc)
-
+    *, full_name: str, login_id: str, password: str, program_name: str = "",
+) -> tuple[str, str]:
+    """Devuelve (subject, html) para el correo genérico (Ingreso/Docentes/Masiva)."""
+    subject = "Tus credenciales de acceso institucional — USIL"
     programa_line = f"<p><strong>Programa:</strong> {program_name}</p>" if program_name else ""
     html = f"""
     <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
@@ -97,27 +95,17 @@ def _build_credentials_message(
       <p>Saludos,<br>Universidad San Ignacio de Loyola — Área de Tecnologías de la Información</p>
     </div>
     """
-    body = MIMEMultipart("alternative")
-    body.attach(MIMEText(html, "html"))
-    msg.attach(body)
-    _attach_files(msg, attachments)
-    return msg
+    return subject, html
 
 
 def _build_diplomado_message(
-    *, to_email: str, cc: list[str], full_name: str, login_id: str, password: str,
-    program_name: str = "", attachments: list[Path] | None = None,
-) -> MIMEMultipart:
+    *, full_name: str, login_id: str, password: str, program_name: str = "",
+) -> tuple[str, str]:
     """Réplica exacta del correo que TI UBS venía enviando a mano para
     Diplomados (bienvenida a la USIL Business School, acceso a Microsoft
-    Teams, contacto de TI y WhatsApp)."""
-    msg = MIMEMultipart("mixed")
+    Teams, contacto de TI y WhatsApp). Devuelve (subject, html)."""
     subject_program = program_name or "tu programa"
-    msg["Subject"] = f"Credenciales de acceso – {subject_program} – TI UBS"
-    msg["From"] = settings.smtp_from
-    msg["To"] = to_email
-    if cc:
-        msg["Cc"] = ", ".join(cc)
+    subject = f"Credenciales de acceso – {subject_program} – TI UBS"
 
     contact_lines = "".join(
         f'<p style="margin:2px 0;">Correo: <a href="mailto:{addr}">{addr}</a></p>'
@@ -162,18 +150,7 @@ def _build_diplomado_message(
       WhatsApp corporativo: {_DIPLOMADO_WHATSAPP}</p>
     </div>
     """
-    body = MIMEMultipart("alternative")
-    body.attach(MIMEText(html, "html"))
-    msg.attach(body)
-    _attach_files(msg, attachments)
-    return msg
-
-
-def _send_sync(msg: MIMEMultipart, to_addrs: list[str]) -> None:
-    with smtplib.SMTP(settings.smtp_server, settings.smtp_port, timeout=15) as server:
-        server.starttls()
-        server.login(settings.smtp_user, settings.smtp_password)
-        server.sendmail(settings.smtp_from, to_addrs, msg.as_string())
+    return subject, html
 
 
 async def send_credentials_email(
@@ -186,28 +163,42 @@ async def send_credentials_email(
     program_name: str = "",
     extra_cc: list[str] | None = None,
 ) -> None:
-    """Envía el correo de credenciales.
+    """Envía el correo de credenciales vía Microsoft Graph.
 
-    Lanza RuntimeError si SMTP no está configurado, o la excepción real de
-    smtplib si el envío falla — el caller decide cómo reportarlo (nunca debe
-    abortar la creación de la cuenta, que ya ocurrió con éxito).
+    Lanza RuntimeError si el remitente no está configurado, o la excepción
+    real de Graph si el envío falla — el caller decide cómo reportarlo
+    (nunca debe abortar la creación de la cuenta, que ya ocurrió con éxito).
     """
-    if not settings.smtp_configured:
-        raise RuntimeError(
-            "El envío de correo no está configurado (faltan SMTP_SERVER/SMTP_USER/SMTP_PASSWORD)."
-        )
+    if not settings.smtp_from:
+        raise RuntimeError("El envío de correo no está configurado (falta SMTP_FROM, el buzón remitente).")
     if not to_email or "@" not in to_email:
         raise ValueError("Correo personal inválido o vacío.")
 
+    is_diplomado = (program_type or "").strip().lower() == "diplomado"
+    builder = _build_diplomado_message if is_diplomado else _build_credentials_message
+    subject, html = builder(full_name=full_name, login_id=login_id, password=password, program_name=program_name)
+
     cc = list(dict.fromkeys([*default_cc_for_program(program_type), *(extra_cc or [])]))
-    builder = _build_diplomado_message if (program_type or "").strip().lower() == "diplomado" else _build_credentials_message
-    msg = builder(
-        to_email=to_email, cc=cc, full_name=full_name, login_id=login_id,
-        password=password, program_name=program_name,
-        attachments=attachments_for_program(program_type),
-    )
+    attachments = _read_attachments(attachments_for_program(program_type))
+
     try:
-        await asyncio.to_thread(_send_sync, msg, [to_email, *cc])
+        await graph.send_mail(
+            mailbox=settings.smtp_from, subject=subject, html_body=html,
+            to_email=to_email, cc=cc, attachments=attachments,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            logger.error("Error enviando correo de credenciales a %s: %s", to_email, exc.detail)
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Falta el permiso de aplicación 'Mail.Send' (con consentimiento de administrador) "
+                    "en Azure Portal → App Registrations → API Permissions, o el buzón SMTP_FROM no es "
+                    f"válido en este tenant. Detalle original: {exc.detail}"
+                ),
+            )
+        logger.error("Error enviando correo de credenciales a %s: %s", to_email, exc.detail)
+        raise
     except Exception as exc:
         logger.error("Error enviando correo de credenciales a %s: %s", to_email, exc)
         raise

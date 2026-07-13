@@ -126,7 +126,7 @@ async def verify_email_sent(body: VerifySentIn):
                 detail=(
                     "Esta verificación requiere el permiso de aplicación 'Mail.Read' "
                     "(o 'Mail.ReadBasic.All') con consentimiento de administrador, con "
-                    "acceso al buzón configurado en SMTP_USER. Otorgarlo en Azure Portal "
+                    "acceso al buzón configurado en SMTP_FROM. Otorgarlo en Azure Portal "
                     "→ App Registrations → API Permissions → Add permission → Microsoft "
                     "Graph → Application permissions → Mail.Read → Grant admin consent. "
                     f"Detalle original: {exc.detail}"

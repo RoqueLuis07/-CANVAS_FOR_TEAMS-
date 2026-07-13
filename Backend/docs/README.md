@@ -118,17 +118,15 @@ SECRET_KEY=<clave-secreta-aleatoria>
 INSTITUTIONAL_DOMAIN=usil.edu.py
 USAGE_LOCATION=PY
 
-# ── Email (SMTP) ──────────────────────────────────────
-SMTP_SERVER=smtp.office365.com
-SMTP_PORT=587
-SMTP_USER=resteche@usil.edu.py
-SMTP_PASSWORD=<contraseña o app password del buzón>
+# ── Email (Microsoft Graph sendMail) ──────────────────
 SMTP_FROM=resteche@usil.edu.py
 ```
 
-El envío de credenciales usa SMTP (STARTTLS) directo contra el buzón configurado,
-no la API de Graph. El CC de cada correo depende del tipo de programa y está
-fijo en `app/services/email_service.py` (ver también la hoja "CC Envío
+El envío de credenciales usa la API de Microsoft Graph (`POST /users/{buzón}/sendMail`),
+autenticada con las mismas credenciales de Azure AD (arriba) que ya se usan para Canvas/Teams
+— no SMTP directo, y no depende de MFA ni de una contraseña de buzón. `SMTP_FROM` es el
+único dato propio de email: el buzón desde el que se envía. El CC de cada correo depende del
+tipo de programa y está fijo en `app/services/email_service.py` (ver también la hoja "CC Envío
 Credenciales" del archivo `referencias_excel/USIL_Config_Referencia.xlsx`).
 
 ### Permisos Requeridos en Azure AD
@@ -140,6 +138,7 @@ La app registration de Azure necesita los siguientes **Application permissions**
 | `User.ReadWrite.All` | Crear y leer usuarios en Azure AD, liberar licencias al dar de baja |
 | `GroupMember.ReadWrite.All` | Gestionar miembros de Teams |
 | `Team.ReadBasic.All` | Leer equipos de Teams |
+| `Mail.Send` | Enviar el correo de credenciales (desde el buzón SMTP_FROM) |
 
 Permisos adicionales **no concedidos todavía**, requeridos por funciones de
 `/reports/*` (ver `app/routers/reports.py`). Sin ellos, esos endpoints
@@ -149,7 +148,7 @@ responden 403 con instrucciones de cómo habilitarlos:
 |---|---|---|
 | `AuditLog.Read.All` | Ver último inicio de sesión (`signInActivity`) | `GET /reports/inactive-teams-users` |
 | `Reports.Read.All` | Reporte de actividad de Teams por usuario | `GET /reports/teams-activity` (además, desactivar "Reports concealment" en el Admin Center para ver nombres reales) |
-| `Mail.Read` (o `Mail.ReadBasic.All`) | Confirmar en la carpeta Enviados si un correo realmente salió del buzón SMTP | `POST /reports/verify-email-sent` |
+| `Mail.Read` (o `Mail.ReadBasic.All`) | Confirmar en la carpeta Enviados si un correo realmente salió del buzón SMTP_FROM | `POST /reports/verify-email-sent` |
 
 Para otorgarlos: Azure Portal → App Registrations → (la app) → API Permissions
 → Add a permission → Microsoft Graph → Application permissions → buscar y

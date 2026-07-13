@@ -455,6 +455,42 @@ async def add_member_to_group(group_id: str, user_id: str) -> bool:
         return False
 
 
+async def send_mail(
+    mailbox: str, subject: str, html_body: str, to_email: str,
+    cc: list[str] | None = None,
+    attachments: list[tuple[str, bytes, str]] | None = None,
+) -> None:
+    """Envía un correo con la API de Microsoft Graph (POST /users/{mailbox}/sendMail),
+    autenticado con las credenciales de la app registration (permiso de
+    aplicación 'Mail.Send' con consentimiento de administrador).
+
+    A diferencia de SMTP, no depende de MFA ni de contraseñas de buzón —
+    usa el mismo token de aplicación que ya se usa para crear usuarios y
+    gestionar Teams.
+
+    `attachments` es una lista de (nombre_archivo, contenido_bytes, content_type).
+    """
+    message: dict = {
+        "subject": subject,
+        "body": {"contentType": "HTML", "content": html_body},
+        "toRecipients": [{"emailAddress": {"address": to_email}}],
+    }
+    if cc:
+        message["ccRecipients"] = [{"emailAddress": {"address": addr}} for addr in cc]
+    if attachments:
+        import base64
+        message["attachments"] = [
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": name,
+                "contentType": content_type,
+                "contentBytes": base64.b64encode(content).decode(),
+            }
+            for name, content, content_type in attachments
+        ]
+    await post(f"/users/{mailbox}/sendMail", {"message": message, "saveToSentItems": True})
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Reportes: licencias huérfanas, cuentas inactivas, actividad de Teams,
 # verificación de envío de correo contra el buzón real de Outlook.
@@ -540,18 +576,17 @@ async def get_teams_activity_report(period: str = "D90") -> list[dict]:
 
 
 async def search_sent_email(to_email: str, since_iso: str) -> bool:
-    """Busca en la carpeta 'Enviados' del buzón SMTP_USER un correo dirigido a
+    """Busca en la carpeta 'Enviados' del buzón SMTP_FROM un correo dirigido a
     `to_email` posterior a `since_iso` (ISO 8601 UTC), para confirmar que
-    realmente salió del buzón — más allá de que smtplib no haya lanzado una
-    excepción.
+    realmente salió del buzón.
 
     Requiere el permiso de aplicación 'Mail.Read' (o 'Mail.ReadBasic.All') con
-    consentimiento de administrador, con acceso al buzón SMTP_USER — NO está
+    consentimiento de administrador, con acceso al buzón SMTP_FROM — NO está
     incluido en el scope actual.
     """
-    mailbox = settings.smtp_user
+    mailbox = settings.smtp_from
     if not mailbox:
-        raise ValueError("SMTP_USER no está configurado; no hay buzón sobre el cual verificar.")
+        raise ValueError("SMTP_FROM no está configurado; no hay buzón sobre el cual verificar.")
 
     safe_email = to_email.replace("'", "''")
     headers = _headers()

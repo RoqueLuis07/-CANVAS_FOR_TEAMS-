@@ -103,11 +103,7 @@ Los endpoints de creación devuelven siempre:
 | `AZURE_TENANT_ID` | ID del tenant de Azure | ✓ |
 | `AZURE_CLIENT_ID` | Client ID de la app registration | ✓ |
 | `AZURE_CLIENT_SECRET` | Secret de la app registration | ✓ |
-| `SMTP_SERVER` | Servidor SMTP (ej: smtp.office365.com) | ✓ |
-| `SMTP_PORT` | Puerto SMTP (587 con STARTTLS) | ✓ |
-| `SMTP_USER` | Usuario/buzón para autenticar contra el SMTP | ✓ |
-| `SMTP_PASSWORD` | Contraseña o app password del buzón | ✓ |
-| `SMTP_FROM` | Buzón desde el que se envían correos | ✓ |
+| `SMTP_FROM` | Buzón desde el que se envían correos (vía Microsoft Graph sendMail) | ✓ |
 | `INSTITUTIONAL_DOMAIN` | Dominio institucional (ej: usil.edu.py) | ✓ |
 | `SECRET_KEY` | Clave para firmar cookies de sesión | ✓ |
 
@@ -117,13 +113,15 @@ Los endpoints de creación devuelven siempre:
 - El token de Canvas expiró. Generar nuevo en Canvas → Configuración → Tokens de acceso.
 
 ### Azure devuelve 403
-- La app registration no tiene admin consent para el permiso `User.ReadWrite.All`.
+- La app registration no tiene admin consent para el permiso `User.ReadWrite.All` (o, si es
+  al enviar un correo, para `Mail.Send`).
 - Ir a Azure Portal → App Registrations → API Permissions → Grant admin consent.
 
 ### Correo no se envía
-- El envío es por SMTP directo (no Graph API): revisar `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`,
-  `SMTP_PASSWORD` y `SMTP_FROM` en las variables de entorno (Railway en producción).
-- Si el buzón usa MFA, `SMTP_PASSWORD` debe ser un "app password", no la contraseña normal.
+- El envío es por Microsoft Graph (`POST /users/{SMTP_FROM}/sendMail`), no SMTP directo — no
+  depende de MFA ni de una contraseña de buzón. Verificar que la app registration tenga el
+  permiso de aplicación `Mail.Send` con admin consent otorgado, y que `SMTP_FROM` sea un buzón
+  válido y con licencia en el tenant.
 - No hay un endpoint dedicado de prueba de correo; para verificar en producción, usar el botón
   "Enviar Credenciales" en Alta Docentes o Carga Diplomados sobre una fila de prueba, o el envío
   automático de Ingreso/Carga Masiva (que dispara al crear una cuenta con correo personal cargado).
