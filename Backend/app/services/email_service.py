@@ -41,7 +41,7 @@ _DIPLOMADO_ATTACHMENTS = [
 
 # Datos de contacto de TI UBS, tal como aparecen en el correo real que el
 # equipo venía enviando a mano (mismo texto, mismo WhatsApp).
-_DIPLOMADO_CONTACT_EMAILS = ["lflorentin@usil.edu.py", "glezcano@usil.edu.py"]
+_DIPLOMADO_CONTACT_EMAILS = ["lflorentin@usil.edu.py", "glezcano@usil.edu.py", "resteche@usil.edu.py"]
 _DIPLOMADO_WHATSAPP = "0991 856 488"
 _DIPLOMADO_TEAMS_LINK = "https://teams.cloud.microsoft/"
 
