@@ -899,19 +899,18 @@ class JsonDataRequest(BaseModel):
 class DocentesPreviewResponse(BaseModel):
     total_rows: int
     valid_rows: int
-    headers: list[str]
-    sample_rows: list[dict]
     headers: list[str] = []
+    sample_rows: list[dict] = []
+    already_processed_details: list[dict] = []
 
 class PreviewResponse(BaseModel):
     sheet_name: str
     students_to_process: int
     students_already_processed: int
-    headers: list[str]
-    sample_rows: list[dict]
     headers: list[str] = []
     sample_rows: list[dict] = []
     student_details: list[dict] = []
+    already_processed_details: list[dict] = []
 
 def _encode_share_url(url: str) -> str:
     import base64
@@ -989,10 +988,11 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
         raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
 
     headers = [h for h in headers_raw if h] # Just for returning to frontend
-    
+
     col_estado = -1
     col_nombre = -1
     col_cedula = -1
+    col_usuario = -1
     for i, h in enumerate(headers_raw):
         if not h: continue
         h_lower = h.lower()
@@ -1002,32 +1002,57 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
             if col_nombre == -1: col_nombre = i
         if "cedula" in h_lower or "cédula" in h_lower or "ci" in h_lower:
             if col_cedula == -1: col_cedula = i
+        if "usuario" in h_lower:
+            if col_usuario == -1: col_usuario = i
+    # Si no hay columna "Estado" propiamente dicha, "Enviado" cumple el mismo rol.
+    if col_estado == -1:
+        for i, h in enumerate(headers_raw):
+            if h and "enviado" in h.lower():
+                col_estado = i
+                break
 
     students_to_process = 0
     students_already_processed = 0
     student_details = []
+    already_processed_details = []
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
-        
+
         # Check if the row has at least a name
         if not any(row_vals):
             continue
-            
+
+        nombre_val = row_vals[col_nombre] if col_nombre >= 0 else ""
+        cedula_val = row_vals[col_cedula] if col_cedula >= 0 else ""
+        if not nombre_val or not cedula_val:
+            continue
+
         estado_val = row_vals[col_estado] if col_estado >= 0 else ""
-        if "✅" in estado_val or estado_val.lower() in ["creado", "ok", "si"]:
+        estado_lower = estado_val.lower()
+        usuario_val = row_vals[col_usuario] if col_usuario >= 0 else ""
+        # Misma condición que usa el procesamiento real (import_diplomados_onedrive):
+        # respeta también el caso de "Estado vacío pero Usuario ya tiene @".
+        if ("✅" in estado_val or estado_lower in ["creado", "ok", "si", "yes", "true", "enviado"]
+                or "creado ok" in estado_lower or "ya exist" in estado_lower
+                or (usuario_val and "@" in usuario_val)):
             students_already_processed += 1
+            already_processed_details.append({
+                "nombre": nombre_val,
+                "cedula": cedula_val,
+                "usuario": usuario_val,
+                "estado": estado_val,
+            })
         else:
             students_to_process += 1
-            if len(student_details) < 10:
-                student_details.append({
-                    "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
-                    "cedula": row_vals[col_cedula] if col_cedula >= 0 else ""
-                })
-            
+            student_details.append({
+                "nombre": nombre_val,
+                "cedula": cedula_val,
+            })
+
         if len(sample_rows) < 10:
             sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
-            
+
     wb.close()
     return PreviewResponse(
         sheet_name=req.sheet_name,
@@ -1035,7 +1060,8 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
         students_already_processed=students_already_processed,
         headers=headers,
         sample_rows=sample_rows,
-        student_details=student_details
+        student_details=student_details,
+        already_processed_details=already_processed_details,
     )
 
 
@@ -2329,26 +2355,29 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
                         sheet_cc_list.append(email)
 
     rows = []
+    already_processed = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         cedula = _clean_cedula(str(ws.cell(row=r_idx, column=col_cedula).value or "").strip())
-        
+
         if not nombre or not cedula or cedula == "None":
             continue
-            
+
         correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
         plat = str(ws.cell(row=r_idx, column=col_plat).value or "both").strip().lower() if col_plat else "both"
         id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
         id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
-        
+
         usuario_preview = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
-        if col_enviado:
-            enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
-            enviado_lower = enviado.lower()
-            if ("✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"]
-                    or "creado ok" in enviado_lower or "ya exist" in enviado_lower
-                    or (usuario_preview and "@" in usuario_preview)):
-                continue
+        enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip() if col_enviado else ""
+        enviado_lower = enviado.lower()
+        if col_enviado and ("✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"]
+                or "creado ok" in enviado_lower or "ya exist" in enviado_lower
+                or (usuario_preview and "@" in usuario_preview)):
+            already_processed.append({
+                "nombre": nombre, "cedula": cedula, "usuario": usuario_preview, "estado": enviado,
+            })
+            continue
 
         rows.append({
             "nombre": nombre,
@@ -2358,14 +2387,13 @@ async def preview_docentes_onedrive(req: DiplomadosUrlRequest) -> DocentesPrevie
             "curso": id_curso,
             "equipo": id_equipo
         })
-        if len(rows) >= 10:
-            break
 
     return DocentesPreviewResponse(
         total_rows=ws.max_row - header_row_idx,
         valid_rows=len(rows),
         headers=list(headers.keys()),
-        sample_rows=rows
+        sample_rows=rows,
+        already_processed_details=already_processed,
     )
 
 @router.post("/excel/docentes-onedrive", summary="Alta Docentes OneDrive")
@@ -3414,29 +3442,37 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     students_to_process = 0
     students_already_processed = 0
     student_details = []
+    already_processed_details = []
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
-        
+
         if not any(row_vals):
             continue
-            
+
+        nombre_val = row_vals[col_nombre] if col_nombre >= 0 else ""
+        cedula_val = row_vals[col_cedula] if col_cedula >= 0 else ""
+        if not nombre_val or not cedula_val:
+            continue
+
         estado_val = row_vals[col_estado] if col_estado >= 0 else ""
+        estado_lower = estado_val.lower()
         usuario_val = row_vals[col_usuario] if col_usuario >= 0 else ""
-        
-        if "no." in estado_val.lower() or estado_val.lower() in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in estado_val.lower() or "ya exist" in estado_val.lower() or (usuario_val and "@" in usuario_val):
+
+        if ("✅" in estado_val or estado_lower in ["si", "yes", "true", "enviado", "ok"]
+                or "creado ok" in estado_lower or "ya exist" in estado_lower
+                or (usuario_val and "@" in usuario_val)):
             students_already_processed += 1
+            already_processed_details.append({
+                "nombre": nombre_val, "cedula": cedula_val, "usuario": usuario_val, "estado": estado_val,
+            })
         else:
             students_to_process += 1
-            if len(student_details) < 10:
-                student_details.append({
-                    "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
-                    "cedula": row_vals[col_cedula] if col_cedula >= 0 else ""
-                })
-            
+            student_details.append({"nombre": nombre_val, "cedula": cedula_val})
+
         if len(sample_rows) < 10:
             sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
-            
+
     wb.close()
     return PreviewResponse(
         sheet_name=req.sheet_name,
@@ -3444,7 +3480,8 @@ async def preview_masivo_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
         students_already_processed=students_already_processed,
         headers=headers,
         sample_rows=sample_rows,
-        student_details=student_details
+        student_details=student_details,
+        already_processed_details=already_processed_details,
     )
 
 
