@@ -1027,7 +1027,10 @@ async function sendDocentesCredentials() {
 
     try {
         const res = await api.post('/excel/docentes/send-credentials', { url: url, sheet_name: sheet });
-        resultDiv.innerHTML = `<div class="alert alert-info py-2 small mb-0">Correos enviados: <strong>${res.succeeded.length}</strong> · Errores: <strong>${res.failed.length}</strong></div>`;
+        const errorList = res.failed.length
+            ? `<ul class="mb-0 mt-2 small">${res.failed.map(f => `<li><strong>${f.correo || '-'}</strong>: ${f.error}</li>`).join('')}</ul>`
+            : '';
+        resultDiv.innerHTML = `<div class="alert ${res.failed.length ? 'alert-warning' : 'alert-success'} py-2 small mb-0">Correos enviados: <strong>${res.succeeded.length}</strong> · Errores: <strong>${res.failed.length}</strong>${errorList}</div>`;
         toast(`Envío de credenciales: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
     } catch (e) {
         resultDiv.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${e.message}</div>`;
@@ -1217,7 +1220,10 @@ async function sendDiplomadosCredentials() {
 
     try {
         const res = await api.post('/excel/diplomados/send-credentials', { url: url, sheet_name: sheet });
-        resultDiv.innerHTML = `<div class="alert alert-info py-2 small mb-0">Correos enviados: <strong>${res.succeeded.length}</strong> · Errores: <strong>${res.failed.length}</strong></div>`;
+        const errorList = res.failed.length
+            ? `<ul class="mb-0 mt-2 small">${res.failed.map(f => `<li><strong>${f.correo || '-'}</strong>: ${f.error}</li>`).join('')}</ul>`
+            : '';
+        resultDiv.innerHTML = `<div class="alert ${res.failed.length ? 'alert-warning' : 'alert-success'} py-2 small mb-0">Correos enviados: <strong>${res.succeeded.length}</strong> · Errores: <strong>${res.failed.length}</strong>${errorList}</div>`;
         toast(`Envío de credenciales: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
     } catch (e) {
         resultDiv.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${e.message}</div>`;
@@ -1329,7 +1335,10 @@ async function sendMasivoCredentials() {
 
     try {
         const res = await api.post('/excel/masivo/send-credentials', { url: url, sheet_name: sheet });
-        resultDiv.innerHTML = `<div class="alert alert-info py-2 small mb-0">Correos enviados: <strong>${res.succeeded.length}</strong> · Errores: <strong>${res.failed.length}</strong></div>`;
+        const errorList = res.failed.length
+            ? `<ul class="mb-0 mt-2 small">${res.failed.map(f => `<li><strong>${f.correo || '-'}</strong>: ${f.error}</li>`).join('')}</ul>`
+            : '';
+        resultDiv.innerHTML = `<div class="alert ${res.failed.length ? 'alert-warning' : 'alert-success'} py-2 small mb-0">Correos enviados: <strong>${res.succeeded.length}</strong> · Errores: <strong>${res.failed.length}</strong>${errorList}</div>`;
         toast(`Envío de credenciales: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
     } catch (e) {
         resultDiv.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${e.message}</div>`;
