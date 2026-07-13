@@ -1496,12 +1496,6 @@ async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
             ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="FF0000")
             result.failed.append({"correo": correo_val, "error": str(exc)})
 
-    if rows_to_send:
-        try:
-            await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"El archivo Excel está abierto o el enlace es de Solo Lectura. Detalle real: {e}")
-
     batch_size = 5
     for i in range(0, len(rows_to_send), batch_size):
         await asyncio.gather(*(send_row(r) for r in rows_to_send[i:i + batch_size]))
@@ -1518,6 +1512,142 @@ async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
         raise HTTPException(
             status_code=400,
             detail="No hay alumnos pendientes de envío: o no tienen cuenta creada todavía, o ya se les envió el correo, o no tienen correo personal cargado.",
+        )
+
+    return result
+
+
+@router.post("/excel/docentes/send-credentials", summary="Enviar correo de credenciales a docentes ya creados")
+async def send_docentes_credentials(req: DiplomadosUrlRequest) -> BulkResult:
+    """Envía el correo de credenciales a los docentes que ya tienen cuenta creada
+    (Usuario + Contraseña ya generados) y que todavía no la recibieron.
+
+    Acción separada de la creación de cuentas (misma lógica que Diplomados):
+    permite reintentar el envío sin volver a crear nada, y no reenvía a quien
+    ya fue marcado como enviado.
+    """
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    result = BulkResult()
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
+    col_correo = get_col_idx("correo", "email")
+    col_usuario = get_col_idx("usuario")
+    col_contra = get_col_idx("contrasena", "contraseña", "clave")
+    col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
+
+    if not col_usuario or not col_contra:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontraron las columnas de Usuario/Contraseña. Primero procesa la planilla con 'Alta Docentes'.",
+        )
+    if not col_correo:
+        raise HTTPException(status_code=400, detail="No se encontró una columna de Correo para enviar las credenciales.")
+
+    col_correo_enviado = get_col_idx("correo enviado", "credenciales enviadas")
+    if not col_correo_enviado:
+        col_correo_enviado = ws.max_column + 1
+        _safe_set_cell(ws, header_row_idx, col_correo_enviado, "Correo Enviado").font = Font(bold=True)
+
+    col_cc = get_col_idx("cc", "copia")
+    sheet_cc_list: list[str] = []
+    if col_cc:
+        for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+            cc_val = str(ws.cell(row=r_idx, column=col_cc).value or "").strip()
+            if cc_val:
+                for email in cc_val.replace(";", ",").replace("\n", ",").split(","):
+                    email = email.strip()
+                    if "@" in email and email not in sheet_cc_list:
+                        sheet_cc_list.append(email)
+
+    rows_to_send = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
+        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "").strip().lower()
+
+        if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
+            continue  # cuenta no creada todavía
+        if not correo_val or "@" not in correo_val:
+            continue  # sin correo personal para enviar
+        if ya_enviado and ("✅" in ya_enviado or ya_enviado in ("si", "yes", "true", "enviado")):
+            continue  # ya se le envió
+
+        rows_to_send.append(r_idx)
+
+    if len(rows_to_send) > 50:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Límite de seguridad excedido: intentas enviar {len(rows_to_send)} correos a la vez (máximo 50 permitidos).",
+        )
+
+    async def send_row(r_idx):
+        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
+        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
+        curso_nombre = str(ws.cell(row=r_idx, column=col_curso_nombre).value or "").strip() if col_curso_nombre else ""
+
+        try:
+            await email_service.send_credentials_email(
+                to_email=correo_val,
+                full_name=nombre or usuario_val,
+                login_id=usuario_val,
+                password=contra_val,
+                program_name=curso_nombre,
+                extra_cc=sheet_cc_list,
+            )
+            ws.cell(row=r_idx, column=col_correo_enviado, value="✅ Enviado")
+            ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="00B050", bold=True)
+            result.succeeded.append({"correo": correo_val, "usuario": usuario_val})
+        except Exception as exc:
+            ws.cell(row=r_idx, column=col_correo_enviado, value=f"❌ Error: {exc}")
+            ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="FF0000")
+            result.failed.append({"correo": correo_val, "error": str(exc)})
+
+    batch_size = 5
+    for i in range(0, len(rows_to_send), batch_size):
+        await asyncio.gather(*(send_row(r) for r in rows_to_send[i:i + batch_size]))
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+
+    if not result.succeeded and not result.failed:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay docentes pendientes de envío: o no tienen cuenta creada todavía, o ya se les envió el correo, o no tienen correo personal cargado.",
         )
 
     return result
@@ -2647,6 +2777,7 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
 
     # Identify columns
     user_col, canvas_col, teams_col, rol_col, env_col = None, None, None, None, None
+    env_col_is_estado = False
     for h, col_idx in headers.items():
         n = _norm(h)
         if "usuario" in n or "correo" in n or "email" in n or "cedula" in n or "sis" in n or "alumno" in n:
@@ -2657,7 +2788,10 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
             teams_col = col_idx
         elif "rol" in n:
             rol_col = col_idx
-        elif "enviado" in n or "estado" in n:
+        elif "estado" in n and not env_col_is_estado:
+            env_col = col_idx
+            env_col_is_estado = True
+        elif "enviado" in n and not env_col_is_estado:
             env_col = col_idx
 
     if not user_col or not (canvas_col or teams_col):

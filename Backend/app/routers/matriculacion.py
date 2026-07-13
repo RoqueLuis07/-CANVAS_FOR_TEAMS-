@@ -1,10 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Optional
 import json
 import os
-import uuid
-from datetime import datetime
 
 from app.services import canvas_client as canvas
 from app.services import teams_client as teams

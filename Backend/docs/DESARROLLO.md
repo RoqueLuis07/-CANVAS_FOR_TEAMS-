@@ -103,11 +103,13 @@ Los endpoints de creación devuelven siempre:
 | `AZURE_TENANT_ID` | ID del tenant de Azure | ✓ |
 | `AZURE_CLIENT_ID` | Client ID de la app registration | ✓ |
 | `AZURE_CLIENT_SECRET` | Secret de la app registration | ✓ |
+| `SMTP_SERVER` | Servidor SMTP (ej: smtp.office365.com) | ✓ |
+| `SMTP_PORT` | Puerto SMTP (587 con STARTTLS) | ✓ |
+| `SMTP_USER` | Usuario/buzón para autenticar contra el SMTP | ✓ |
+| `SMTP_PASSWORD` | Contraseña o app password del buzón | ✓ |
 | `SMTP_FROM` | Buzón desde el que se envían correos | ✓ |
-| `SMTP_FROM_NAME` | Nombre del remitente | — |
 | `INSTITUTIONAL_DOMAIN` | Dominio institucional (ej: usil.edu.py) | ✓ |
 | `SECRET_KEY` | Clave para firmar cookies de sesión | ✓ |
-| `EMAIL_CC` | CC fijo para todos los correos (separado por coma) | — |
 
 ## Diagnóstico de Problemas Frecuentes
 
@@ -115,13 +117,16 @@ Los endpoints de creación devuelven siempre:
 - El token de Canvas expiró. Generar nuevo en Canvas → Configuración → Tokens de acceso.
 
 ### Azure devuelve 403
-- La app registration no tiene admin consent para los permisos `User.ReadWrite.All` o `Mail.Send`.
+- La app registration no tiene admin consent para el permiso `User.ReadWrite.All`.
 - Ir a Azure Portal → App Registrations → API Permissions → Grant admin consent.
 
 ### Correo no se envía
-- Verificar que `SMTP_FROM` sea un buzón válido del tenant de Azure.
-- El buzón debe tener habilitado el permiso `Mail.Send` en la app registration.
-- Probar con `POST /ingreso/test-email?to_email=test@example.com`.
+- El envío es por SMTP directo (no Graph API): revisar `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`,
+  `SMTP_PASSWORD` y `SMTP_FROM` en las variables de entorno (Railway en producción).
+- Si el buzón usa MFA, `SMTP_PASSWORD` debe ser un "app password", no la contraseña normal.
+- No hay un endpoint dedicado de prueba de correo; para verificar en producción, usar el botón
+  "Enviar Credenciales" en Alta Docentes o Carga Diplomados sobre una fila de prueba, o el envío
+  automático de Ingreso/Carga Masiva (que dispara al crear una cuenta con correo personal cargado).
 
 ### Usuario creado en Canvas pero no en Teams
 - Revisar la licencia disponible con `GET /diagnostics`.
@@ -151,7 +156,4 @@ curl -X POST http://localhost:3000/ingreso/preview \
 curl -X POST http://localhost:3000/ingreso/check-account \
   -H "Content-Type: application/json" \
   -d '{"cedula":"6868066","full_name":"Karen Gonzalez","platform":"both"}'
-
-# Probar envío de correo
-curl -X POST "http://localhost:3000/ingreso/test-email?to_email=tu@email.com&program_type=grado"
 ```

@@ -118,11 +118,18 @@ SECRET_KEY=<clave-secreta-aleatoria>
 INSTITUTIONAL_DOMAIN=usil.edu.py
 USAGE_LOCATION=PY
 
-# ── Email (Graph API) ────────────────────────────────
+# ── Email (SMTP) ──────────────────────────────────────
+SMTP_SERVER=smtp.office365.com
+SMTP_PORT=587
+SMTP_USER=resteche@usil.edu.py
+SMTP_PASSWORD=<contraseña o app password del buzón>
 SMTP_FROM=resteche@usil.edu.py
-SMTP_FROM_NAME=Roque Esteche
-EMAIL_CC=
 ```
+
+El envío de credenciales usa SMTP (STARTTLS) directo contra el buzón configurado,
+no la API de Graph. El CC de cada correo depende del tipo de programa y está
+fijo en `app/services/email_service.py` (ver también la hoja "CC Envío
+Credenciales" del archivo `referencias_excel/USIL_Config_Referencia.xlsx`).
 
 ### Permisos Requeridos en Azure AD
 
@@ -131,7 +138,6 @@ La app registration de Azure necesita los siguientes **Application permissions**
 | Permiso | Uso |
 |---|---|
 | `User.ReadWrite.All` | Crear y leer usuarios en Azure AD |
-| `Mail.Send` | Enviar correos vía Graph API |
 | `GroupMember.ReadWrite.All` | Gestionar miembros de Teams |
 | `Team.ReadBasic.All` | Leer equipos de Teams |
 

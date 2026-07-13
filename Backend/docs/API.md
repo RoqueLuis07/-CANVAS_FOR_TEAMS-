@@ -216,14 +216,23 @@ curl -X POST http://localhost:3000/ingreso/bulk-file \
 
 ---
 
-### POST `/ingreso/test-email`
+### POST `/excel/diplomados/send-credentials`
 
-Envía un correo de prueba para verificar la configuración.
+Envía el correo de credenciales a los alumnos de una planilla de Diplomados que
+ya tienen cuenta creada (columnas Usuario/Contraseña ya generadas) y que todavía
+no la recibieron. Acción separada de `/excel/diplomados-onedrive` (creación de
+cuentas): no vuelve a crear nada, y no reenvía a quien ya está marcado como
+enviado en la columna "Correo Enviado".
 
-**Query params:**
-- `to_email` (requerido)
-- `program_type` (opcional, default `grado`)
-- `program_name` (opcional)
+```bash
+curl -X POST http://localhost:3000/excel/diplomados/send-credentials \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://usilpy-my.sharepoint.com/...","sheet_name":"Nombre Diplomado"}'
+```
+
+### POST `/excel/docentes/send-credentials`
+
+Mismo comportamiento que el anterior, pero para planillas de Alta Docentes.
 
 ---
 
