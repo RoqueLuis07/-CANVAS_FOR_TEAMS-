@@ -78,8 +78,19 @@
           </div>
         
         <div class="d-flex justify-content-end gap-2 mb-4">
+          <button type="button" class="btn btn-outline-secondary" onclick="previewSendDocentesCredentials()" id="btnPreviewSendDocentes" disabled><i class="bi bi-eye me-2"></i>Vista Previa de Envío</button>
           <button type="button" class="btn btn-outline-warning" onclick="sendDocentesCredentials()" id="btnSendDocentesCredentials" disabled><i class="bi bi-envelope-check me-2"></i>Enviar Credenciales</button>
           <button type="button" class="btn btn-warning text-dark" onclick="importDocentes()" id="btnImportDocentes" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
+        </div>
+        <div id="docSendPreviewWrap" style="display:none;" class="mb-4">
+          <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-envelope-paper me-2"></i>Pendientes de Recibir Credenciales (<span id="docSendPendingCount">0</span>)</h6>
+          <div class="table-responsive bg-white rounded border" style="max-height:280px; overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light"><tr><th>Nombre</th><th>Correo</th></tr></thead>
+              <tbody id="docSendPendingTbody"></tbody>
+            </table>
+          </div>
+          <p class="small text-muted mb-0 mt-1" id="docSendPreviewNote"></p>
         </div>
         <div id="docSendResult" class="mb-4"></div>
 
@@ -171,8 +182,19 @@
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
+                  <button type="button" class="btn btn-outline-secondary" onclick="previewSendDiplomadosCredentials()" id="btnPreviewSendDiplomados" disabled><i class="bi bi-eye me-2"></i>Vista Previa de Envío</button>
                   <button type="button" class="btn btn-outline-primary" onclick="sendDiplomadosCredentials()" id="btnSendDiplomadosCredentials" disabled><i class="bi bi-envelope-check me-2"></i>Enviar Credenciales</button>
                   <button type="button" class="btn btn-success text-white" onclick="importDiplomados()" id="btnImportDiplomados" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
+                </div>
+                <div id="diplomadoSendPreviewWrap" style="display:none;" class="mb-4">
+                  <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-envelope-paper me-2"></i>Pendientes de Recibir Credenciales (<span id="diplomadoSendPendingCount">0</span>)</h6>
+                  <div class="table-responsive bg-white rounded border" style="max-height:280px; overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                      <thead class="table-light"><tr><th>Nombre</th><th>Correo</th></tr></thead>
+                      <tbody id="diplomadoSendPendingTbody"></tbody>
+                    </table>
+                  </div>
+                  <p class="small text-muted mb-0 mt-1" id="diplomadoSendPreviewNote"></p>
                 </div>
                 <div id="diplomadoSendResult" class="mb-4"></div>
 
@@ -257,8 +279,19 @@
                 </div>
                 
                 <div class="d-flex justify-content-end gap-2 mb-4">
+                  <button type="button" class="btn btn-outline-secondary" onclick="previewSendMasivoCredentials()" id="btnPreviewSendMasivo" disabled><i class="bi bi-eye me-2"></i>Vista Previa de Envío</button>
                   <button type="button" class="btn btn-outline-primary" onclick="sendMasivoCredentials()" id="btnSendMasivoCredentials" disabled><i class="bi bi-envelope-check me-2"></i>Enviar Credenciales</button>
                   <button type="button" class="btn btn-primary" onclick="importMasivo()" id="btnImportMasivo" disabled><i class="bi bi-check-circle me-2"></i>Confirmar y Procesar</button>
+                </div>
+                <div id="masivoSendPreviewWrap" style="display:none;" class="mb-4">
+                  <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-envelope-paper me-2"></i>Pendientes de Recibir Credenciales (<span id="masivoSendPendingCount">0</span>)</h6>
+                  <div class="table-responsive bg-white rounded border" style="max-height:280px; overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                      <thead class="table-light"><tr><th>Nombre</th><th>Correo</th></tr></thead>
+                      <tbody id="masivoSendPendingTbody"></tbody>
+                    </table>
+                  </div>
+                  <p class="small text-muted mb-0 mt-1" id="masivoSendPreviewNote"></p>
                 </div>
                 <div id="masivoSendResult" class="mb-4"></div>
 
@@ -948,9 +981,34 @@ async function previewDocentes() {
         document.getElementById('docPreviewWrap').style.display = 'block';
         document.getElementById('btnImportDocentes').disabled = false;
         document.getElementById('btnSendDocentesCredentials').disabled = false;
+        document.getElementById('btnPreviewSendDocentes').disabled = false;
         toast(`Pendientes: ${res.valid_rows} · Ya procesados: ${res.already_processed_details.length}`, 'success');
     } catch (e) {
         toast(e.message, 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+async function previewSendDocentesCredentials() {
+    const url = document.getElementById('doc_url').value;
+    const sheet = document.getElementById('doc_sheet').value;
+    if (!url || !sheet) return;
+
+    const btn = document.getElementById('btnPreviewSendDocentes');
+    setLoading(btn, true);
+    try {
+        const res = await api.post('/excel/docentes/send-credentials/preview', { url: url, sheet_name: sheet });
+        document.getElementById('docSendPendingCount').innerText = res.pending.length;
+        document.getElementById('docSendPendingTbody').innerHTML = res.pending.length
+            ? res.pending.map(r => `<tr><td>${r.nombre || '-'}</td><td>${r.correo || '-'}</td></tr>`).join('')
+            : '<tr><td colspan="2" class="text-muted small">Nadie pendiente de recibir credenciales.</td></tr>';
+        document.getElementById('docSendPreviewNote').innerText =
+            `Ya enviados: ${res.already_sent_count} · Sin cuenta creada todavía: ${res.no_account_count} · Sin correo personal: ${res.no_email_count}`;
+        document.getElementById('docSendPreviewWrap').style.display = 'block';
+        toast(`${res.pending.length} pendientes de recibir credenciales`, res.pending.length ? 'info' : 'success');
+    } catch (e) {
+        toast('Error: ' + e.message, 'danger');
     } finally {
         setLoading(btn, false);
     }
@@ -1076,6 +1134,7 @@ async function previewDiplomados() {
         document.getElementById('diplomadoPreviewWrap').style.display = 'block';
         document.getElementById('btnImportDiplomados').disabled = false;
         document.getElementById('btnSendDiplomadosCredentials').disabled = false;
+        document.getElementById('btnPreviewSendDiplomados').disabled = false;
         toast(`Pendientes: ${res.students_to_process} · Ya procesados: ${res.students_already_processed}`, 'success');
     } catch (e) {
         toast(e.message, 'danger');
@@ -1115,6 +1174,30 @@ async function importDiplomados() {
         toast('Proceso completado', 'success');
     } catch (e) {
         toast(e.message, 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+async function previewSendDiplomadosCredentials() {
+    const url = document.getElementById('diplomadoUrl').value;
+    const sheet = document.getElementById('diplomadoSheet').value;
+    if (!url || !sheet) return;
+
+    const btn = document.getElementById('btnPreviewSendDiplomados');
+    setLoading(btn, true);
+    try {
+        const res = await api.post('/excel/diplomados/send-credentials/preview', { url: url, sheet_name: sheet });
+        document.getElementById('diplomadoSendPendingCount').innerText = res.pending.length;
+        document.getElementById('diplomadoSendPendingTbody').innerHTML = res.pending.length
+            ? res.pending.map(r => `<tr><td>${r.nombre || '-'}</td><td>${r.correo || '-'}</td></tr>`).join('')
+            : '<tr><td colspan="2" class="text-muted small">Nadie pendiente de recibir credenciales.</td></tr>';
+        document.getElementById('diplomadoSendPreviewNote').innerText =
+            `Ya enviados: ${res.already_sent_count} · Sin cuenta creada todavía: ${res.no_account_count} · Sin correo personal: ${res.no_email_count}`;
+        document.getElementById('diplomadoSendPreviewWrap').style.display = 'block';
+        toast(`${res.pending.length} pendientes de recibir credenciales`, res.pending.length ? 'info' : 'success');
+    } catch (e) {
+        toast('Error: ' + e.message, 'danger');
     } finally {
         setLoading(btn, false);
     }
@@ -1200,9 +1283,34 @@ async function previewMasivo() {
         document.getElementById('masivoPreviewWrap').style.display = 'block';
         document.getElementById('btnImportMasivo').disabled = false;
         document.getElementById('btnSendMasivoCredentials').disabled = false;
+        document.getElementById('btnPreviewSendMasivo').disabled = false;
         toast(`Pendientes: ${res.students_to_process} · Ya procesados: ${res.students_already_processed}`, 'success');
     } catch (e) {
         toast(e.message, 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+async function previewSendMasivoCredentials() {
+    const url = document.getElementById('masivoUrl').value;
+    const sheet = document.getElementById('masivoSheet').value;
+    if (!url || !sheet) return;
+
+    const btn = document.getElementById('btnPreviewSendMasivo');
+    setLoading(btn, true);
+    try {
+        const res = await api.post('/excel/masivo/send-credentials/preview', { url: url, sheet_name: sheet });
+        document.getElementById('masivoSendPendingCount').innerText = res.pending.length;
+        document.getElementById('masivoSendPendingTbody').innerHTML = res.pending.length
+            ? res.pending.map(r => `<tr><td>${r.nombre || '-'}</td><td>${r.correo || '-'}</td></tr>`).join('')
+            : '<tr><td colspan="2" class="text-muted small">Nadie pendiente de recibir credenciales.</td></tr>';
+        document.getElementById('masivoSendPreviewNote').innerText =
+            `Ya enviados: ${res.already_sent_count} · Sin cuenta creada todavía: ${res.no_account_count} · Sin correo personal: ${res.no_email_count}`;
+        document.getElementById('masivoSendPreviewWrap').style.display = 'block';
+        toast(`${res.pending.length} pendientes de recibir credenciales`, res.pending.length ? 'info' : 'success');
+    } catch (e) {
+        toast('Error: ' + e.message, 'danger');
     } finally {
         setLoading(btn, false);
     }

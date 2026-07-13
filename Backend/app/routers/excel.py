@@ -912,6 +912,16 @@ class PreviewResponse(BaseModel):
     student_details: list[dict] = []
     already_processed_details: list[dict] = []
 
+
+class SendCredentialsPreviewResponse(BaseModel):
+    """Vista previa de a quién le falta enviar credenciales — no envía nada,
+    solo lee la planilla y aplica la misma lógica de filtrado que el envío
+    real (Correo Enviado / Enviado legacy / cuenta creada / correo válido)."""
+    pending: list[dict] = []
+    already_sent_count: int = 0
+    no_account_count: int = 0
+    no_email_count: int = 0
+
 def _encode_share_url(url: str) -> str:
     import base64
     b64 = base64.b64encode(url.encode()).decode()
@@ -1411,6 +1421,90 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     return result
 
 
+@router.post("/excel/diplomados/send-credentials/preview", summary="Vista previa: quién falta enviar credenciales (Diplomados)")
+async def preview_send_diplomados_credentials(req: DiplomadosUrlRequest) -> SendCredentialsPreviewResponse:
+    """Muestra quién está pendiente de recibir el correo de credenciales, sin
+    enviar nada — misma lógica de filtrado exacta que /send-credentials."""
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
+    col_correo = get_col_idx("correo")
+    col_usuario = get_col_idx("usuario")
+    col_contra = get_col_idx("contrasena", "contraseña", "clave")
+
+    if not col_usuario or not col_contra:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontraron las columnas de Usuario/Contraseña. Primero procesa la planilla con 'Carga Diplomados'.",
+        )
+    if not col_correo:
+        raise HTTPException(status_code=400, detail="No se encontró una columna de Correo para enviar las credenciales.")
+
+    col_correo_enviado = get_col_idx("correo enviado", "credenciales enviadas")
+    col_enviado_legacy = headers.get("enviado")
+
+    def _looks_sent(raw: str) -> bool:
+        v = raw.strip().lower()
+        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
+
+    pending, already_sent, no_account, no_email = [], 0, 0, 0
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
+        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
+        if not nombre_val and not usuario_val and not correo_val:
+            continue
+
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "") if col_correo_enviado else ""
+        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
+
+        if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
+            no_account += 1
+            continue
+        if not correo_val or "@" not in correo_val:
+            no_email += 1
+            continue
+        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
+            already_sent += 1
+            continue
+
+        pending.append({"nombre": nombre_val, "correo": correo_val, "usuario": usuario_val})
+
+    wb.close()
+    return SendCredentialsPreviewResponse(
+        pending=pending, already_sent_count=already_sent,
+        no_account_count=no_account, no_email_count=no_email,
+    )
+
+
 @router.post("/excel/diplomados/send-credentials", summary="Enviar correo de credenciales a alumnos ya creados (Diplomados)")
 async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
     """Envía el correo de credenciales a los alumnos que ya tienen cuenta creada
@@ -1564,6 +1658,90 @@ async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
         )
 
     return result
+
+
+@router.post("/excel/docentes/send-credentials/preview", summary="Vista previa: quién falta enviar credenciales (Docentes)")
+async def preview_send_docentes_credentials(req: DiplomadosUrlRequest) -> SendCredentialsPreviewResponse:
+    """Muestra quién está pendiente de recibir el correo de credenciales, sin
+    enviar nada — misma lógica de filtrado exacta que /send-credentials."""
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
+    col_correo = get_col_idx("correo", "email")
+    col_usuario = get_col_idx("usuario")
+    col_contra = get_col_idx("contrasena", "contraseña", "clave")
+
+    if not col_usuario or not col_contra:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontraron las columnas de Usuario/Contraseña. Primero procesa la planilla con 'Alta Docentes'.",
+        )
+    if not col_correo:
+        raise HTTPException(status_code=400, detail="No se encontró una columna de Correo para enviar las credenciales.")
+
+    col_correo_enviado = get_col_idx("correo enviado", "credenciales enviadas")
+    col_enviado_legacy = headers.get("enviado")
+
+    def _looks_sent(raw: str) -> bool:
+        v = raw.strip().lower()
+        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
+
+    pending, already_sent, no_account, no_email = [], 0, 0, 0
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
+        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
+        if not nombre_val and not usuario_val and not correo_val:
+            continue
+
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "") if col_correo_enviado else ""
+        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
+
+        if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
+            no_account += 1
+            continue
+        if not correo_val or "@" not in correo_val:
+            no_email += 1
+            continue
+        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
+            already_sent += 1
+            continue
+
+        pending.append({"nombre": nombre_val, "correo": correo_val, "usuario": usuario_val})
+
+    wb.close()
+    return SendCredentialsPreviewResponse(
+        pending=pending, already_sent_count=already_sent,
+        no_account_count=no_account, no_email_count=no_email,
+    )
 
 
 @router.post("/excel/docentes/send-credentials", summary="Enviar correo de credenciales a docentes ya creados")
@@ -3702,6 +3880,90 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo en OneDrive: {e}")
 
     return result
+
+
+@router.post("/excel/masivo/send-credentials/preview", summary="Vista previa: quién falta enviar credenciales (Carga Masiva)")
+async def preview_send_masivo_credentials(req: DiplomadosUrlRequest) -> SendCredentialsPreviewResponse:
+    """Muestra quién está pendiente de recibir el correo de credenciales, sin
+    enviar nada — misma lógica de filtrado exacta que /send-credentials."""
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
+    col_correo = get_col_idx("correo", "email")
+    col_usuario = get_col_idx("usuario")
+    col_contra = get_col_idx("contrasena", "contraseña", "clave")
+
+    if not col_usuario or not col_contra:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontraron las columnas de Usuario/Contraseña. Primero procesa la planilla con 'Carga Masiva'.",
+        )
+    if not col_correo:
+        raise HTTPException(status_code=400, detail="No se encontró una columna de Correo para enviar las credenciales.")
+
+    col_correo_enviado = get_col_idx("correo enviado", "credenciales enviadas")
+    col_enviado_legacy = headers.get("enviado")
+
+    def _looks_sent(raw: str) -> bool:
+        v = raw.strip().lower()
+        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
+
+    pending, already_sent, no_account, no_email = [], 0, 0, 0
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
+        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
+        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
+        if not nombre_val and not usuario_val and not correo_val:
+            continue
+
+        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "") if col_correo_enviado else ""
+        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
+
+        if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
+            no_account += 1
+            continue
+        if not correo_val or "@" not in correo_val:
+            no_email += 1
+            continue
+        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
+            already_sent += 1
+            continue
+
+        pending.append({"nombre": nombre_val, "correo": correo_val, "usuario": usuario_val})
+
+    wb.close()
+    return SendCredentialsPreviewResponse(
+        pending=pending, already_sent_count=already_sent,
+        no_account_count=no_account, no_email_count=no_email,
+    )
 
 
 @router.post("/excel/masivo/send-credentials", summary="Enviar correo de credenciales a usuarios ya creados (Carga Masiva)")
