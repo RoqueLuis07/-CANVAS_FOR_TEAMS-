@@ -127,6 +127,11 @@ async def jobs_page(request: Request):
     return _r(request, "job_history.html")
 
 
+@router.get("/ui/reports", response_class=HTMLResponse)
+async def reports_page(request: Request):
+    return _r(request, "reports.html")
+
+
 @router.get("/ui/unified-users", response_class=HTMLResponse)
 async def unified_users_page(request: Request):
     return _r(request, "unified_users.html")

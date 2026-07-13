@@ -48,6 +48,13 @@ async def suspend_user(sys_user_id: str, email: str = None):
                 # Deshabilitar cuenta en Azure AD
                 await graph.patch(f"/users/{t_user_id}", {"accountEnabled": False})
                 res["teams"] = "suspended"
+                # Liberar licencias: una cuenta deshabilitada no debe seguir
+                # ocupando un asiento pago.
+                try:
+                    removed = await graph.remove_all_licenses(t_user_id)
+                    res["license"] = f"removed ({len(removed)})" if removed else "none"
+                except Exception as le:
+                    res["license"] = f"error: {le}"
             else:
                 res["teams"] = "not_found"
         except Exception as te:

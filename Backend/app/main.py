@@ -44,6 +44,7 @@ from app.routers import (
     egreso,
     sspr,
     analytics,
+    reports,
 )
 from app.routers import matriculacion
 import asyncio
@@ -206,6 +207,7 @@ routers_to_load = [
     ("Teams · Users", teams_users.router),
     ("Web", web.router),
     ("Sync", sync.router),
+    ("Reports", reports.router),
 ]
 
 for router_name, router_obj in routers_to_load:

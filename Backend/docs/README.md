@@ -137,9 +137,23 @@ La app registration de Azure necesita los siguientes **Application permissions**
 
 | Permiso | Uso |
 |---|---|
-| `User.ReadWrite.All` | Crear y leer usuarios en Azure AD |
+| `User.ReadWrite.All` | Crear y leer usuarios en Azure AD, liberar licencias al dar de baja |
 | `GroupMember.ReadWrite.All` | Gestionar miembros de Teams |
 | `Team.ReadBasic.All` | Leer equipos de Teams |
+
+Permisos adicionales **no concedidos todavía**, requeridos por funciones de
+`/reports/*` (ver `app/routers/reports.py`). Sin ellos, esos endpoints
+responden 403 con instrucciones de cómo habilitarlos:
+
+| Permiso | Uso | Endpoint que lo necesita |
+|---|---|---|
+| `AuditLog.Read.All` | Ver último inicio de sesión (`signInActivity`) | `GET /reports/inactive-teams-users` |
+| `Reports.Read.All` | Reporte de actividad de Teams por usuario | `GET /reports/teams-activity` (además, desactivar "Reports concealment" en el Admin Center para ver nombres reales) |
+| `Mail.Read` (o `Mail.ReadBasic.All`) | Confirmar en la carpeta Enviados si un correo realmente salió del buzón SMTP | `POST /reports/verify-email-sent` |
+
+Para otorgarlos: Azure Portal → App Registrations → (la app) → API Permissions
+→ Add a permission → Microsoft Graph → Application permissions → buscar y
+agregar cada uno → **Grant admin consent**.
 
 ---
 

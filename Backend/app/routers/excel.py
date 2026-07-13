@@ -2205,6 +2205,10 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
                     await graph.delete(f"/users/{ms_users[0]['id']}")
                 else:
                     await graph.patch(f"/users/{ms_users[0]['id']}", {"accountEnabled": False})
+                    try:
+                        await graph.remove_all_licenses(ms_users[0]["id"])
+                    except Exception:
+                        pass
             else:
                 if error:
                     error += " | No en Azure AD"

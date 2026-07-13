@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Reportes{% endblock %}
+{% block breadcrumb %}Administración › Reportes{% endblock %}
+{% block nav_rp %}active{% endblock %}
+
+{% block content %}
+<div class="page-body">
+  <h1 class="page-title">📊 Reportes</h1>
+  <p class="page-subtitle">Licencias ocupadas por cuentas abandonadas, actividad de Teams y verificación de envíos.</p>
+
+  <!-- Licencias Huérfanas -->
+  <div class="table-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h5 class="mb-0"><i class="bi bi-key-fill me-2"></i>Licencias Huérfanas</h5>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" onclick="loadOrphanedLicenses()"><i class="bi bi-arrow-clockwise me-1"></i>Consultar</button>
+        <button class="btn btn-warning btn-sm text-dark" id="btnFreeSelected" onclick="freeSelectedLicenses()" disabled><i class="bi bi-unlock-fill me-1"></i>Liberar Seleccionadas</button>
+      </div>
+    </div>
+    <p class="px-3 pt-2 mb-0 small text-muted">Cuentas deshabilitadas en Azure AD que todavía tienen una licencia asignada (asiento pago ocupado sin uso).</p>
+    <div class="table-scroll">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th style="width:36px;"><input type="checkbox" id="chkAllLicenses" onchange="toggleAllLicenses(this)"></th>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Licencias</th>
+          </tr>
+        </thead>
+        <tbody id="orphanedLicensesBody"><tr><td colspan="4" class="text-muted small p-3">Presioná "Consultar" para cargar.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Cuentas de Teams inactivas -->
+  <div class="table-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h5 class="mb-0"><i class="bi bi-person-x-fill me-2"></i>Cuentas de Teams Inactivas</h5>
+      <div class="d-flex gap-2 align-items-center">
+        <input type="number" id="inactiveDays" value="60" min="1" class="form-control form-control-sm" style="width:90px;" title="Días sin iniciar sesión">
+        <button class="btn btn-outline-secondary btn-sm" onclick="loadInactiveUsers()"><i class="bi bi-arrow-clockwise me-1"></i>Consultar</button>
+      </div>
+    </div>
+    <p class="px-3 pt-2 mb-0 small text-muted">
+      Requiere el permiso de aplicación <code>AuditLog.Read.All</code> con consentimiento de administrador en Azure Portal
+      (no concedido todavía). Hasta otorgarlo, esta consulta va a devolver un error explicando cómo habilitarlo.
+    </p>
+    <div class="table-scroll">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Último inicio de sesión</th></tr></thead>
+        <tbody id="inactiveUsersBody"><tr><td colspan="3" class="text-muted small p-3">Sin datos todavía.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Actividad de Teams -->
+  <div class="table-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Actividad de Teams por Usuario</h5>
+      <div class="d-flex gap-2 align-items-center">
+        <select id="activityPeriod" class="form-select form-select-sm" style="width:110px;">
+          <option value="D7">7 días</option>
+          <option value="D30">30 días</option>
+          <option value="D90" selected>90 días</option>
+          <option value="D180">180 días</option>
+        </select>
+        <button class="btn btn-outline-secondary btn-sm" onclick="loadTeamsActivity()"><i class="bi bi-arrow-clockwise me-1"></i>Consultar</button>
+      </div>
+    </div>
+    <p class="px-3 pt-2 mb-0 small text-muted">
+      Requiere el permiso de aplicación <code>Reports.Read.All</code> con consentimiento de administrador (no concedido
+      todavía). Además, si el tenant tiene activado el ocultamiento de datos de reportes, hay que desactivarlo en el
+      Admin Center para ver nombres/correos reales.
+    </p>
+    <div class="table-scroll">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Usuario</th><th>Chats</th><th>Reuniones</th><th>Llamadas</th></tr></thead>
+        <tbody id="teamsActivityBody"><tr><td colspan="4" class="text-muted small p-3">Sin datos todavía.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Verificación de envío -->
+  <div class="table-card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-envelope-check me-2"></i>Verificar Envío Real (Outlook)</h5>
+    </div>
+    <p class="px-3 pt-2 mb-0 small text-muted">
+      Confirma en la carpeta "Enviados" del buzón SMTP si un correo de credenciales realmente salió, más allá de que el
+      sistema lo haya marcado como enviado. Requiere el permiso de aplicación <code>Mail.Read</code> con consentimiento
+      de administrador sobre ese buzón (no concedido todavía).
+    </p>
+    <div class="p-3">
+      <div class="row g-2">
+        <div class="col-md-5">
+          <input type="email" id="verifyEmail" class="form-control form-control-sm" placeholder="correo@ejemplo.com">
+        </div>
+        <div class="col-md-4">
+          <input type="datetime-local" id="verifySince" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-primary btn-sm w-100" onclick="verifyEmailSent()"><i class="bi bi-search me-1"></i>Verificar</button>
+        </div>
+      </div>
+      <div id="verifyResult" class="mt-3"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let orphanedUsers = [];
+
+async function loadOrphanedLicenses() {
+    try {
+        const res = await api.get('/reports/orphaned-licenses');
+        orphanedUsers = res.users;
+        const body = document.getElementById('orphanedLicensesBody');
+        if (!res.users.length) {
+            body.innerHTML = '<tr><td colspan="4" class="text-muted small p-3">No se encontraron licencias huérfanas.</td></tr>';
+            document.getElementById('btnFreeSelected').disabled = true;
+            return;
+        }
+        body.innerHTML = res.users.map(u => `
+            <tr>
+                <td><input type="checkbox" class="chk-license" value="${u.id}"></td>
+                <td>${u.displayName || '-'}</td>
+                <td class="font-monospace small">${u.userPrincipalName || '-'}</td>
+                <td>${(u.licenses || []).length}</td>
+            </tr>
+        `).join('');
+        toast(`${res.total} cuentas con licencias huérfanas`, res.total ? 'warning' : 'success');
+    } catch (e) {
+        toast('Error: ' + e.message, 'danger');
+    }
+}
+
+function toggleAllLicenses(master) {
+    document.querySelectorAll('.chk-license').forEach(c => c.checked = master.checked);
+    document.getElementById('btnFreeSelected').disabled = !master.checked;
+}
+
+document.addEventListener('change', (e) => {
+    if (e.target.classList && e.target.classList.contains('chk-license')) {
+        const any = Array.from(document.querySelectorAll('.chk-license')).some(c => c.checked);
+        document.getElementById('btnFreeSelected').disabled = !any;
+    }
+});
+
+async function freeSelectedLicenses() {
+    const ids = Array.from(document.querySelectorAll('.chk-license:checked')).map(c => c.value);
+    if (!ids.length) return;
+    if (!confirm(`¿Liberar las licencias de ${ids.length} cuenta(s)?`)) return;
+    try {
+        const res = await api.post('/reports/orphaned-licenses/free', { user_ids: ids });
+        toast(`Licencias liberadas: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
+        loadOrphanedLicenses();
+    } catch (e) {
+        toast('Error: ' + e.message, 'danger');
+    }
+}
+
+async function loadInactiveUsers() {
+    const days = document.getElementById('inactiveDays').value || 60;
+    try {
+        const res = await api.get(`/reports/inactive-teams-users?days=${days}`);
+        const body = document.getElementById('inactiveUsersBody');
+        if (!res.users.length) {
+            body.innerHTML = '<tr><td colspan="3" class="text-muted small p-3">Ninguna cuenta inactiva encontrada.</td></tr>';
+            return;
+        }
+        body.innerHTML = res.users.map(u => `
+            <tr>
+                <td>${u.displayName || '-'}</td>
+                <td class="font-monospace small">${u.userPrincipalName || '-'}</td>
+                <td>${u.last_signin || 'Nunca'}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        document.getElementById('inactiveUsersBody').innerHTML =
+            `<tr><td colspan="3" class="text-danger small p-3">${e.message}</td></tr>`;
+    }
+}
+
+async function loadTeamsActivity() {
+    const period = document.getElementById('activityPeriod').value;
+    try {
+        const res = await api.get(`/reports/teams-activity?period=${period}`);
+        const body = document.getElementById('teamsActivityBody');
+        if (!res.rows.length) {
+            body.innerHTML = '<tr><td colspan="4" class="text-muted small p-3">Sin datos para el período seleccionado.</td></tr>';
+            return;
+        }
+        body.innerHTML = res.rows.map(r => `
+            <tr>
+                <td class="font-monospace small">${r['User Principal Name'] || r['user_principal_name'] || '-'}</td>
+                <td>${r['Team Chat Message Count'] || '-'}</td>
+                <td>${r['Meetings Organized Count'] || '-'}</td>
+                <td>${r['Calls Organized Count'] || '-'}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        document.getElementById('teamsActivityBody').innerHTML =
+            `<tr><td colspan="4" class="text-danger small p-3">${e.message}</td></tr>`;
+    }
+}
+
+async function verifyEmailSent() {
+    const to = document.getElementById('verifyEmail').value.trim();
+    const since = document.getElementById('verifySince').value;
+    const resultDiv = document.getElementById('verifyResult');
+    if (!to || !since) return toast('Completá el correo y la fecha', 'warning');
+    const sinceIso = new Date(since).toISOString();
+    resultDiv.innerHTML = '';
+    try {
+        const res = await api.post('/reports/verify-email-sent', { to_email: to, since_iso: sinceIso });
+        resultDiv.innerHTML = res.found_in_sent_items
+            ? '<div class="alert alert-success py-2 small mb-0">✅ Encontrado en Enviados: el correo sí salió del buzón.</div>'
+            : '<div class="alert alert-warning py-2 small mb-0">⚠️ No se encontró en Enviados para ese correo/fecha.</div>';
+    } catch (e) {
+        resultDiv.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${e.message}</div>`;
+    }
+}
+</script>
+{% endblock %}

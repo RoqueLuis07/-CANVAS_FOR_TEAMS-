@@ -132,6 +132,18 @@ async def assign_license(user_id: str, sku_part_number: str) -> Any:
         raise ValueError(f"La licencia {sku_part_number} no se encontró o no está disponible en tu cuenta de Microsoft.")
     return await post(f"/users/{user_id}/assignLicense", {"addLicenses": [{"skuId": sku_id}], "removeLicenses": []})
 
+
+async def remove_all_licenses(user_id: str) -> list[str]:
+    """Libera todas las licencias asignadas a un usuario (usado al dar de baja,
+    para no seguir consumiendo asientos pagos). Devuelve los skuId removidos.
+    Requiere User.ReadWrite.All (ya concedido)."""
+    user = await get(f"/users/{user_id}", params={"$select": "assignedLicenses"})
+    sku_ids = [lic["skuId"] for lic in (user.get("assignedLicenses") or []) if lic.get("skuId")]
+    if not sku_ids:
+        return []
+    await post(f"/users/{user_id}/assignLicense", {"addLicenses": [], "removeLicenses": sku_ids})
+    return sku_ids
+
 _client_instance: httpx.AsyncClient | None = None
 
 def _client(timeout: httpx.Timeout | None = None) -> httpx.AsyncClient:
@@ -441,3 +453,107 @@ async def add_member_to_group(group_id: str, user_id: str) -> bool:
         return True
     except Exception:
         return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Reportes: licencias huérfanas, cuentas inactivas, actividad de Teams,
+# verificación de envío de correo contra el buzón real de Outlook.
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def list_disabled_users_with_licenses() -> list[dict]:
+    """Cuentas deshabilitadas (accountEnabled=false) que todavía tienen
+    licencias asignadas: asientos pagos ocupados por cuentas abandonadas.
+    Requiere User.ReadWrite.All (ya concedido)."""
+    users = await paginate("/users", params={
+        "$select": "id,displayName,userPrincipalName,accountEnabled,assignedLicenses",
+        "$filter": "accountEnabled eq false",
+    })
+    return [u for u in users if u.get("assignedLicenses")]
+
+
+async def get_inactive_users(min_days_inactive: int = 60) -> list[dict]:
+    """Cuentas habilitadas sin inicio de sesión en los últimos `min_days_inactive`
+    días (o que nunca iniciaron sesión).
+
+    Requiere el permiso de aplicación 'AuditLog.Read.All' con consentimiento de
+    administrador en Azure Portal — NO está incluido en el scope actual
+    (User.ReadWrite.All / GroupMember.ReadWrite.All / Team.ReadBasic.All).
+    Sin ese permiso, Graph devuelve 403 al pedir 'signInActivity'.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    users = await paginate("/users", params={
+        "$select": "id,displayName,userPrincipalName,accountEnabled,signInActivity",
+        "$filter": "accountEnabled eq true",
+    })
+    cutoff = datetime.now(timezone.utc) - timedelta(days=min_days_inactive)
+    inactive = []
+    for u in users:
+        last = (u.get("signInActivity") or {}).get("lastSignInDateTime")
+        if not last:
+            inactive.append({**u, "last_signin": None})
+            continue
+        try:
+            dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+            if dt < cutoff:
+                inactive.append({**u, "last_signin": last})
+        except Exception:
+            pass
+    return inactive
+
+
+async def get_teams_activity_report(period: str = "D90") -> list[dict]:
+    """Reporte de actividad de Teams por usuario (mensajes, reuniones, llamadas)
+    de los últimos `period` (D7/D30/D90/D180).
+
+    Requiere el permiso de aplicación 'Reports.Read.All' con consentimiento de
+    administrador — NO está incluido en el scope actual. Además, si el tenant
+    tiene activado el "ocultamiento de datos de reportes" (Reports concealment)
+    en el Admin Center, los nombres/UPN vienen anonimizados y hay que
+    desactivar esa opción para poder identificar a los usuarios.
+    """
+    import csv
+    import io as _io
+
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+        r = await c.get(
+            f"{_GRAPH}/reports/getTeamsUserActivityUserDetail(period='{period}')",
+            headers=_headers(),
+        )
+        _raise(r)
+        reader = csv.DictReader(_io.StringIO(r.text))
+        return list(reader)
+
+
+async def search_sent_email(to_email: str, since_iso: str) -> bool:
+    """Busca en la carpeta 'Enviados' del buzón SMTP_USER un correo dirigido a
+    `to_email` posterior a `since_iso` (ISO 8601 UTC), para confirmar que
+    realmente salió del buzón — más allá de que smtplib no haya lanzado una
+    excepción.
+
+    Requiere el permiso de aplicación 'Mail.Read' (o 'Mail.ReadBasic.All') con
+    consentimiento de administrador, con acceso al buzón SMTP_USER — NO está
+    incluido en el scope actual.
+    """
+    mailbox = settings.smtp_user
+    if not mailbox:
+        raise ValueError("SMTP_USER no está configurado; no hay buzón sobre el cual verificar.")
+
+    headers = _headers()
+    headers["ConsistencyLevel"] = "eventual"
+    params = {
+        "$filter": (
+            f"toRecipients/any(r:r/emailAddress/address eq '{to_email}') "
+            f"and sentDateTime ge {since_iso}"
+        ),
+        "$select": "id,subject,sentDateTime",
+        "$count": "true",
+        "$top": "1",
+    }
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+        r = await c.get(
+            f"{_GRAPH}/users/{mailbox}/mailFolders/SentItems/messages",
+            headers=headers, params=params,
+        )
+        _raise(r)
+        return len(r.json().get("value", [])) > 0
