@@ -8,9 +8,12 @@ depende del tipo de programa.
 """
 import asyncio
 import logging
+import mimetypes
 import smtplib
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 
 from app.core.config import settings
 
@@ -26,17 +29,36 @@ _PROGRAM_CC: dict[str, list[str]] = {
     "grado": ["gradocredenciales@usil.edu.py"],
 }
 
+# Instructivos que el proceso manual anterior adjuntaba a los correos de
+# Diplomados (referencias_excel/alumnos para crear.xlsm, hoja "Envio
+# Credenciales UBS"). Se mantienen en el repo tal como estaban.
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_DIPLOMADO_ATTACHMENTS_DIR = _BACKEND_DIR / "Archivos para los correos" / "Diplomados (UBS - USIL Business School)"
+_DIPLOMADO_ATTACHMENTS = [
+    _DIPLOMADO_ATTACHMENTS_DIR / "2° Acceso a la Plataforma Teams- Instructivo.pdf",
+    _DIPLOMADO_ATTACHMENTS_DIR / "3° Descargar grabacion en TEAMS - Instructivo.pdf",
+]
+
 
 def default_cc_for_program(program_type: str | None) -> list[str]:
     extra = _PROGRAM_CC.get((program_type or "").strip().lower(), [])
     return [*extra, *_BASE_CC]
 
 
+def attachments_for_program(program_type: str | None) -> list[Path]:
+    """Adjuntos fijos según el tipo de programa (hoy solo Diplomados trae
+    instructivos). Si algún archivo no existe en disco, se omite en vez de
+    romper el envío del correo."""
+    if (program_type or "").strip().lower() != "diplomado":
+        return []
+    return [p for p in _DIPLOMADO_ATTACHMENTS if p.is_file()]
+
+
 def _build_credentials_message(
     *, to_email: str, cc: list[str], full_name: str, login_id: str, password: str,
-    program_name: str = "",
+    program_name: str = "", attachments: list[Path] | None = None,
 ) -> MIMEMultipart:
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart("mixed")
     msg["Subject"] = "Tus credenciales de acceso institucional — USIL"
     msg["From"] = settings.smtp_from
     msg["To"] = to_email
@@ -57,7 +79,20 @@ def _build_credentials_message(
       <p>Saludos,<br>Universidad San Ignacio de Loyola — Área de Tecnologías de la Información</p>
     </div>
     """
-    msg.attach(MIMEText(html, "html"))
+    body = MIMEMultipart("alternative")
+    body.attach(MIMEText(html, "html"))
+    msg.attach(body)
+
+    for path in attachments or []:
+        try:
+            ctype, _ = mimetypes.guess_type(path.name)
+            maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
+            part = MIMEApplication(path.read_bytes(), _subtype=subtype)
+            part.add_header("Content-Disposition", "attachment", filename=path.name)
+            msg.attach(part)
+        except Exception as exc:
+            logger.warning("No se pudo adjuntar %s al correo de credenciales: %s", path, exc)
+
     return msg
 
 
@@ -95,6 +130,7 @@ async def send_credentials_email(
     msg = _build_credentials_message(
         to_email=to_email, cc=cc, full_name=full_name, login_id=login_id,
         password=password, program_name=program_name,
+        attachments=attachments_for_program(program_type),
     )
     try:
         await asyncio.to_thread(_send_sync, msg, [to_email, *cc])

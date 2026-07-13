@@ -133,7 +133,12 @@ Los endpoints de creación devuelven siempre:
 - El SKU configurado (`AZURE_SKU_STUDENTS` / `AZURE_SKU_TEACHERS`) debe estar disponible en el tenant.
 
 ### PDFs no se adjuntan en diplomados
-- Verificar que los archivos existan en `app/static/templates/`.
+- Solo se adjuntan cuando `program_type == "diplomado"` (ver
+  `email_service.attachments_for_program`). Docentes/Grado no llevan adjuntos.
+- Verificar que los archivos existan en
+  `Backend/Archivos para los correos/Diplomados (UBS - USIL Business School)/`.
+  Si no están, el correo se envía igual mostrando un warning en el log (no
+  rompe el envío).
 - Los nombres exactos esperados son:
   - `2° Acceso a la Plataforma Teams- Instructivo.pdf`
   - `3° Descargar grabacion en TEAMS - Instructivo.pdf`
