@@ -1155,10 +1155,21 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 col_enviado_mirror = idx
                 break
 
-        def _set_estado(r_idx, value, color):
+        def _set_estado(r_idx, value, color, mirror=False):
+            """Escribe el estado de creación de cuenta en la columna Estado.
+
+            `mirror=True` además replica el valor en la columna "Enviado"
+            preexistente — SOLO corresponde para sincronizar una fila que ya
+            estaba creada de antes (Estado ya OK pero Enviado en blanco), no
+            para cuentas recién creadas en esta misma corrida: "Enviado"
+            representa si el correo de credenciales fue enviado, algo que
+            hoy es una acción manual y separada (botón "Enviar
+            Credenciales"), no un efecto automático de la creación de la
+            cuenta.
+            """
             cell = ws.cell(row=r_idx, column=col_enviado, value=value)
             cell.font = Font(color=color, bold=True)
-            if col_enviado_mirror:
+            if mirror and col_enviado_mirror:
                 mirror_cell = ws.cell(row=r_idx, column=col_enviado_mirror, value=value)
                 mirror_cell.font = Font(color=color, bold=True)
 
@@ -1215,11 +1226,11 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             enviado_lower = enviado.lower()
             if "✅" in enviado or enviado_lower in ["si", "yes", "true", "enviado", "ok"] or "creado ok" in enviado_lower or "ya exist" in enviado_lower or (usuario_val and "@" in usuario_val):
                 if not enviado and col_enviado:
-                    _set_estado(r_idx, "✅ Existente", "00B050")
+                    _set_estado(r_idx, "✅ Existente", "00B050", mirror=True)
                 elif col_enviado_mirror:
                     mirror_val = str(ws.cell(row=r_idx, column=col_enviado_mirror).value or "").strip()
                     if not mirror_val:
-                        _set_estado(r_idx, enviado, "00B050")
+                        _set_estado(r_idx, enviado, "00B050", mirror=True)
                 # Alumno ya creado en una corrida anterior: igual verificamos que
                 # esté agregado al grupo de Teams correspondiente (como miembro),
                 # y lo agregamos si falta — un run previo pudo haber creado la
