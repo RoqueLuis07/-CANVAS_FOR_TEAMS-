@@ -122,19 +122,19 @@ def _build_diplomado_message(
       <p>Le damos la bienvenida a la <strong>USIL Business School (UBS)</strong>.</p>
       <p>{programa_line}</p>
 
-      <div style="border:1px solid #d0d5dd; border-radius:8px; padding:12px 16px; margin:16px 0;">
+      <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
         <p style="margin:0 0 8px;"><strong>Microsoft Teams</strong> es la plataforma oficial donde podrá acceder a sus clases virtuales, materiales académicos y comunicarse con sus docentes y compañeros.</p>
         <p style="margin:0;">Acceda desde el siguiente enlace:<br><a href="{_DIPLOMADO_TEAMS_LINK}">{_DIPLOMADO_TEAMS_LINK}</a></p>
       </div>
 
       <p>A continuación, con las siguientes credenciales podrá ingresar a <strong>Microsoft Teams</strong>:</p>
 
-      <div style="border:1px solid #d0d5dd; border-radius:8px; padding:12px 16px; margin:16px 0;">
+      <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
         <p style="margin:0;"><strong>Usuario:</strong> {login_id}</p>
         <p style="margin:0;"><strong>Contraseña:</strong> {password}</p>
       </div>
 
-      <div style="border:1px solid #d0d5dd; border-radius:8px; padding:12px 16px; margin:16px 0;">
+      <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
         <p style="margin:0 0 8px;">En caso de inconvenientes con el acceso a Teams, puede contactar al área de Tecnología de la Información (TI):</p>
         {contact_lines}
         <p style="margin:2px 0;">WhatsApp corporativo: {_DIPLOMADO_WHATSAPP}</p>
