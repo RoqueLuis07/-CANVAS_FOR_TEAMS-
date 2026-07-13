@@ -963,7 +963,7 @@ async def get_egreso_sheets(req: UrlOnlyRequest) -> list[str]:
 @router.post("/excel/diplomados/preview", summary="Pre-visualizar planilla de Diplomados")
 async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL inv├ílida.")
+        raise HTTPException(status_code=400, detail="URL inválida.")
     
     encoded_url = _encode_share_url(req.url)
     try:
@@ -974,10 +974,10 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
     except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo no es un Excel v├ílido.")
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
 
     if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pesta├▒a '{req.sheet_name}' no existe. Disponibles: {', '.join(wb.sheetnames)}")
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe. Disponibles: {', '.join(wb.sheetnames)}")
 
     ws = wb[req.sheet_name]
 
@@ -1068,7 +1068,7 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
 @router.post("/excel/diplomados", summary="Procesar planilla de Diplomados directo en OneDrive")
 async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL inv├ílida.")
+        raise HTTPException(status_code=400, detail="URL inválida.")
     
     encoded_url = _encode_share_url(req.url)
     
@@ -1080,13 +1080,13 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
     except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel v├ílido.")
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
 
     _ACCOUNT_LOCAL = settings.canvas_account_id
     result = BulkResult()
 
     if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pesta├▒a '{req.sheet_name}' no existe en el archivo. Las disponibles son: {', '.join(wb.sheetnames)}")
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe en el archivo. Las disponibles son: {', '.join(wb.sheetnames)}")
 
     # Buscar en la hoja especificada
     for sheet_name in [req.sheet_name]:
@@ -1106,14 +1106,14 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             return None
 
         col_nombre = get_col_idx("nombre", "alumno", "estudiante")
-        col_cedula = get_col_idx("cedula", "c├®dula", "ci")
+        col_cedula = get_col_idx("cedula", "cédula", "ci")
         col_correo = get_col_idx("correo")
         col_curso = get_col_idx("curso", "id curso", "canvas")
         col_equipo = get_col_idx("equipo", "id equipo", "teams")
         col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
         
         col_usuario = get_col_idx("usuario")
-        col_contra = get_col_idx("contrasena", "contrase├▒a", "clave")
+        col_contra = get_col_idx("contrasena", "contraseña", "clave")
         col_enviado = get_col_idx("estado", "enviado")
     
         col_cc = get_col_idx("cc", "copia")
@@ -1339,26 +1339,42 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 result.failed.append({"input": {"cedula": cedula}, "error": error})
 
         tasks = []
+        pending_count = 0
         empty_count = 0
         for r_idx in range(header_row_idx + 1, ws.max_row + 1):
             nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
             cedula_val = str(ws.cell(row=r_idx, column=col_cedula).value or "").strip()
-            
+
             if not nombre_val and not cedula_val:
                 empty_count += 1
                 if empty_count > 10:
                     break
                 continue
-                
+
             empty_count = 0
+
+            # El límite de seguridad es sobre cuentas NUEVAS a crear, no sobre
+            # el total de filas — si no, una planilla con la mayoría de filas
+            # ya procesadas se bloquea aunque falten pocas por crear.
+            enviado_check = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
+            enviado_check_lower = enviado_check.lower()
+            usuario_check = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip() if col_usuario else ""
+            already_done = (
+                "✅" in enviado_check or enviado_check_lower in ["si", "yes", "true", "enviado", "ok"]
+                or "creado ok" in enviado_check_lower or "ya exist" in enviado_check_lower
+                or (usuario_check and "@" in usuario_check)
+            )
+            if not already_done:
+                pending_count += 1
+
             tasks.append(process_row(r_idx))
-            
-        if len(tasks) > 50:
-            raise HTTPException(status_code=400, detail=f"L├¡mite de seguridad excedido: Intentas procesar {len(tasks)} alumnos a la vez (M├íximo 50 permitidos). Revisa el archivo para evitar accidentes.")
+
+        if pending_count > 50:
+            raise HTTPException(status_code=400, detail=f"Límite de seguridad excedido: intentás crear {pending_count} cuentas nuevas a la vez (máximo 50 permitidas). Revisa el archivo para evitar accidentes.")
             
         if len(tasks) > 0:
             try:
-                # Verificar si el archivo est├í bloqueado antes de empezar a procesar alumnos
+                # Verificar si el archivo está bloqueado antes de empezar a procesar alumnos
                 await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"El archivo Excel está abierto o el enlace es de Solo Lectura. Detalle real: {e}")
