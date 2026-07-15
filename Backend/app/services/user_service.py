@@ -120,32 +120,50 @@ async def generate_unique_credentials(full_name: str, cedula: str, platform: str
             if cand not in suffixes:
                 suffixes.append(cand)
 
+    collision_with: str | None = None
+
     for suffix in suffixes:
         creds = generate_credentials(full_name, cedula, domain, collision_suffix=suffix)
         email = creds["email"]
         email_taken = False
-        
+        colliding_name = None
+
         # 2. Verificar colisión en Teams
         if platform in ("teams", "both"):
             try:
-                exists_teams, _ = await _teams_user_exists(email)
+                exists_teams, info = await _teams_user_exists(email)
                 if exists_teams:
                     email_taken = True
+                    colliding_name = info.get("name")
             except Exception as exc:
                 logger.warning(f"Error checking Teams for {email}: {exc}")
-                
+
         # 3. Verificar colisión en Canvas
         if platform in ("canvas", "both") and not email_taken:
             try:
                 exists_canvas, info = await _canvas_user_exists(cedula, email)
                 if exists_canvas and info.get("found_by") == "login_id":
                     email_taken = True
+                    colliding_name = info.get("name")
             except Exception as exc:
                 logger.warning(f"Error checking Canvas for {email}: {exc}")
-                
+
+        if email_taken and collision_with is None and colliding_name:
+            # Guardamos el nombre de la primera colisión encontrada (con el
+            # intento sin sufijo) — indica que ya existe OTRA persona con un
+            # nombre lo bastante parecido como para generar el mismo correo
+            # base. Se lo pasamos al caller para que avise antes de compartir
+            # nada manualmente (evita el tipo de confusión "¿esta cuenta es
+            # mía o de otra persona con apellido parecido?").
+            collision_with = colliding_name
+
         if not email_taken:
+            if collision_with:
+                creds["name_collision_with"] = collision_with
             return creds, "new"
-            
+
     # Fallback (extremadamente raro que se agoten los 100 sufijos)
     fallback_creds = generate_credentials(full_name, cedula, domain, collision_suffix="x")
+    if collision_with:
+        fallback_creds["name_collision_with"] = collision_with
     return fallback_creds, "fallback"

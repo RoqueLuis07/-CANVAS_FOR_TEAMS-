@@ -1351,10 +1351,13 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 ws.cell(row=r_idx, column=col_contra, value=pwd)
                 result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id})
 
+                collision_name = creds.get("name_collision_with")
+                collision_note = f" ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona)" if collision_name else ""
+
                 if not error:
-                    _set_estado(r_idx, "✅ OK", "00B050")
+                    _set_estado(r_idx, f"✅ OK{collision_note}", "00B050" if not collision_note else "D97706")
                 else:
-                    _set_estado(r_idx, f"⚠️ {error}", "D97706")
+                    _set_estado(r_idx, f"⚠️ {error}{collision_note}", "D97706")
             else:
                 _set_estado(r_idx, f"❌ Error: {error}", "FF0000")
                 result.failed.append({"input": {"cedula": cedula}, "error": error})
@@ -2887,8 +2890,13 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         else:
             ws.cell(row=r_idx, column=col_usuario, value=login_id)
             ws.cell(row=r_idx, column=col_contra, value=pwd)
-            ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
-            ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
+            collision_name = creds.get("name_collision_with")
+            if collision_name:
+                ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona)")
+                ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
+            else:
+                ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
+                ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
             result.succeeded.append(entry)
 
     if len(users_to_process) > 0:
@@ -3854,8 +3862,13 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
                 result.succeeded.append({"correo": login_id, "mensaje": "OK"})
             else:
-                ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
-                ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
+                collision_name = creds.get("name_collision_with")
+                if collision_name:
+                    ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona)")
+                    ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
+                else:
+                    ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
+                    ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
                 result.succeeded.append({"correo": login_id, "mensaje": "OK"})
         else:
             ws.cell(row=r_idx, column=col_enviado, value=f"❌ Error: {error_msg}")
