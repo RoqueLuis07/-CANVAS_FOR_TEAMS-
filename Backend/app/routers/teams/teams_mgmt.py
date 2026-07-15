@@ -1,8 +1,11 @@
 """Microsoft Teams team/group management endpoints."""
 import asyncio
-from typing import Annotated
+import re
+import time
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.models.teams import (
@@ -47,6 +50,33 @@ async def list_teams(
         "$filter": filter_query,
     }
     return await graph.paginate("/groups", params)
+
+
+class TeamsTeamCreateSimple(BaseModel):
+    display_name: str
+    description: str | None = None
+    visibility: Literal["Public", "Private", "HiddenMembership"] = "Private"
+    owner_id: str = Field(..., description="Azure object ID del propietario")
+    template: str | None = None
+
+
+@router.post("", summary="Crear un Team nuevo")
+async def create_team(body: TeamsTeamCreateSimple):
+    nickname = re.sub(r'[^a-zA-Z0-9]', '', body.display_name).lower()
+    if not nickname:
+        nickname = f"team{int(time.time())}"
+    try:
+        return await create_team_via_group(
+            display_name=body.display_name,
+            mail_nickname=nickname,
+            description=body.description or "",
+            visibility=body.visibility,
+            owner_ids=[body.owner_id],
+        )
+    except StarletteHTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/{team_id}", summary="Obtener Team por ID")
