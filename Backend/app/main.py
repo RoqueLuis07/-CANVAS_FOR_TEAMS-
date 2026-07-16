@@ -42,8 +42,6 @@ from app.routers import (
     web,
     sync,
     egreso,
-    sspr,
-    analytics,
     reports,
 )
 from app.routers import matriculacion
@@ -198,8 +196,6 @@ routers_to_load = [
     ("Ingreso", ingreso.router),
     ("Matriculacion", matriculacion.router),
     ("Egreso", egreso.router),
-    ("SSPR", sspr.router),
-    ("Analytics", analytics.router),
     ("Jobs", jobs.router),
     ("Profile", profile.router),
     ("Audit", audit.router),
