@@ -3032,14 +3032,15 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Preview
     )
 
 async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, contents: bytes, encoded_url: str):
+    await jobs.start_job(job_id)
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
     except Exception as e:
-        await jobs.complete_job(job_id, "failed", 0, 0, f"El archivo no es un Excel válido: {e}")
+        await jobs.fail_job(job_id, f"El archivo no es un Excel válido: {e}")
         return
 
     if req.sheet_name not in wb.sheetnames:
-        await jobs.complete_job(job_id, "failed", 0, 0, f"La pestaña '{req.sheet_name}' no existe.")
+        await jobs.fail_job(job_id, f"La pestaña '{req.sheet_name}' no existe.")
         return
 
     ws = wb[req.sheet_name]
@@ -3075,7 +3076,7 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
             env_col = col_idx
 
     if not user_col or not (canvas_col or teams_col):
-        await jobs.complete_job(job_id, "failed", 0, 0, "Falta columna de 'usuario' o 'curso/canvas' o 'equipo/teams'.")
+        await jobs.fail_job(job_id, "Falta columna de 'usuario' o 'curso/canvas' o 'equipo/teams'.")
         return
         
     if not env_col:
@@ -3101,7 +3102,7 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
         valid_rows.append(r_idx)
     
     if not valid_rows:
-        await jobs.complete_job(job_id, "completed", 0, 0, "No hay filas nuevas para procesar.")
+        await jobs.complete_job(job_id, 0, 0, "No hay filas nuevas para procesar.")
         return
 
     async def process_row(r_idx):
@@ -3165,9 +3166,9 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
     
     try:
         await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
-        await jobs.complete_job(job_id, "completed", success_count, error_count, "Guardado en OneDrive correctamente.")
+        await jobs.complete_job(job_id, success_count, error_count, "Guardado en OneDrive correctamente.")
     except Exception as e:
-        await jobs.complete_job(job_id, "completed", success_count, error_count, f"Procesado, pero no se pudo guardar en OneDrive: {e}")
+        await jobs.complete_job(job_id, success_count, error_count, f"Procesado, pero no se pudo guardar en OneDrive: {e}")
 
 @router.post("/excel/matriculaciones-onedrive")
 async def import_matriculaciones_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks) -> dict:
