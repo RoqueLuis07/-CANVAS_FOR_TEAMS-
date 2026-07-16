@@ -5,13 +5,27 @@ Algunos de estos reportes requieren permisos de Azure AD que todavía NO están
 concedidos a la app registration (ver detalle en cada endpoint) — devuelven un
 error claro hasta que se otorgue el permiso y el admin consent en Azure Portal.
 """
+import asyncio
+import logging
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Annotated
 
+from app.core.config import settings
+from app.services import canvas_client as canvas
 from app.services import teams_client as graph
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/reports", tags=["Reportes"])
+_ACCOUNT = settings.canvas_account_id
+
+# Estados de curso considerados "vigentes" para efectos de matrícula — un
+# curso eliminado no cuenta como membresía activa aunque el registro de
+# enrollment siga existiendo en Canvas.
+_ACTIVE_COURSE_STATES = ["created", "claimed", "available", "completed"]
+
+_SCAN_SEM = asyncio.Semaphore(15)
 
 
 # ── Licencias huérfanas (cuentas deshabilitadas que siguen con licencia) ────
@@ -134,3 +148,169 @@ async def verify_email_sent(body: VerifySentIn):
             )
         raise
     return {"to_email": body.to_email, "found_in_sent_items": found}
+
+
+# ── Cuentas sin uso (ni en cursos de Canvas ni en equipos de Teams) ────────
+
+async def _canvas_enrolled_user_ids() -> set[int]:
+    """IDs de usuario de Canvas con al menos una matrícula vigente,
+    recorriendo todos los cursos de la cuenta."""
+    courses = await canvas.paginate(
+        f"/accounts/{_ACCOUNT}/courses",
+        {"per_page": 100, "state[]": _ACTIVE_COURSE_STATES},
+    )
+    enrolled: set[int] = set()
+
+    async def _scan(course_id):
+        async with _SCAN_SEM:
+            try:
+                enrollments = await canvas.paginate(
+                    f"/courses/{course_id}/enrollments", {"per_page": 100}
+                )
+                for e in enrollments:
+                    uid = e.get("user_id")
+                    if uid:
+                        enrolled.add(uid)
+            except Exception as exc:
+                logger.warning(f"No se pudo leer matrículas del curso {course_id}: {exc}")
+
+    await asyncio.gather(*[_scan(c["id"]) for c in courses if c.get("id")])
+    return enrolled
+
+
+async def _teams_member_user_ids() -> set[str]:
+    """IDs de Azure AD (objectId) que son miembro de al menos un Team."""
+    teams = await graph.paginate("/groups", {
+        "$filter": "resourceProvisioningOptions/Any(x:x eq 'Team')",
+        "$select": "id",
+        "$top": 999,
+    })
+    members: set[str] = set()
+
+    async def _scan(team_id):
+        async with _SCAN_SEM:
+            try:
+                team_members = await graph.paginate(f"/teams/{team_id}/members")
+                for m in team_members:
+                    uid = m.get("userId")
+                    if uid:
+                        members.add(uid)
+            except Exception as exc:
+                logger.warning(f"No se pudo leer miembros del equipo {team_id}: {exc}")
+
+    await asyncio.gather(*[_scan(t["id"]) for t in teams if t.get("id")])
+    return members
+
+
+async def _azure_users_with_signin() -> tuple[list[dict], bool]:
+    """Lista todos los usuarios de Azure AD. Intenta incluir signInActivity
+    (requiere el permiso de aplicación 'AuditLog.Read.All', que puede no
+    estar concedido); si Graph devuelve 403 por ese campo, reintenta sin él.
+
+    Returns:
+        (users, signin_available)
+    """
+    select_with_signin = "id,displayName,userPrincipalName,mail,accountEnabled,createdDateTime,signInActivity"
+    try:
+        users = await graph.paginate("/users", {"$select": select_with_signin, "$top": 999})
+        return users, True
+    except HTTPException as exc:
+        if exc.status_code in (403, 400):
+            logger.warning(f"signInActivity no disponible (falta AuditLog.Read.All): {exc.detail}")
+        else:
+            raise
+    select_basic = "id,displayName,userPrincipalName,mail,accountEnabled,createdDateTime"
+    users = await graph.paginate("/users", {"$select": select_basic, "$top": 999})
+    return users, False
+
+
+@router.get("/unused-accounts", summary="Detectar cuentas sin uso (sin cursos/equipos ni actividad)")
+async def unused_accounts():
+    """Detecta cuentas institucionales (Canvas y/o Azure AD/Teams) que no
+    están agregadas a ningún curso de Canvas ni a ningún equipo de Teams —
+    buenas candidatas a depurar por no estar en uso.
+
+    Recorre TODOS los cursos y equipos de la cuenta (no una muestra), por lo
+    que puede demorar según el tamaño del tenant.
+    """
+    try:
+        (
+            canvas_users,
+            canvas_enrolled_ids,
+            azure_result,
+            team_member_ids,
+        ) = await asyncio.gather(
+            canvas.paginate(f"/accounts/{_ACCOUNT}/users", {"per_page": 100, "include[]": "last_login"}),
+            _canvas_enrolled_user_ids(),
+            _azure_users_with_signin(),
+            _teams_member_user_ids(),
+        )
+        azure_users, signin_available = azure_result
+    except Exception as e:
+        logger.error(f"Error escaneando cuentas sin uso: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al escanear cuentas: {e}")
+
+    combined: dict[str, dict] = {}
+
+    for u in canvas_users:
+        key = (u.get("login_id") or u.get("email") or "").strip().lower()
+        if not key:
+            continue
+        combined.setdefault(key, {})["canvas"] = {
+            "id": u.get("id"),
+            "name": u.get("name") or u.get("short_name"),
+            "login_id": u.get("login_id"),
+            "sis_user_id": u.get("sis_user_id"),
+            "last_login": u.get("last_login"),
+            "in_course": u.get("id") in canvas_enrolled_ids,
+        }
+
+    for u in azure_users:
+        key = (u.get("userPrincipalName") or u.get("mail") or "").strip().lower()
+        if not key:
+            continue
+        last_signin = (u.get("signInActivity") or {}).get("lastSignInDateTime")
+        combined.setdefault(key, {})["azure"] = {
+            "id": u.get("id"),
+            "name": u.get("displayName"),
+            "upn": u.get("userPrincipalName"),
+            "account_enabled": u.get("accountEnabled"),
+            "created": u.get("createdDateTime"),
+            "last_signin": last_signin,
+            "in_team": u.get("id") in team_member_ids,
+        }
+
+    unused = []
+    for email, entry in combined.items():
+        c = entry.get("canvas")
+        a = entry.get("azure")
+        canvas_unused = (c is None) or (not c["in_course"])
+        azure_unused = (a is None) or (not a["in_team"])
+        if not (canvas_unused and azure_unused):
+            continue
+
+        never_logged_canvas = c is None or not c["last_login"]
+        if a is None:
+            never_logged_azure = None  # sin cuenta en Teams
+        elif not signin_available:
+            never_logged_azure = None  # no se pudo verificar (falta permiso)
+        else:
+            never_logged_azure = not a["last_signin"]
+
+        unused.append({
+            "email": email,
+            "canvas": c,
+            "azure": a,
+            "never_logged_canvas": never_logged_canvas,
+            "never_logged_azure": never_logged_azure,
+        })
+
+    unused.sort(key=lambda x: x["email"])
+
+    return {
+        "signin_activity_available": signin_available,
+        "total_canvas_users": len(canvas_users),
+        "total_azure_users": len(azure_users),
+        "total_unused": len(unused),
+        "accounts": unused,
+    }

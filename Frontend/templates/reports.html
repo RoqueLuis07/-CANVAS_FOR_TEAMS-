@@ -107,10 +107,50 @@
       <div id="verifyResult" class="mt-3"></div>
     </div>
   </div>
+
+  <!-- Cuentas sin uso (ni en Canvas ni en Teams) -->
+  <div class="table-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h5 class="mb-0"><i class="bi bi-person-slash me-2"></i>Cuentas sin Uso</h5>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" id="btnScanUnused" onclick="loadUnusedAccounts()"><i class="bi bi-search me-1"></i>Escanear Cuentas</button>
+        <button class="btn btn-danger btn-sm" id="btnDeleteUnused" onclick="deleteSelectedUnused()" disabled><i class="bi bi-trash3-fill me-1"></i>Eliminar Seleccionadas</button>
+      </div>
+    </div>
+    <p class="px-3 pt-2 mb-0 small text-muted">
+      Cuentas institucionales que no están matriculadas en ningún curso de Canvas ni son miembro de ningún equipo de
+      Teams — buenas candidatas a depurar. Recorre <strong>todos</strong> los cursos y equipos de la cuenta, así que
+      puede tardar un momento.
+    </p>
+    <div id="unusedSigninNote" class="px-3 pt-2" style="display:none;">
+      <div class="alert alert-warning py-2 small mb-0">
+        No se pudo verificar la actividad de inicio de sesión en Teams (falta el permiso de aplicación
+        <code>AuditLog.Read.All</code> con consentimiento de administrador). Se muestra igual la falta de
+        matrícula/membresía, que no depende de ese permiso.
+      </div>
+    </div>
+    <div id="unusedSummary" class="px-3 pt-2 small text-muted"></div>
+    <div class="table-scroll">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th style="width:36px;"><input type="checkbox" id="chkAllUnused" onchange="toggleAllUnused(this)"></th>
+            <th>Correo</th>
+            <th>Nombre</th>
+            <th>Canvas</th>
+            <th>Teams</th>
+            <th>Último acceso</th>
+          </tr>
+        </thead>
+        <tbody id="unusedAccountsBody"><tr><td colspan="6" class="text-muted small p-3">Presioná "Escanear Cuentas" para cargar.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script>
 let orphanedUsers = [];
+let unusedAccounts = [];
 
 async function loadOrphanedLicenses() {
     try {
@@ -220,6 +260,110 @@ async function verifyEmailSent() {
             : '<div class="alert alert-warning py-2 small mb-0">⚠️ No se encontró en Enviados para ese correo/fecha.</div>';
     } catch (e) {
         resultDiv.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${e.message}</div>`;
+    }
+}
+
+function _fmtDate(iso) {
+    if (!iso) return 'Nunca';
+    try { return new Date(iso).toLocaleString('es-PY'); } catch (e) { return iso; }
+}
+
+async function loadUnusedAccounts() {
+    const btn = document.getElementById('btnScanUnused');
+    setLoading(btn, true);
+    document.getElementById('unusedAccountsBody').innerHTML =
+        '<tr><td colspan="6" class="text-center text-muted small p-3"><span class="spinner-border spinner-border-sm me-2"></span>Escaneando cursos y equipos, puede tardar un momento...</td></tr>';
+    try {
+        const res = await api.get('/reports/unused-accounts');
+        unusedAccounts = res.accounts;
+
+        document.getElementById('unusedSigninNote').style.display = res.signin_activity_available ? 'none' : 'block';
+        document.getElementById('unusedSummary').innerText =
+            `${res.total_unused} cuenta(s) sin uso de ${res.total_canvas_users} en Canvas y ${res.total_azure_users} en Teams.`;
+
+        const body = document.getElementById('unusedAccountsBody');
+        if (!unusedAccounts.length) {
+            body.innerHTML = '<tr><td colspan="6" class="text-muted small p-3">No se encontraron cuentas sin uso. 🎉</td></tr>';
+            document.getElementById('chkAllUnused').checked = false;
+            updateDeleteUnusedButton();
+            return;
+        }
+
+        body.innerHTML = unusedAccounts.map((a, idx) => {
+            const name = (a.canvas && a.canvas.name) || (a.azure && a.azure.name) || '-';
+            const canvasBadge = a.canvas
+                ? `<span class="badge bg-secondary">Sin curso</span>`
+                : `<span class="badge bg-light text-muted border">Sin cuenta</span>`;
+            const teamsBadge = a.azure
+                ? `<span class="badge bg-secondary">Sin equipo</span>`
+                : `<span class="badge bg-light text-muted border">Sin cuenta</span>`;
+            const lastCanvas = a.canvas ? _fmtDate(a.canvas.last_login) : '—';
+            const lastAzure = a.azure
+                ? (a.never_logged_azure === null ? 'No verificable' : _fmtDate(a.azure.last_signin))
+                : '—';
+            return `
+            <tr>
+                <td><input type="checkbox" class="chk-unused" value="${idx}"></td>
+                <td class="font-monospace small">${a.email}</td>
+                <td>${name}</td>
+                <td>${canvasBadge}</td>
+                <td>${teamsBadge}</td>
+                <td class="small">Canvas: ${lastCanvas}<br>Teams: ${lastAzure}</td>
+            </tr>`;
+        }).join('');
+        document.getElementById('chkAllUnused').checked = false;
+        updateDeleteUnusedButton();
+        toast(`${unusedAccounts.length} cuenta(s) sin uso encontradas`, unusedAccounts.length ? 'warning' : 'success');
+    } catch (e) {
+        document.getElementById('unusedAccountsBody').innerHTML =
+            `<tr><td colspan="6" class="text-danger small p-3">${e.detail || e.message || e}</td></tr>`;
+        toast('Error escaneando cuentas: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function toggleAllUnused(master) {
+    document.querySelectorAll('.chk-unused').forEach(c => c.checked = master.checked);
+    updateDeleteUnusedButton();
+}
+
+function updateDeleteUnusedButton() {
+    const any = Array.from(document.querySelectorAll('.chk-unused')).some(c => c.checked);
+    document.getElementById('btnDeleteUnused').disabled = !any;
+}
+
+document.addEventListener('change', (e) => {
+    if (e.target.classList && e.target.classList.contains('chk-unused')) {
+        updateDeleteUnusedButton();
+    }
+});
+
+async function deleteSelectedUnused() {
+    const idxs = Array.from(document.querySelectorAll('.chk-unused:checked')).map(c => parseInt(c.value, 10));
+    if (!idxs.length) return;
+
+    const selected = idxs.map(i => unusedAccounts[i]);
+    const canvasIds = selected.filter(a => a.canvas).map(a => String(a.canvas.id));
+    const azureIds = selected.filter(a => a.azure).map(a => a.azure.id);
+
+    if (!confirm(`¿ELIMINAR ${selected.length} cuenta(s) sin uso? Se borrará el usuario en Canvas y/o Azure AD según corresponda. Esta acción no se puede deshacer.`)) return;
+
+    const btn = document.getElementById('btnDeleteUnused');
+    setLoading(btn, true);
+    try {
+        const [canvasRes, azureRes] = await Promise.all([
+            canvasIds.length ? api.del_body('/canvas/users/bulk', { ids: canvasIds }) : Promise.resolve({ succeeded: [], failed: [] }),
+            azureIds.length ? api.del_body('/teams/users/bulk', { ids: azureIds }) : Promise.resolve({ succeeded: [], failed: [] }),
+        ]);
+        const okCount = canvasRes.succeeded.length + azureRes.succeeded.length;
+        const errCount = canvasRes.failed.length + azureRes.failed.length;
+        toast(`Eliminadas: ${okCount}. Errores: ${errCount}.`, errCount ? 'warning' : 'success');
+        loadUnusedAccounts();
+    } catch (e) {
+        toast('Error eliminando cuentas: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
     }
 }
 </script>
