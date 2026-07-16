@@ -62,7 +62,7 @@
                 <label class="form-label fw-bold">Nombre de la Pestaña (Requerido)</label>
                 <div class="input-group mb-4">
                   <span class="input-group-text"><i class="bi bi-file-spreadsheet"></i></span>
-                  <select class="form-select" id="coursesOdSheet" required>
+                  <select class="form-select" id="coursesOdSheet" required onchange="doPreviewCourses()">
                       <option value="">Primero haz clic en Cargar Pestañas...</option>
                   </select>
                 </div>
@@ -857,8 +857,10 @@ async function doPreviewCourses() {
     localStorage.setItem('masterReportUrl', reportUrlInput.value.trim());
   }
 
-  if (!urlInput || !sheetInput) {
-    toast('Por favor, ingresa la URL y selecciona una pestaña.', 'warning');
+  if (!sheetInput) return; // Placeholder seleccionado, todavía no hay nada que previsualizar
+
+  if (!urlInput) {
+    toast('Por favor, ingresa la URL primero.', 'warning');
     return;
   }
 
