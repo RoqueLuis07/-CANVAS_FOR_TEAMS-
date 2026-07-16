@@ -131,6 +131,16 @@ html.dark-mode {
   }
 }
 
+/* Utilidades de Bootstrap con color fijo (no ligado a las variables de
+   arriba) — sin esto, cualquier .bg-white/.bg-light/.text-dark/.table-light
+   queda blanco/gris claro fijo aunque el resto de la UI esté en modo
+   oscuro (tablas de previsualización, acordeones, thead de tablas). */
+html.dark-mode .bg-white       { background-color: var(--card-bg) !important; }
+html.dark-mode .bg-light       { background-color: var(--header-bg) !important; }
+html.dark-mode .text-dark      { color: var(--text-primary) !important; }
+html.dark-mode .table-light,
+html.dark-mode .table-light > * { --bs-table-bg: var(--header-bg); --bs-table-color: var(--text-primary); }
+
 /* ── 3. Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; }
 
