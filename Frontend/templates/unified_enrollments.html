@@ -190,6 +190,28 @@
 
 {% block scripts %}
 <script>
+/* ── Acordeones: al mostrar una vista previa, colapsar los demás paneles;
+   al terminar el proceso, restaurarlos todos a su estado abierto original. ── */
+const _MAT_ACCORDION_IDS = ['collapseMatriculacionInd', 'collapseMatriculaciones'];
+
+function collapseOtherAccordions(activeId) {
+    _MAT_ACCORDION_IDS.forEach(id => {
+        if (id === activeId) return;
+        const el = document.getElementById(id);
+        if (el && el.classList.contains('show')) {
+            bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).hide();
+        }
+    });
+}
+
+function restoreAccordions() {
+    _MAT_ACCORDION_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el.classList.contains('show')) {
+            bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).show();
+        }
+    });
+}
 
 let mi_materiasList = []; // from backend
 let mi_selectedMaterias = [];
@@ -472,6 +494,7 @@ async function enableMatProcessBtn() {
         try {
             const preview = await api.post('/excel/matriculaciones-onedrive/preview', { url: url, sheet_name: val });
             document.getElementById('matPreviewWrap').style.display = 'block';
+            collapseOtherAccordions('collapseMatriculaciones');
             
             document.getElementById('matPreviewToProcess').innerText = `${preview.students_to_process} a procesar`;
             document.getElementById('matPreviewSkipped').innerText = `${preview.students_already_processed} omitidos (ya listos/error)`;
@@ -593,7 +616,8 @@ function startMatriculacionPolling(jobId, oldBtnText) {
                     btn.innerHTML = oldBtnText;
                     btn.disabled = false;
                     document.getElementById('btnRollbackMat').disabled = false;
-                    
+                    restoreAccordions();
+
                     if (bar) {
                         bar.classList.remove('progress-bar-animated');
                         bar.classList.remove('progress-bar-striped');
@@ -710,7 +734,8 @@ function startRollbackPolling(jobId, oldBtnText) {
                     btn.innerHTML = oldBtnText;
                     btn.disabled = false;
                     document.getElementById('btnImportMat').disabled = false;
-                    
+                    restoreAccordions();
+
                     if (bar) {
                         bar.classList.remove('progress-bar-animated');
                         bar.classList.remove('progress-bar-striped');

@@ -457,6 +457,29 @@
 
 {% block scripts %}
 <script>
+/* ── Acordeones: al mostrar una vista previa, colapsar los demás paneles;
+   al terminar el proceso, restaurarlos todos a su estado abierto original. ── */
+const _INGRESO_ACCORDION_IDS = ['collapseDocentes', 'collapseDiplomados', 'collapseMasivo', 'collapseIndividual'];
+
+function collapseOtherAccordions(activeId) {
+    _INGRESO_ACCORDION_IDS.forEach(id => {
+        if (id === activeId) return;
+        const el = document.getElementById(id);
+        if (el && el.classList.contains('show')) {
+            bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).hide();
+        }
+    });
+}
+
+function restoreAccordions() {
+    _INGRESO_ACCORDION_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el.classList.contains('show')) {
+            bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).show();
+        }
+    });
+}
+
 function toggleProg(pfx) {
     const t = document.getElementById(pfx + '_tipo').value;
     const inp = document.getElementById(pfx + '_programa');
@@ -819,6 +842,7 @@ async function previewDocentes() {
             : '<tr><td colspan="3" class="text-muted small">Ninguno procesado todavía.</td></tr>';
 
         document.getElementById('docPreviewWrap').style.display = 'block';
+        collapseOtherAccordions('collapseDocentes');
         document.getElementById('btnImportDocentes').disabled = false;
         document.getElementById('btnSendDocentesCredentials').disabled = false;
         document.getElementById('btnPreviewSendDocentes').disabled = false;
@@ -917,6 +941,7 @@ async function importDocentes() {
         toast(e.message, 'danger');
     } finally {
         setLoading(btn, false);
+        restoreAccordions();
     }
 }
 
@@ -975,6 +1000,7 @@ async function previewDiplomados() {
             : '<tr><td colspan="3" class="text-muted small">Ninguno procesado todavía.</td></tr>';
 
         document.getElementById('diplomadoPreviewWrap').style.display = 'block';
+        collapseOtherAccordions('collapseDiplomados');
         document.getElementById('btnImportDiplomados').disabled = false;
         document.getElementById('btnSendDiplomadosCredentials').disabled = false;
         document.getElementById('btnPreviewSendDiplomados').disabled = false;
@@ -1019,6 +1045,7 @@ async function importDiplomados() {
         toast(e.message, 'danger');
     } finally {
         setLoading(btn, false);
+        restoreAccordions();
     }
 }
 
@@ -1127,6 +1154,7 @@ async function previewMasivo() {
             : '<tr><td colspan="3" class="text-muted small">Ninguno procesado todavía.</td></tr>';
 
         document.getElementById('masivoPreviewWrap').style.display = 'block';
+        collapseOtherAccordions('collapseMasivo');
         document.getElementById('btnImportMasivo').disabled = false;
         document.getElementById('btnSendMasivoCredentials').disabled = false;
         document.getElementById('btnPreviewSendMasivo').disabled = false;
@@ -1221,6 +1249,7 @@ async function importMasivo() {
         toast(e.message, 'danger');
     } finally {
         setLoading(btn, false);
+        restoreAccordions();
     }
 }
 
