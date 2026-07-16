@@ -668,7 +668,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                 parts = full_name.strip().split()
                 sku = settings.azure_sku_teachers if role == "teacher" else settings.azure_sku_students
                 try:
-                    au = await graph.post("/users", {
+                    au_payload = {
                         "displayName": creds["full_name"],
                         "givenName": parts[0],
                         "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
@@ -677,11 +677,15 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                         "usageLocation": settings.usage_location,
                         "accountEnabled": True,
                         "jobTitle": "Docente" if role == "teacher" else "Alumno",
+                        "country": "Paraguay",
                         "passwordProfile": {
                             "forceChangePasswordNextSignIn": True,
                             "password": creds["password"],
                         },
-                    })
+                    }
+                    if cedula:
+                        au_payload["postalCode"] = cedula
+                    au = await graph.post("/users", au_payload)
                     await graph.assign_license(au["id"], sku)
                     entry["teams"] = {"status": "ok", "id": au.get("id")}
                 except Exception as exc:
@@ -1118,6 +1122,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         col_nombre = get_col_idx("nombre", "alumno", "estudiante")
         col_cedula = get_col_idx("cedula", "cédula", "ci")
         col_correo = get_col_idx("correo")
+        col_telefono = get_col_idx("telefono", "teléfono", "celular")
         col_curso = get_col_idx("curso", "id curso", "canvas")
         col_equipo = get_col_idx("equipo", "id equipo", "teams")
         col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
@@ -1224,10 +1229,11 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
             cedula = _clean_cedula(str(ws.cell(row=r_idx, column=col_cedula).value or "").strip())
             correo = str(ws.cell(row=r_idx, column=col_correo).value or "").strip() if col_correo else ""
+            telefono = str(ws.cell(row=r_idx, column=col_telefono).value or "").strip() if col_telefono else ""
             id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
             id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
             curso_nombre = str(ws.cell(row=r_idx, column=col_curso_nombre).value or "").strip() if col_curso_nombre else ""
-            
+
             enviado = str(ws.cell(row=r_idx, column=col_enviado).value or "").strip()
             
             if not nombre or not cedula or cedula == "None":
@@ -1275,7 +1281,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if not error:
                 parts = creds["full_name"].strip().split()
                 try:
-                    au = await graph.post("/users", {
+                    au_payload = {
                         "displayName": creds["full_name"],
                         "givenName": parts[0],
                         "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
@@ -1284,11 +1290,18 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         "usageLocation": settings.usage_location,
                         "accountEnabled": True,
                         "jobTitle": "Alumno",
+                        "department": "UBS",
+                        "country": "Paraguay",
                         "passwordProfile": {
                             "forceChangePasswordNextSignIn": True,
                             "password": pwd,
                         },
-                    })
+                    }
+                    if cedula:
+                        au_payload["postalCode"] = cedula
+                    if telefono:
+                        au_payload["mobilePhone"] = telefono
+                    au = await graph.post("/users", au_payload)
                     au_id = au.get("id")
                     await graph.assign_license(au_id, settings.azure_sku_students)
                 except Exception as e:
@@ -2718,7 +2731,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         azure_id = None
         if plat in ("teams", "both"):
             try:
-                au = await graph.post("/users", {
+                au_payload = {
                     "displayName": creds["full_name"],
                     "givenName": parts[0],
                     "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
@@ -2727,11 +2740,15 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
                     "jobTitle": "Docente",
+                    "country": "Paraguay",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
                     },
-                })
+                }
+                if cedula:
+                    au_payload["postalCode"] = cedula
+                au = await graph.post("/users", au_payload)
                 azure_id = au["id"]
                 await graph.assign_license(azure_id, settings.azure_sku_teachers)
                 entry["teams"] = "creado"
@@ -3515,7 +3532,7 @@ async def import_diplomados_json(req: JsonDataRequest):
             # Azure AD Creation
             parts = creds["full_name"].strip().split()
             try:
-                au = await graph.post("/users", {
+                au_payload = {
                     "displayName": creds["full_name"],
                     "givenName": parts[0],
                     "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
@@ -3524,11 +3541,15 @@ async def import_diplomados_json(req: JsonDataRequest):
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
                     "jobTitle": "Alumno",
+                    "country": "Paraguay",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
                     },
-                })
+                }
+                if cedula:
+                    au_payload["postalCode"] = cedula
+                au = await graph.post("/users", au_payload)
                 au_id = au.get("id")
                 await graph.assign_license(au_id, settings.azure_sku_students)
             except Exception as e:
@@ -3800,7 +3821,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         if plat in ("teams", "both"):
             parts = creds["full_name"].strip().split()
             try:
-                au = await graph.post("/users", {
+                au_payload = {
                     "displayName": creds["full_name"],
                     "givenName": parts[0],
                     "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
@@ -3809,11 +3830,15 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "usageLocation": settings.usage_location,
                     "accountEnabled": True,
                     "jobTitle": "Alumno",
+                    "country": "Paraguay",
                     "passwordProfile": {
                         "forceChangePasswordNextSignIn": True,
                         "password": pwd,
                     },
-                })
+                }
+                if cedula:
+                    au_payload["postalCode"] = cedula
+                au = await graph.post("/users", au_payload)
                 await graph.assign_license(au["id"], settings.azure_sku_students)
             except Exception as e:
                 if "already exists" not in str(e).lower() and "Request_BadRequest" not in str(e):

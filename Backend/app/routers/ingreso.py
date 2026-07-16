@@ -338,23 +338,24 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
                     "existing": info,
                 }
             else:
-                az_user = await graph.post(
-                    "/users",
-                    {
-                        "displayName": creds["full_name"],
-                        "givenName": parts[0],
-                        "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
-                        "userPrincipalName": creds["email"],
-                        "mailNickname": creds["login_id"].replace(".", "_"),
-                        "usageLocation": settings.usage_location,
-                        "accountEnabled": True,
-                        "jobTitle": "Docente" if student.role == "teacher" else "Alumno",
-                        "passwordProfile": {
-                            "forceChangePasswordNextSignIn": True,
-                            "password": creds["password"],
-                        },
+                az_payload = {
+                    "displayName": creds["full_name"],
+                    "givenName": parts[0],
+                    "surname": " ".join(parts[1:]) if len(parts) > 1 else "",
+                    "userPrincipalName": creds["email"],
+                    "mailNickname": creds["login_id"].replace(".", "_"),
+                    "usageLocation": settings.usage_location,
+                    "accountEnabled": True,
+                    "jobTitle": "Docente" if student.role == "teacher" else "Alumno",
+                    "country": "Paraguay",
+                    "passwordProfile": {
+                        "forceChangePasswordNextSignIn": True,
+                        "password": creds["password"],
                     },
-                )
+                }
+                if student.cedula:
+                    az_payload["postalCode"] = student.cedula
+                az_user = await graph.post("/users", az_payload)
                 await graph.assign_license(az_user["id"], sku)
                 results["teams"] = {
                     "status": "ok",
