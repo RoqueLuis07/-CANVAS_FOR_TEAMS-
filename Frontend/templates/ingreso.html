@@ -18,13 +18,6 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link active fw-semibold" id="crear-tab" data-bs-toggle="tab" data-bs-target="#crear" type="button" role="tab"><i class="bi bi-person-plus-fill me-1"></i>Crear usuario</button>
       </li>
-      
-      <li class="nav-item" role="presentation">
-        <button class="nav-link fw-semibold" id="verificar-tab" data-bs-toggle="tab" data-bs-target="#verificar" type="button" role="tab"><i class="bi bi-check-circle-fill me-1"></i>Verificar cuenta</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link fw-semibold" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview" type="button" role="tab"><i class="bi bi-eye-fill me-1"></i>Previsualizar</button>
-      </li>
     </ul>
   </div>
   
@@ -419,83 +412,6 @@
         </div>
       </div>
 
-      <!-- VERIFICAR CUENTA -->
-      <div class="tab-pane fade" id="verificar" role="tabpanel">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 pb-2 border-bottom">
-          <h5 class="mb-0 text-secondary"><i class="bi bi-search me-2"></i>Verificación Individual</h5>
-        </div>
-        
-        <form id="verificarIndForm" onsubmit="event.preventDefault(); doVerificarInd();">
-          <div class="row g-3 mb-4">
-            <div class="col-md-4">
-              <label class="form-label">Cédula <span class="text-danger">*</span></label>
-              <input type="text" id="vi_cedula" class="form-control" placeholder="Ej: 6868066" required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Nombre completo <small class="text-muted">(requerido p/ Teams)</small></label>
-              <input type="text" id="vi_nombre" class="form-control" placeholder="Ej: Karen Gonzalez">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Plataforma</label>
-              <select id="vi_plataforma" class="form-select">
-                <option value="both">Canvas + Teams</option>
-                <option value="canvas">Solo Canvas</option>
-                <option value="teams">Solo Teams</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="d-flex justify-content-end border-top pt-3">
-            <button type="submit" class="btn btn-primary px-4" id="btnVerificarInd">Verificar</button>
-          </div>
-        </form>
-        <div id="verificarIndResult" class="mt-4" style="display:none;"></div>
-      </div>
-
-      <!-- PREVISUALIZAR -->
-      <div class="tab-pane fade" id="preview" role="tabpanel">
-        <div class="mb-4 pb-2 border-bottom">
-          <h5 class="mb-0 text-secondary"><i class="bi bi-magic me-2"></i>Previsualizar Generación de Credenciales</h5>
-        </div>
-        
-        <form id="previewForm" onsubmit="event.preventDefault(); doPreview();">
-          <div class="row g-3 mb-4">
-            <div class="col-md-4">
-              <label class="form-label">Nombre completo <span class="text-danger">*</span></label>
-              <input type="text" id="pv_nombre" class="form-control" placeholder="Ej: Karen Gonzalez" required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Cédula <span class="text-danger">*</span></label>
-              <input type="text" id="pv_cedula" class="form-control" placeholder="Ej: 6868066" required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Rol</label>
-              <select id="pv_rol" class="form-select">
-                <option value="student">Estudiante</option>
-                <option value="teacher">Docente</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="d-flex justify-content-end border-top pt-3">
-            <button type="submit" class="btn btn-primary px-4" id="btnPreview">Generar credenciales</button>
-          </div>
-        </form>
-        <div id="previewResult" class="mt-4" style="display:none;"></div>
-      </div>
-      
-    </div>
-  </div>
-</div>
-
-
-{% endblock %}
-{% block scripts %}
-
-
-        </div>
-        
-      </div>
     </div>
   </div>
 </div>
@@ -537,7 +453,9 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
 function toggleProg(pfx) {
     const t = document.getElementById(pfx + '_tipo').value;
@@ -672,84 +590,6 @@ async function doReenviarInd() {
         document.getElementById('reenviarIndResult').style.display = 'block';
         toast('Proceso completado', 'success');
         document.getElementById('reenviarIndForm').reset(); toggleProg('ri');
-    } catch (err) {
-        toast('Error: ' + err.message, 'danger');
-    } finally {
-        setLoading(btn, false);
-    }
-}
-
-async function doVerificarInd() {
-    const btn = document.getElementById('btnVerificarInd');
-    document.getElementById('verificarIndResult').style.display = 'none';
-    setLoading(btn, true);
-    try {
-        const res = await api.post('/ingreso/check-account', {
-            cedula:    document.getElementById('vi_cedula').value,
-            full_name: document.getElementById('vi_nombre').value,
-            platform:  document.getElementById('vi_plataforma').value
-        });
-        
-        let html = '<div class="alert alert-info border-0 shadow-sm">';
-        html += '<h6 class="alert-heading fw-bold">Verificación: ' + (res.full_name || res.cedula) + '</h6>';
-        
-        if (res.generated_email) html += '<p class="small text-muted mb-2">Email generado: <strong>' + res.generated_email + '</strong></p>';
-        
-        const cv = res.canvas;
-        if (cv) {
-            html += '<div class="mb-2"><strong>Canvas:</strong> ';
-            if (cv.exists === true) html += '<span class="badge bg-warning text-dark">Existe</span> <small>' + (cv.name||'') + ' | ' + (cv.login_id||'') + '</small>';
-            else if (cv.exists === false) html += '<span class="badge bg-success">Libre</span>';
-            else html += '<span class="badge bg-danger">Error</span> <small>' + (cv.error||'') + '</small>';
-            html += '</div>';
-        }
-        
-        const tm = res.teams;
-        if (tm) {
-            html += '<div><strong>Teams:</strong> ';
-            if (tm.exists === true) html += '<span class="badge bg-warning text-dark">Existe</span> <small>' + (tm.name||'') + ' | ' + (tm.upn||'') + '</small>';
-            else if (tm.exists === false) html += '<span class="badge bg-success">Libre</span>';
-            else html += '<span class="badge bg-danger">Error</span> <small>' + (tm.error||'') + '</small>';
-            html += '</div>';
-        }
-        html += '</div>';
-        
-        document.getElementById('verificarIndResult').innerHTML = html;
-        document.getElementById('verificarIndResult').style.display = 'block';
-    } catch (err) {
-        toast('Error: ' + err.message, 'danger');
-    } finally {
-        setLoading(btn, false);
-    }
-}
-
-async function doPreview() {
-    const btn = document.getElementById('btnPreview');
-    document.getElementById('previewResult').style.display = 'none';
-    setLoading(btn, true);
-    try {
-        const res = await api.post('/ingreso/preview', {
-            full_name:      document.getElementById('pv_nombre').value,
-            cedula:         document.getElementById('pv_cedula').value,
-            personal_email: 'preview@usil.edu.py',
-            role:           document.getElementById('pv_rol').value,
-            platform:       'both', program_type: 'grado', cc: []
-        });
-        
-        let html = '<div class="alert alert-success border-0 shadow-sm">';
-        html += '<h6 class="alert-heading fw-bold mb-3">Credenciales Generadas</h6>';
-        html += '<div class="bg-white p-3 rounded border">';
-        html += '<div><small class="text-muted">Nombre:</small> ' + (res.full_name || '') + '</div>';
-        html += '<div><small class="text-muted">Cédula:</small> <span class="font-monospace">' + (res.cedula || '') + '</span></div>';
-        html += '<div><small class="text-muted">Email inst:</small> <span class="font-monospace text-primary">' + (res.institutional_email || '') + '</span></div>';
-        html += '<div><small class="text-muted">Login:</small> <span class="font-monospace">' + (res.login_id || '') + '</span></div>';
-        html += '<div><small class="text-muted">Contraseña:</small> <span class="font-monospace text-primary">' + (res.password || '') + '</span></div>';
-        html += '<div><small class="text-muted">Rol:</small> ' + (res.role === 'student' ? 'Estudiante' : 'Docente') + '</div>';
-        html += '</div></div>';
-        
-        document.getElementById('previewResult').innerHTML = html;
-        document.getElementById('previewResult').style.display = 'block';
-        toast('Credenciales generadas', 'success');
     } catch (err) {
         toast('Error: ' + err.message, 'danger');
     } finally {
