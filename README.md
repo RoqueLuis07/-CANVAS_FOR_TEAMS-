@@ -17,7 +17,7 @@ Sistema integral de automatización y gestión para Canvas LMS y Microsoft Teams
 
 ```bash
 # Clonar o navegar al directorio del proyecto
-cd claudecode-CanvasforTeams-
+cd -canvas_for_teams-
 
 # Instalar dependencias
 pip install -r requirements.txt
@@ -39,12 +39,10 @@ AZURE_CLIENT_ID=tu_client_id
 AZURE_CLIENT_SECRET=tu_client_secret
 INSTITUTIONAL_DOMAIN=tu_dominio.edu.py
 
-SMTP_SERVER=smtp.office365.com
-SMTP_PORT=587
-SMTP_USER=it@usil.edu.py
-SMTP_PASSWORD=tu_password
 SMTP_FROM=it@usil.edu.py
 ```
+
+> El envío de correos de credenciales se hace vía Microsoft Graph (`sendMail`), reutilizando las credenciales de Azure de arriba — no hace falta usuario/contraseña SMTP. Requiere el permiso de aplicación `Mail.Send` con consentimiento de administrador sobre el buzón indicado en `SMTP_FROM`.
 
 ### 3. Ejecutar el Servidor
 
@@ -70,7 +68,7 @@ El sistema estará disponible en: **http://localhost:3000** o **http://127.0.0.1
   - `static/`: Archivos estáticos (CSS, JS, imágenes).
 - **Backend/**: Contiene el servidor y la lógica de negocio.
   - `app/`: Código fuente de la API (FastAPI, routers, modelos).
-  - `data/`: Bases de datos SQLite locales (persistencia).
+  - Persistencia en PostgreSQL (Supabase) — ver `SUPABASE_DATABASE_URL` en `.env`.
   - Archivos de configuración (`.env`, `requirements.txt`, etc.).
 
 ---
@@ -193,13 +191,14 @@ Ver un registro completo (log) de quién hizo qué en el sistema. Registra todas
 
 ---
 
-## 💾 Bases de Datos
+## 💾 Base de Datos
 
-El sistema crea automáticamente 3 bases de datos locales en la carpeta `data/` usando SQLite:
+El sistema usa una única base **PostgreSQL en Supabase** (`SUPABASE_DATABASE_URL` en `.env`), con estas tablas principales:
 
-1. **app.db** - Caché y datos rápidos de la app.
-2. **audit.db** - Log de auditoría de solicitudes.
-3. **jobs.db** - Historial detallado de operaciones (Jobs).
+1. **canvas_courses / canvas_users / canvas_enrollments** - Caché local de Canvas (sincronizada, no es la fuente de verdad).
+2. **azure_users** - Caché local de usuarios de Azure AD/Teams.
+3. **jobs** - Historial detallado de operaciones masivas (background jobs).
+4. **audit_logs** - Log de auditoría de solicitudes.
 
 Todos los datos se **persisten automáticamente** aunque el servidor se reinicie.
 
@@ -212,8 +211,8 @@ Todos los datos se **persisten automáticamente** aunque el servidor se reinicie
 | **Backend** | Python 3.12 + FastAPI |
 | **Servidor** | Uvicorn (ASGI) |
 | **Integraciones** | Canvas LMS REST API v1, Microsoft Graph API |
-| **Autenticación** | OAuth2, Graph API Tokens, SMTP para correos |
-| **Base de Datos** | SQLite3 (Manejo concurrente de 3 bases: app, audit, jobs) |
+| **Autenticación** | OAuth2, Graph API Tokens, envío de correo vía Microsoft Graph |
+| **Base de Datos** | PostgreSQL (Supabase) |
 | **Frontend** | Jinja2 Templates + Vanilla JS + Bootstrap 5.3 |
 | **Despliegue** | Dockerizado para Railway (`railway up`) |
 
@@ -225,7 +224,7 @@ Todos los datos se **persisten automáticamente** aunque el servidor se reinicie
 Si usaste una cuenta diferente a la configurada en Windows, ve al "Administrador de Credenciales" de Windows, borra la credencial antigua de GitHub y vuelve a hacer `git push`.
 
 **2. "Los correos de bienvenida no llegan"**
-Verifica que las variables `SMTP_USER` y `SMTP_PASSWORD` en tu `.env` correspondan a la cuenta institucional correcta (ej. `it@usil.edu.py`) y que el tenant permita el envío SMTP (Basic Auth o App Passwords).
+Verifica que `SMTP_FROM` en tu `.env` sea la cuenta institucional correcta (ej. `it@usil.edu.py`) y que la App Registration de Azure tenga concedido el permiso de aplicación `Mail.Send` (con consentimiento de administrador) sobre ese buzón.
 
 **3. "No aparecen datos al subir el Excel de Nuevo Ingreso"**
 Asegúrate de haber descargado la plantilla oficial desde el botón "Plantilla Excel" y no alterar los nombres de las cabeceras (columnas). Si falla, revisa el **Historial de Trabajos** para leer el error exacto.

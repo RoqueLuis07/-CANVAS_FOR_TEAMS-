@@ -50,7 +50,7 @@ app/
 ├── main.py                  # Aplicación FastAPI, monta todos los routers
 ├── core/
 │   ├── config.py            # Settings (Pydantic BaseSettings, lee .env)
-│   ├── database.py          # Contadores estadísticos (SQLite)
+│   ├── database.py          # Caché local de Canvas/Azure (PostgreSQL/Supabase)
 │   └── cache.py             # Cache en memoria simple
 ├── routers/
 │   ├── ingreso.py           # ★ Core: crear/reenviar/verificar credenciales

@@ -10,8 +10,8 @@
 ## Instalación
 
 ```bash
-git clone https://github.com/RoqueEsteche/claudecode-CanvasforTeams-.git
-cd claudecode-CanvasforTeams-
+git clone https://github.com/RoqueLuis07/-canvas_for_teams-.git
+cd -canvas_for_teams-
 
 pip install -r requirements.txt
 cp .env.example .env
