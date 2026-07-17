@@ -100,124 +100,6 @@ async function loadTeams(query = '') {
   } catch(e) { toast('Error cargando Teams: ' + e.message, 'danger'); }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-function _slugify(s) {
-  return s.normalize('NFKD').replace(/[^\w\s-]/g,'').replace(/\s+/g,'-').toLowerCase().slice(0,64);
-}
-
-// Picked users registry: { owners: [{id, name, upn}], members: [{id, name, upn}] }
-let _picked = { owners: [], members: [] };
-
-function _renderPicked() {
-  const badge = (type, u) =>
-    `<span class="badge bg-${type==='owners'?'warning text-dark':'primary'} me-1 mb-1" style="font-size:.78rem">
-       ${u.name} <button type="button" class="btn-close btn-close-${type==='owners'?'dark':'white'} ms-1"
-         style="font-size:.5rem" onclick="removePicked('${type}','${u.id}')"></button>
-     </span>`;
-  document.getElementById('pickedOwners').innerHTML  = _picked.owners.map(u => badge('owners',u)).join('') || '<span class="text-muted small">Ninguno</span>';
-  document.getElementById('pickedMembers').innerHTML = _picked.members.map(u => badge('members',u)).join('') || '<span class="text-muted small">Ninguno</span>';
-}
-
-function removePicked(type, id) {
-  _picked[type] = _picked[type].filter(u => u.id !== id);
-  _renderPicked();
-}
-
-let _userSearchTimer = null;
-function searchTeamUser(q, targetType) {
-  clearTimeout(_userSearchTimer);
-  const selId = targetType + 'SearchResults';
-  const sel = document.getElementById(selId);
-  if (!sel) return;
-  if (q.length < 2) { sel.style.display = 'none'; return; }
-  _userSearchTimer = setTimeout(async () => {
-    try {
-      const users = await api.get('/teams/users?search=' + encodeURIComponent(q));
-      sel.innerHTML = users.map(u =>
-        `<option value="${u.id}" data-name="${u.displayName}" data-upn="${u.userPrincipalName}">
-           ${u.displayName} — ${u.userPrincipalName}
-         </option>`
-      ).join('');
-      sel.style.display = users.length ? '' : 'none';
-    } catch(e) { sel.style.display = 'none'; }
-  }, 400);
-}
-
-function addFromSearch(targetType) {
-  const sel = document.getElementById(targetType + 'SearchResults');
-  if (!sel || !sel.value) return;
-  const opt = sel.options[sel.selectedIndex];
-  const id   = sel.value;
-  const name = opt.dataset.name;
-  const upn  = opt.dataset.upn;
-  if (!_picked[targetType].find(u => u.id === id)) {
-    _picked[targetType].push({ id, name, upn });
-    _renderPicked();
-  }
-  sel.style.display = 'none';
-  document.getElementById(targetType + 'Search').value = '';
-}
-
-function _userPicker(type, label, color) {
-  return `
-    <div class="mb-3">
-      <label class="form-label fw-semibold">${label}</label>
-      <div class="d-flex gap-2 mb-1">
-        <input class="form-control form-control-sm" id="${type}Search"
-          placeholder="Buscar por nombre o UPN…"
-          oninput="searchTeamUser(this.value,'${type}')">
-      </div>
-      <select class="form-select form-select-sm" id="${type}SearchResults" size="3" style="display:none"
-        onchange="addFromSearch('${type}')"></select>
-      <div id="picked${type.charAt(0).toUpperCase()+type.slice(1)}" class="mt-1"></div>
-    </div>`;
-}
-
-
-function showTeamReport(res) {
-  const team = res.team || {};
-  const teamId = team.id || '—';
-  const members = res.members_added || [];
-
-  const roleBadge = r => r === 'owner'
-    ? '<span class="badge bg-warning text-dark">Owner</span>'
-    : '<span class="badge bg-primary">Miembro</span>';
-  const statusBadge = s => s === 'ok'
-    ? '<span class="badge bg-success">OK</span>'
-    : `<span class="badge bg-danger">${s}</span>`;
-
-  const rows = members.map(m => `
-    <tr>
-      <td class="small">${m.displayName || '—'}</td>
-      <td class="small text-muted">${m.upn || m.user_id}</td>
-      <td>${roleBadge(m.role)}</td>
-      <td>${statusBadge(m.status)}</td>
-    </tr>`).join('');
-
-  showModal('✅ Team creado exitosamente', `
-    <div class="alert alert-success py-2 mb-3">
-      <strong>${team.displayName || 'Nuevo Team'}</strong>
-      <span class="text-muted ms-2 small">${team.visibility || ''}</span>
-    </div>
-    <div class="mb-3">
-      <label class="form-label small fw-semibold">ID del Team (para vincular Canvas, etc.)</label>
-      <div class="input-group input-group-sm">
-        <input type="text" class="form-control font-monospace" id="teamIdCopy" value="${teamId}" readonly>
-        <button class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText('${teamId}').then(()=>toast('ID copiado','success'))">
-          <i class="bi bi-clipboard"></i> Copiar
-        </button>
-      </div>
-    </div>
-    <strong class="small">Miembros agregados (${members.length})</strong>
-    <div class="table-responsive mt-1" style="max-height:260px;overflow-y:auto">
-      <table class="table table-sm table-hover mb-0">
-        <thead><tr><th>Nombre</th><th>UPN</th><th>Rol</th><th>Estado</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" class="text-center text-muted">Sin miembros</td></tr>'}</tbody>
-      </table>
-    </div>`,
-    `<button class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button>`);
-}
-
 function viewTeamDetail(teamId, name) {
   showModal('Miembros: ' + name, `
     <div class="mb-3 d-flex gap-2 flex-wrap">
@@ -382,7 +264,7 @@ function openExcelMembers() {
       const result = { succeeded: [], failed: [] };
       for (const m of rows) {
         try {
-          const res = await api.post(`/teams/teams/${m.team_id}/members`, { user_id: m.user_id, role: m.role || 'member' });
+          const res = await api.post(`/teams/teams/${m.team_id}/members/bulk-add-emails`, { emails: [m.user_id], role: m.role || 'member' });
           result.succeeded.push(res);
         } catch(e) {
           result.failed.push({ input: { team_id: m.team_id, user_id: m.user_id }, error: e.message });

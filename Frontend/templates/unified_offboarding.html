@@ -296,8 +296,8 @@ async function openEgresoOneDrive() {
         if (res.ok) {
             const data = await res.json();
             
-            document.getElementById('egresoToProcess').innerText = `${data.total_to_process} a procesar`;
-            document.getElementById('egresoAlreadyProcessed').innerText = `${data.already_processed} ignorados`;
+            document.getElementById('egresoToProcess').innerText = `${data.students_to_process} a procesar`;
+            document.getElementById('egresoAlreadyProcessed').innerText = `${data.students_already_processed} ignorados`;
             
             const thead = document.getElementById('egresoPreviewHeaders');
             thead.innerHTML = '<tr>' + data.headers.map(h => `<th>${h}</th>`).join('') + '</tr>';

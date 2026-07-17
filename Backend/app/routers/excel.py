@@ -2345,11 +2345,12 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
                 sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
 
     return PreviewResponse(
+        sheet_name=req.sheet_name,
+        students_to_process=students_to_process,
+        students_already_processed=students_already_processed,
         headers=headers[:min(5, len(headers))],
         sample_rows=sample_rows,
-        total_to_process=students_to_process,
-        already_processed=students_already_processed,
-        details=student_details
+        student_details=student_details,
     )
 
 @router.post("/excel/egreso", summary="Procesar planilla de Egreso/Eliminación")
@@ -3199,6 +3200,7 @@ async def get_job_status(job_id: int):
     return job
 
 async def _process_rollback_bg(job_id: int, req: DiplomadosUrlRequest, contents: bytes, encoded_url: str):
+    _ACCOUNT_LOCAL = settings.canvas_account_id
     await jobs.start_job(job_id)
     try:
         import io, openpyxl
@@ -3380,16 +3382,13 @@ async def _process_matriculaciones_json_bg(job_id: int, data: list[dict]):
         
         try:
             enroll_res = await _enroll_single(enroll_item)
-            error_msg = ""
-            if "errores" in enroll_res and enroll_res["errores"]:
-                error_msg = " | ".join(enroll_res["errores"])
-            
-            if error_msg:
-                error_count += 1
-                results.append({"usuario": user_val, "status": f"❌ {error_msg}"})
-            else:
+            if enroll_res.get("status") == "success":
                 success_count += 1
                 results.append({"usuario": user_val, "status": "✅ OK"})
+            else:
+                error_count += 1
+                msg = enroll_res.get("message", "Error desconocido")
+                results.append({"usuario": user_val, "status": f"❌ {msg}"})
         except Exception as e:
             error_count += 1
             results.append({"usuario": user_val, "status": f"❌ Error: {e}"})
@@ -3425,6 +3424,7 @@ async def import_matriculaciones_json(req: JsonDataRequest, bg_tasks: Background
 async def _process_rollback_json_bg(job_id: int, data: list[dict]):
     import asyncio
     import json
+    _ACCOUNT_LOCAL = settings.canvas_account_id
     await jobs.start_job(job_id)
     
     success_count = 0
@@ -3509,8 +3509,7 @@ async def import_diplomados_json(req: JsonDataRequest):
         raise HTTPException(status_code=400, detail="Límite de 50 alumnos por lote para Diplomados excedido.")
 
     result = BulkResult(succeeded=[], failed=[])
-    
-    from app.services.users import user_service
+
     import re
     import time
     
@@ -4200,10 +4199,11 @@ async def preview_delete_courses_onedrive(req: DiplomadosUrlRequest) -> PreviewR
 
     wb.close()
     return PreviewResponse(
+        sheet_name=req.sheet_name,
+        students_to_process=courses_to_process,
+        students_already_processed=courses_skipped,
         headers=list(headers.keys()),
         sample_rows=sample_rows,
-        students_to_process=courses_to_process,
-        students_already_processed=courses_skipped
     )
 
 @router.post("/excel/courses/delete/import")

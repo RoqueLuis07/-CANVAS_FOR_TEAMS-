@@ -239,33 +239,3 @@ async def remove_user_from_course(course_id: str, user_id: str) -> bool:
         pass
     return False
 
-async def create_user(account_id: str, name: str, short_name: str, sortable_name: str, unique_id: str, sis_user_id: str, password: str = None) -> dict:
-    """Create a user in Canvas."""
-    payload = {
-        "user": {
-            "name": name,
-            "short_name": short_name,
-            "sortable_name": sortable_name,
-        },
-        "pseudonym": {
-            "unique_id": unique_id,
-            "sis_user_id": sis_user_id
-        }
-    }
-    if password:
-        payload["pseudonym"]["password"] = password
-
-    return await post(f"/accounts/{account_id}/users", payload)
-
-async def enroll_user(course_id: str, user_id: str, role_type: str) -> dict:
-    """Enroll a user in a Canvas course. role_type can be StudentEnrollment, TeacherEnrollment, etc."""
-    payload = {
-        "enrollment": {
-            "user_id": user_id,
-            "type": role_type,
-            "enrollment_state": "active",
-            "notify": True
-        }
-    }
-    return await post(f"/courses/{course_id}/enrollments", payload)
-

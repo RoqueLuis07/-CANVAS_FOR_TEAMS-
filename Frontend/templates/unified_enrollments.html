@@ -411,27 +411,6 @@ document.addEventListener('DOMContentLoaded', () => {
     mi_loadHistory();
 });
 
-async function doEnrollUnified() {
-  const form = document.getElementById('enrollForm');
-  if (!form.checkValidity()) { form.reportValidity(); return; }
-  
-  const btn = document.getElementById('enrollBtn');
-  setLoading(btn, true);
-  
-  const fd = new FormData(form);
-  const data = Object.fromEntries(fd.entries());
-  
-  try {
-    const res = await api.post('/sync/enroll-both', data);
-    toast('Usuario matriculado exitosamente!', 'success');
-    form.reset();
-  } catch(e) {
-    toast('Error: ' + e.message, 'danger');
-  } finally {
-    setLoading(btn, false);
-  }
-}
-
 // Configurar Autocompletado
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('mat_url').value = localStorage.getItem('matUrl') || '';
