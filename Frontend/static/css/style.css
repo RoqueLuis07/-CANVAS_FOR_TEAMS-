@@ -86,7 +86,9 @@ html.dark-mode {
   --bs-body-bg: #101820;
   --bs-body-bg-rgb: 16, 24, 32;
   --bs-secondary-bg: #172130;
+  --bs-secondary-bg-rgb: 23, 33, 48;
   --bs-tertiary-bg: #131E2A;
+  --bs-tertiary-bg-rgb: 19, 30, 42;
   --bs-border-color: #253545;
   --bs-table-color: #E8EFF4;
   --bs-table-bg: transparent;
@@ -119,8 +121,11 @@ html.dark-mode {
     --bs-body-color-rgb: 232, 239, 244;
     --bs-secondary-color: #8BA5B5;
     --bs-body-bg: #101820;
+    --bs-body-bg-rgb: 16, 24, 32;
     --bs-secondary-bg: #172130;
+    --bs-secondary-bg-rgb: 23, 33, 48;
     --bs-tertiary-bg: #131E2A;
+    --bs-tertiary-bg-rgb: 19, 30, 42;
     --bs-border-color: #253545;
     --bs-table-color: #E8EFF4;
     --bs-table-hover-bg: #1D2D3C;

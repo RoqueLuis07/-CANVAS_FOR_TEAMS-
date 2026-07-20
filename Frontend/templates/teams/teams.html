@@ -97,7 +97,15 @@ async function loadTeams(query = '') {
       });
     });
 
-  } catch(e) { toast('Error cargando Teams: ' + e.message, 'danger'); }
+  } catch(e) {
+    document.getElementById('tableWrap').innerHTML = `
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-exclamation-triangle fs-1 d-block mb-2 text-warning"></i>
+        <div class="mb-3">No se pudieron cargar los Teams: ${e.message}</div>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadTeams()"><i class="bi bi-arrow-clockwise me-1"></i>Reintentar</button>
+      </div>`;
+    toast('Error cargando Teams: ' + e.message, 'danger');
+  }
 }
 
 function viewTeamDetail(teamId, name) {
