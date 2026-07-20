@@ -117,6 +117,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Auth gate — exige sesión válida (admin autorizado) en todo el sistema
+# salvo /auth/*, /ui/login, /health, /ping y /static/*
+from app.middleware.auth_gate import AuthGateMiddleware
+app.add_middleware(AuthGateMiddleware)
+
 # Audit middleware
 from app.middleware.audit import AuditMiddleware
 app.add_middleware(AuditMiddleware)

@@ -164,11 +164,22 @@ def exchange_code(code: str, request: Request = None) -> dict[str, Any]:
     }
 
 
+def is_email_allowed(email: str) -> bool:
+    """Solo el personal de TI en ADMIN_ALLOWED_EMAILS puede iniciar sesión."""
+    return bool(email) and email.strip().lower() in settings.admin_allowed_emails_set
+
+
 def get_user_from_request(request: Request) -> dict[str, Any] | None:
     token = request.cookies.get(settings.auth_cookie_name)
     if not token:
         return None
     try:
-        return validate_session_token(token)
+        payload = validate_session_token(token)
     except HTTPException:
         return None
+    # Revalidar contra la lista vigente en cada request: si a alguien se le
+    # revoca el acceso, deja de poder usar el sistema aunque su sesión
+    # (de hasta 8h) todavía no haya expirado.
+    if not is_email_allowed(payload.get("email", "")):
+        return None
+    return payload

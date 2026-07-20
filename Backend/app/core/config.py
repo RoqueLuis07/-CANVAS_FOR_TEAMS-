@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     # SMTP_FROM es el buzón desde el que se envía.
     smtp_from: str = "it@usil.edu.py"
 
+    # Lista de correos institucionales autorizados a iniciar sesión en el
+    # sistema (separados por coma). Solo el personal de TI administrador
+    # debe estar acá — alumnos y docentes nunca deben tener acceso.
+    admin_allowed_emails: str = "resteche@usil.edu.py"
+
+    @property
+    def admin_allowed_emails_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_allowed_emails.split(",") if e.strip()}
+
 
 
     @field_validator("secret_key")

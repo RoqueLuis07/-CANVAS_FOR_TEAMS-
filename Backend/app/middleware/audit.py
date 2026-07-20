@@ -19,7 +19,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         # Get user information
         try:
             user = auth.get_user_from_request(request)
-            username = user.email if user else "Anonymous"
+            username = user.get("email") if user else "Anonymous"
         except Exception:
             username = "Anonymous"
 

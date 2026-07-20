@@ -22,6 +22,9 @@ async def callback(request: Request):
         raise HTTPException(status_code=400, detail="No se recibió el código de autorización")
 
     user = auth_service.exchange_code(code, request)
+    if not auth_service.is_email_allowed(user["email"]):
+        return RedirectResponse(url="/ui/login?error=forbidden")
+
     session_token = auth_service.create_session_token(user)
     response = RedirectResponse(url="/ui/profile")
     response.set_cookie(

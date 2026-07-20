@@ -390,6 +390,13 @@
     <h1 class="title stagger-1">¡Bienvenido!</h1>
     <p class="subtitle stagger-1">Inicia tu sesión para continuar a Gestión TI</p>
 
+    {% if request.query_params.get('error') == 'forbidden' %}
+    <div class="stagger-2" style="background:#fee2e2; color:#991b1b; border-radius:14px; padding:14px 18px; margin-bottom:20px; font-size:0.85rem; line-height:1.5; display:flex; gap:10px; align-items:flex-start;">
+      <i class="bi bi-exclamation-triangle-fill" style="margin-top:2px;"></i>
+      <span>Tu cuenta no tiene permiso para acceder a este sistema. El acceso está reservado al equipo de TI administrador. Si creés que esto es un error, contactá al administrador.</span>
+    </div>
+    {% endif %}
+
     <!-- Main Azure AD Button (Prominent) -->
     <a href="/auth/login" class="btn-sso stagger-2" style="margin-top: 10px; margin-bottom: 24px; padding: 18px;">
       <i class="bi bi-microsoft sso-icon" style="font-size: 1.4rem;"></i>

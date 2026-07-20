@@ -40,9 +40,13 @@ AZURE_CLIENT_SECRET=tu_client_secret
 INSTITUTIONAL_DOMAIN=tu_dominio.edu.py
 
 SMTP_FROM=it@usil.edu.py
+
+ADMIN_ALLOWED_EMAILS=admin1@usil.edu.py,admin2@usil.edu.py
 ```
 
 > El envío de correos de credenciales se hace vía Microsoft Graph (`sendMail`), reutilizando las credenciales de Azure de arriba — no hace falta usuario/contraseña SMTP. Requiere el permiso de aplicación `Mail.Send` con consentimiento de administrador sobre el buzón indicado en `SMTP_FROM`.
+
+> **Acceso al sistema:** solo los correos institucionales listados en `ADMIN_ALLOWED_EMAILS` (separados por coma) pueden iniciar sesión — cualquier otra cuenta de Azure AD del tenant (alumnos, docentes) queda bloqueada aunque se autentique correctamente contra Azure. Para dar de alta a un nuevo administrador de TI, agregá su correo a esa variable y reiniciá el servidor.
 
 ### 3. Ejecutar el Servidor
 
