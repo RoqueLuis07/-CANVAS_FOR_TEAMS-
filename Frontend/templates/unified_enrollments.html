@@ -316,7 +316,7 @@ async function mi_doEnroll() {
         const payload = {
             email: email,
             sys_id: sys,
-            program: mi_selectedMaterias[0].program || '',
+            program: [...new Set(mi_selectedMaterias.map(m => m.program).filter(Boolean))].join(', '),
             materias: mi_selectedMaterias,
             platforms: plat
         };
