@@ -46,21 +46,13 @@
         </div>
         
         <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <label class="form-label fw-semibold">Programa <span class="text-danger">*</span></label>
-                <select id="mi_programa" class="form-select" onchange="mi_onProgramChange()" required>
-                    <option value="" disabled selected>Seleccione el programa...</option>
-                    <option value="GA">GA</option>
-                    <option value="GND">GND</option>
-                    <option value="CPEL">CPEL</option>
-                </select>
-            </div>
-            <div class="col-md-8 position-relative">
+            <div class="col-12 position-relative">
                 <label class="form-label fw-semibold">Materias (Buscador) <span class="text-danger">*</span></label>
                 <div class="input-group">
                     <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="text" id="mi_search" class="form-control" placeholder="Buscar materia por nombre o ID..." disabled oninput="mi_onSearchInput()">
+                    <input type="text" id="mi_search" class="form-control" placeholder="Buscar curso real en Canvas por nombre, código o SIS ID..." oninput="mi_onSearchInput()">
                 </div>
+                <div class="form-text">Busca en vivo entre los cursos de Canvas — el equipo de Teams correspondiente se resuelve automáticamente al matricular.</div>
                 <!-- Autocomplete dropdown -->
                 <ul id="mi_autocomplete_list" class="list-group position-absolute w-100 shadow-sm" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;">
                 </ul>
@@ -216,55 +208,41 @@ function restoreAccordions() {
 let mi_materiasList = []; // from backend
 let mi_selectedMaterias = [];
 
-async function mi_onProgramChange() {
-    const prog = document.getElementById('mi_programa').value;
-    const searchInput = document.getElementById('mi_search');
-    const list = document.getElementById('mi_autocomplete_list');
-    
-    if (!prog) {
-        searchInput.disabled = true;
-        list.style.display = 'none';
-        return;
-    }
-    
-    searchInput.disabled = false;
-    searchInput.value = '';
-    list.style.display = 'none';
-    
-    try {
-        const res = await api.get('/api/matriculacion/materias?program=' + prog);
-        mi_materiasList = res || [];
-    } catch (e) {
-        toast('Error al cargar materias del programa: ' + e.message, 'danger');
-        mi_materiasList = [];
-    }
-}
+let mi_searchTimer = null;
 
 function mi_onSearchInput() {
-    const q = document.getElementById('mi_search').value.toLowerCase();
+    const q = document.getElementById('mi_search').value.trim();
     const list = document.getElementById('mi_autocomplete_list');
-    
+
+    clearTimeout(mi_searchTimer);
     if (q.length < 2) {
         list.style.display = 'none';
         return;
     }
-    
-    const matches = mi_materiasList.filter(m => 
-        (m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) && 
-        !mi_selectedMaterias.find(sel => sel.id === m.id)
-    );
-    
-    if (matches.length === 0) {
-        list.style.display = 'none';
-        return;
-    }
-    
-    list.innerHTML = matches.map(m => `
-        <li class="list-group-item list-group-item-action cursor-pointer" onclick="mi_addMateria('${m.id}')">
-            <strong>${m.id}</strong> - ${m.name}
-        </li>
-    `).join('');
-    list.style.display = 'block';
+
+    mi_searchTimer = setTimeout(async () => {
+        try {
+            const res = await api.get('/api/matriculacion/materias?q=' + encodeURIComponent(q));
+            mi_materiasList = res || [];
+        } catch (e) {
+            mi_materiasList = [];
+        }
+
+        const matches = mi_materiasList.filter(m => !mi_selectedMaterias.find(sel => sel.id === m.id));
+
+        if (matches.length === 0) {
+            list.innerHTML = '<li class="list-group-item text-muted small">Sin resultados en Canvas.</li>';
+            list.style.display = 'block';
+            return;
+        }
+
+        list.innerHTML = matches.map(m => `
+            <li class="list-group-item list-group-item-action cursor-pointer" onclick="mi_addMateria('${m.id}')">
+                <strong>${m.id}</strong> - ${m.name} <span class="badge bg-secondary ms-1">${m.program}</span>
+            </li>
+        `).join('');
+        list.style.display = 'block';
+    }, 350);
 }
 
 function mi_addMateria(id) {
@@ -307,40 +285,38 @@ function mi_renderSelected() {
 function mi_resetForm() {
     document.getElementById('mi_correo').value = '';
     document.getElementById('mi_sys').value = '';
-    document.getElementById('mi_programa').value = '';
     document.getElementById('mi_search').value = '';
     document.getElementById('mi_plataforma').value = 'both';
     document.getElementById('mi_resultWrap').style.display = 'none';
+    document.getElementById('mi_autocomplete_list').style.display = 'none';
     mi_selectedMaterias = [];
     mi_renderSelected();
-    mi_onProgramChange();
 }
 
 async function mi_doEnroll() {
     const email = document.getElementById('mi_correo').value.trim();
     const sys = document.getElementById('mi_sys').value.trim();
-    const prog = document.getElementById('mi_programa').value;
     const plat = document.getElementById('mi_plataforma').value;
     const btn = document.getElementById('btnMatriculacionInd');
     const resultWrap = document.getElementById('mi_resultWrap');
-    
-    if (!email || !sys || !prog) {
-        toast('Complete los campos obligatorios (Correo, SYS, Programa).', 'warning');
+
+    if (!email || !sys) {
+        toast('Complete los campos obligatorios (Correo, SYS).', 'warning');
         return;
     }
     if (mi_selectedMaterias.length === 0) {
         toast('Debe seleccionar al menos una materia.', 'warning');
         return;
     }
-    
+
     setLoading(btn, true);
     resultWrap.style.display = 'none';
-    
+
     try {
         const payload = {
             email: email,
             sys_id: sys,
-            program: prog,
+            program: mi_selectedMaterias[0].program || '',
             materias: mi_selectedMaterias,
             platforms: plat
         };

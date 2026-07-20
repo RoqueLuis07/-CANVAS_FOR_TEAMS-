@@ -2,8 +2,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Optional
 import json
-import os
 
+from app.core.config import settings
 from app.services import canvas_client as canvas
 from app.services import teams_client as teams
 from app.core import jobs
@@ -11,10 +11,6 @@ from app.core import jobs
 router = APIRouter(tags=["Matriculaciones Individuales"])
 
 # Models
-class MateriaSearchRequest(BaseModel):
-    program: str
-    q: Optional[str] = ""
-
 class MateriaResponse(BaseModel):
     id: str
     name: str
@@ -25,7 +21,7 @@ class MateriaResponse(BaseModel):
 class IndividualEnrollmentRequest(BaseModel):
     email: str
     sys_id: str
-    program: str
+    program: str = ""
     materias: List[MateriaResponse]
     platforms: str # "canvas", "teams", or "both"
 
@@ -35,30 +31,44 @@ class EnrollmentResult(BaseModel):
     canvas_status: str
     teams_status: str
 
-# Helper to load catalogue
-def load_catalogue():
-    catalogue_path = os.path.join(os.path.dirname(__file__), "..", "data", "catalogo_materias.json")
-    if not os.path.exists(catalogue_path):
-        return []
-    with open(catalogue_path, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
+
+def _extract_program(course: dict) -> str:
+    code = course.get("course_code") or ""
+    if "-" in code:
+        return code.split("-")[0]
+    name = course.get("name", "")
+    return name.split()[0] if name else "—"
+
 
 @router.get("/api/matriculacion/materias", response_model=List[MateriaResponse])
-async def search_materias(program: str, q: str = "",):
-    catalogue = load_catalogue()
-    
-    # Filter by program
-    filtered = [m for m in catalogue if m.get("program", "").lower() == program.lower()]
-    
-    # Filter by search query (id or name)
-    if q:
-        q_lower = q.lower()
-        filtered = [m for m in filtered if q_lower in m.get("name", "").lower() or q_lower in m.get("id", "").lower()]
-        
-    return filtered
+async def search_materias(q: str = ""):
+    """Busca materias en vivo entre los cursos reales de Canvas, por nombre,
+    código o SIS ID — reemplaza el catálogo estático que quedaba desactualizado.
+    El ID del equipo de Teams se resuelve recién al matricular (ver
+    matriculate_individual), no en cada búsqueda, para no hacer una llamada a
+    Graph por cada resultado."""
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    try:
+        courses = await canvas.paginate_limited(
+            f"/accounts/{settings.canvas_account_id}/courses",
+            {"per_page": 15, "search_term": q, "state[]": ["available", "unpublished", "created", "claimed"]},
+            max_records=15,
+        )
+    except Exception:
+        return []
+
+    return [
+        MateriaResponse(
+            id=str(c["id"]),
+            name=c.get("name", ""),
+            program=_extract_program(c),
+            canvas_course_id=str(c["id"]),
+            teams_group_id=None,
+        )
+        for c in courses
+    ]
 
 @router.post("/api/matriculacion/individual")
 async def matriculate_individual(req: IndividualEnrollmentRequest,):
@@ -111,16 +121,22 @@ async def matriculate_individual(req: IndividualEnrollmentRequest,):
                 except Exception as e:
                     canvas_status = f"Error: {str(e)}"
                     
-        # Teams Enrollment
-        if req.platforms in ["teams", "both"] and materia.teams_group_id:
+        # Teams Enrollment — el ID del equipo ya no viene de la búsqueda (que
+        # solo consulta Canvas); se resuelve acá buscando un equipo cuyo
+        # nombre coincida exactamente con el de la materia.
+        if req.platforms in ["teams", "both"]:
             try:
-                azure_user = await teams.search_users(req.email)
-                if azure_user:
-                    uid = azure_user[0]["id"]
-                    await teams.add_member_to_group(materia.teams_group_id, uid)
-                    teams_status = "OK"
+                team_group_id = materia.teams_group_id or await teams.search_group_by_name(materia.name)
+                if not team_group_id:
+                    teams_status = "Error: No se encontró un equipo en Teams con ese nombre"
                 else:
-                    teams_status = "Error: Usuario no encontrado en Teams"
+                    azure_user = await teams.search_users(req.email)
+                    if azure_user:
+                        uid = azure_user[0]["id"]
+                        await teams.add_member_to_group(team_group_id, uid)
+                        teams_status = "OK"
+                    else:
+                        teams_status = "Error: Usuario no encontrado en Teams"
             except Exception as e:
                 teams_status = f"Error: {str(e)}"
                 
