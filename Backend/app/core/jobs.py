@@ -244,7 +244,8 @@ async def get_jobs(
                 "result_count": row["result_count"],
                 "error_count": row["error_count"],
                 "error_message": row["error_message"],
-                "details": row["details"]
+                "details": row["details"],
+                "data_json": row["data_json"]
             })
 
         conn.close()
