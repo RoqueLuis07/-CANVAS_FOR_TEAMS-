@@ -57,10 +57,12 @@ async def get_recent_activity(
 async def get_audit_logs(
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    username: Annotated[str | None, Query()] = None,
+    endpoint: Annotated[str | None, Query()] = None,
 ):
-    """Get audit logs with pagination."""
+    """Get audit logs with pagination, optionally filtered by username/endpoint."""
     try:
-        result = await audit_log.get_audit_logs(limit=limit, offset=offset)
+        result = await audit_log.get_audit_logs(limit=limit, offset=offset, username=username, endpoint=endpoint)
         return result
     except Exception as exc:
         logger.error(f"Error retrieving audit logs: {exc}")

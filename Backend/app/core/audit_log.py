@@ -65,22 +65,33 @@ async def log_activity(
         logger.error(f"Error logging activity: {e}")
 
 
-async def get_audit_logs(limit: int = 100, offset: int = 0):
-    """Get audit logs from database."""
+async def get_audit_logs(limit: int = 100, offset: int = 0, username: str = None, endpoint: str = None):
+    """Get audit logs from database, optionally filtered by username/endpoint (partial match)."""
     try:
         conn = psycopg2.connect(settings.supabase_database_url)
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
+        where_clauses = []
+        params = []
+        if username:
+            where_clauses.append("username ILIKE %s")
+            params.append(f"%{username}%")
+        if endpoint:
+            where_clauses.append("endpoint ILIKE %s")
+            params.append(f"%{endpoint}%")
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
         # Get total count
-        cursor.execute("SELECT COUNT(*) FROM audit_logs")
+        cursor.execute(f"SELECT COUNT(*) FROM audit_logs {where_sql}", params)
         total = cursor.fetchone()[0]
 
         # Get logs
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT * FROM audit_logs
+            {where_sql}
             ORDER BY timestamp DESC
             LIMIT %s OFFSET %s
-        """, (limit, offset))
+        """, params + [limit, offset])
 
         logs = []
         for row in cursor.fetchall():

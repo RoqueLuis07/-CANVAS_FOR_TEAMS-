@@ -12,8 +12,8 @@
   <!-- Filters -->
   <div class="table-card" style="margin-bottom: 24px; padding: 16px;">
     <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
-      <input type="search" id="usernameFilter" placeholder="Filtrar por usuario..." class="form-control" style="max-width: 250px;">
-      <input type="search" id="endpointFilter" placeholder="Filtrar por endpoint..." class="form-control" style="max-width: 250px;">
+      <input type="search" id="usernameFilter" placeholder="Filtrar por usuario..." class="form-control" style="max-width: 250px;" onkeydown="if(event.key==='Enter') loadAuditLogs()">
+      <input type="search" id="endpointFilter" placeholder="Filtrar por endpoint..." class="form-control" style="max-width: 250px;" onkeydown="if(event.key==='Enter') loadAuditLogs()">
       <button class="btn btn-primary" onclick="loadAuditLogs()">
         <i class="bi bi-arrow-clockwise"></i> Cargar
       </button>
@@ -70,9 +70,15 @@ async function loadAuditLogs() {
 
 async function loadPage() {
   const offset = currentPage * pageSize;
+  const username = document.getElementById('usernameFilter').value.trim();
+  const endpoint = document.getElementById('endpointFilter').value.trim();
+
+  const params = new URLSearchParams({ limit: pageSize, offset });
+  if (username) params.set('username', username);
+  if (endpoint) params.set('endpoint', endpoint);
 
   try {
-    const response = await fetch(`/audit/logs?limit=${pageSize}&offset=${offset}`);
+    const response = await fetch(`/audit/logs?${params.toString()}`);
     const data = await response.json();
 
     if (!data.logs || data.logs.length === 0) {
