@@ -18,13 +18,13 @@
     <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
       <input type="date" id="dateFrom" class="form-control" style="max-width: 150px;" placeholder="Desde...">
       <input type="date" id="dateTo" class="form-control" style="max-width: 150px;" placeholder="Hasta...">
-      <select id="jobType" class="form-control" style="max-width: 200px;">
+      <select id="jobType" class="form-control" style="max-width: 240px;">
         <option value="">Todos los tipos</option>
-        <option value="bulk_user_create">Crear usuarios (Conjunto)</option>
-        <option value="user_create">Crear usuario (Individual)</option>
-        <option value="enrollment_bulk">Matrículas (Conjunto)</option>
-        <option value="enrollment_single">Matrícula (Individual)</option>
-        <option value="course_create">Crear curso</option>
+        <option value="matriculacion_individual">Matriculación Individual</option>
+        <option value="matriculacion_masiva_json">Matriculación Masiva (Excel)</option>
+        <option value="matriculacion_masiva_onedrive">Matriculación Masiva (OneDrive)</option>
+        <option value="rollback_masivo_json">Rollback Masivo (Excel)</option>
+        <option value="rollback_masivo_onedrive">Rollback Masivo (OneDrive)</option>
       </select>
       <input type="text" id="usernameFilter" placeholder="Filtrar por usuario..." class="form-control" style="max-width: 200px;">
       <button class="btn btn-primary" onclick="loadJobs()">
@@ -66,7 +66,10 @@
       </table>
     </div>
     <div style="padding: 12px 16px; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center;">
-      <small id="resultCount" style="color: var(--text-muted);">Total: 0 registros</small>
+      <small style="color: var(--text-muted);">
+        <span id="resultCount">Total: 0 registros</span>
+        <span id="autoRefreshIndicator" style="display: none; margin-left: 10px; color: #4e73df;"><i class="bi bi-arrow-repeat"></i> Actualización automática cada 10 s (trabajos en curso)</span>
+      </small>
       <div style="display: flex; gap: 8px;">
         <button class="btn btn-sm btn-outline-secondary" id="prevBtn" onclick="previousPage()" disabled>← Anterior</button>
         <button class="btn btn-sm btn-outline-secondary" id="nextBtn" onclick="nextPage()" disabled>Siguiente →</button>
@@ -78,6 +81,7 @@
 <script>
 let currentPage = 0;
 const pageSize = 50;
+let autoRefreshTimer = null;
 
 async function loadJobs() {
   currentPage = 0;
@@ -85,6 +89,7 @@ async function loadJobs() {
 }
 
 async function loadPage() {
+  clearTimeout(autoRefreshTimer);
   const dateFrom = document.getElementById('dateFrom').value;
   const dateTo = document.getElementById('dateTo').value;
   const jobType = document.getElementById('jobType').value;
@@ -109,6 +114,8 @@ async function loadPage() {
           <td colspan="7" style="text-align: center; padding: 40px;">No hay registros</td>
         </tr>
       `;
+      document.getElementById('resultCount').textContent = 'Total: 0 registros';
+      document.getElementById('autoRefreshIndicator').style.display = 'none';
       return;
     }
 
@@ -121,7 +128,7 @@ async function loadPage() {
       return `
         <tr>
           <td style="font-size: 0.85rem;" title="${createdDate}">${createdDate}</td>
-          <td><span style="font-size: 0.8rem; padding: 2px 6px; border-radius: 3px; background: #e3e6f0;">${jobTypeLabel}</span></td>
+          <td><span style="font-size: 0.8rem; padding: 2px 6px; border-radius: 3px; background: var(--table-hover-bg); color: var(--text-primary);">${jobTypeLabel}</span></td>
           <td>${job.operation}</td>
           <td><strong>${job.username}</strong></td>
           <td>${statusBadge}</td>
@@ -142,6 +149,16 @@ async function loadPage() {
     // Load stats if first page
     if (currentPage === 0) {
       loadStats(dateFrom, dateTo);
+    }
+
+    // Auto-refresco mientras haya trabajos en curso visibles
+    const hasActive = data.jobs.some(j => j.status === 'processing' || j.status === 'pending');
+    const indicator = document.getElementById('autoRefreshIndicator');
+    if (hasActive) {
+      indicator.style.display = 'inline';
+      autoRefreshTimer = setTimeout(loadPage, 10000);
+    } else {
+      indicator.style.display = 'none';
     }
 
   } catch (error) {
@@ -202,13 +219,11 @@ function getStatusBadge(status) {
 
 function getJobTypeLabel(type) {
   const labels = {
-    'bulk_user_create': 'Crear Usuarios (Conjunto)',
-    'user_create': 'Crear Usuario',
-    'enrollment_bulk': 'Matrículas (Conjunto)',
-    'enrollment_single': 'Matrícula',
-    'course_create': 'Crear Curso',
-    'course_update': 'Actualizar Curso',
-    'user_update': 'Actualizar Usuario'
+    'matriculacion_individual': 'Matriculación Individual',
+    'matriculacion_masiva_json': 'Matriculación Masiva (Excel)',
+    'matriculacion_masiva_onedrive': 'Matriculación Masiva (OneDrive)',
+    'rollback_masivo_json': 'Rollback Masivo (Excel)',
+    'rollback_masivo_onedrive': 'Rollback Masivo (OneDrive)'
   };
   return labels[type] || type;
 }

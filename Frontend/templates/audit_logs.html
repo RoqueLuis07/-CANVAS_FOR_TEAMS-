@@ -15,7 +15,13 @@
       <input type="search" id="usernameFilter" placeholder="Filtrar por usuario..." class="form-control" style="max-width: 250px;" onkeydown="if(event.key==='Enter') loadAuditLogs()">
       <input type="search" id="endpointFilter" placeholder="Filtrar por endpoint..." class="form-control" style="max-width: 250px;" onkeydown="if(event.key==='Enter') loadAuditLogs()">
       <button class="btn btn-primary" onclick="loadAuditLogs()">
-        <i class="bi bi-arrow-clockwise"></i> Cargar
+        <i class="bi bi-search"></i> Buscar
+      </button>
+      <button class="btn btn-outline-secondary" onclick="clearFilters()">
+        <i class="bi bi-x-circle"></i> Limpiar
+      </button>
+      <button class="btn btn-outline-success ms-auto" onclick="exportCsv()" title="Exporta hasta 500 registros con los filtros aplicados">
+        <i class="bi bi-filetype-csv"></i> Exportar CSV
       </button>
     </div>
   </div>
@@ -87,6 +93,9 @@ async function loadPage() {
           <td colspan="6" style="text-align: center; padding: 40px;">No hay registros</td>
         </tr>
       `;
+      document.getElementById('resultCount').textContent = 'Total: 0 registros';
+      document.getElementById('prevBtn').disabled = true;
+      document.getElementById('nextBtn').disabled = true;
       return;
     }
 
@@ -167,6 +176,46 @@ function getMethodColor(method) {
     'PATCH': '#858796'
   };
   return colors[method] || '#858796';
+}
+
+function clearFilters() {
+  document.getElementById('usernameFilter').value = '';
+  document.getElementById('endpointFilter').value = '';
+  loadAuditLogs();
+}
+
+async function exportCsv() {
+  const username = document.getElementById('usernameFilter').value.trim();
+  const endpoint = document.getElementById('endpointFilter').value.trim();
+  const params = new URLSearchParams({ limit: 500, offset: 0 });
+  if (username) params.set('username', username);
+  if (endpoint) params.set('endpoint', endpoint);
+
+  try {
+    const response = await fetch(`/audit/logs?${params.toString()}`);
+    const data = await response.json();
+    if (!data.logs || data.logs.length === 0) {
+      toast('No hay registros para exportar', 'warning');
+      return;
+    }
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['Fecha/Hora', 'Usuario', 'Método', 'Endpoint', 'Estado', 'IP'].join(';'),
+      ...data.logs.map(l => [
+        new Date(l.timestamp).toLocaleString('es-ES'),
+        l.username, l.method, l.endpoint, l.status_code, l.ip_address
+      ].map(esc).join(';'))
+    ];
+    const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auditoria_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(`${data.logs.length} registros exportados`, 'success');
+  } catch (e) {
+    toast('Error exportando registros', 'danger');
+  }
 }
 
 function previousPage() {

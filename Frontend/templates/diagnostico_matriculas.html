@@ -86,26 +86,27 @@
             log('Cursos Canvas', 'fail', `Error: ${e.message}`);
         }
 
-        // Test 4: Frontend JS disponible
+        // Tests 4 y 5: main.js accesible y con las funciones esperadas
+        // (esta página no carga main.js, así que se verifica su contenido por fetch)
         try {
-            if (typeof api !== 'undefined') {
-                log('API Helper (main.js)', 'pass', 'Función api.get() disponible');
+            const mainJsRes = await fetch('/static/js/main.js');
+            if (mainJsRes.ok) {
+                const mainJs = await mainJsRes.text();
+                if (mainJs.includes('apiCall')) {
+                    log('API Helper (main.js)', 'pass', 'main.js accesible y contiene el helper api');
+                } else {
+                    log('API Helper (main.js)', 'fail', 'main.js no contiene el helper api');
+                }
+                if (mainJs.includes('function copyToClipboard')) {
+                    log('copyToClipboard()', 'pass', 'Función presente en main.js');
+                } else {
+                    log('copyToClipboard()', 'fail', 'Función no encontrada en main.js');
+                }
             } else {
-                log('API Helper (main.js)', 'fail', 'api.get() no está definida');
+                log('API Helper (main.js)', 'fail', `main.js no accesible (HTTP ${mainJsRes.status})`);
             }
         } catch(e) {
             log('API Helper (main.js)', 'fail', `Error: ${e.message}`);
-        }
-
-        // Test 5: Función copyToClipboard
-        try {
-            if (typeof copyToClipboard !== 'undefined') {
-                log('copyToClipboard()', 'pass', 'Función disponible');
-            } else {
-                log('copyToClipboard()', 'fail', 'Función no definida');
-            }
-        } catch(e) {
-            log('copyToClipboard()', 'fail', `Error: ${e.message}`);
         }
 
         // Test 6: Página unified_enrollments.html
@@ -113,10 +114,10 @@
             const enrollPageRes = await fetch('/ui/unified-enrollments');
             if (enrollPageRes.ok) {
                 const enrollPageHtml = await enrollPageRes.text();
-                if (enrollPageHtml.includes('mi_onProgramChange')) {
-                    log('Página unified_enrollments.html', 'pass', 'Página cargable y contiene mi_onProgramChange()');
+                if (enrollPageHtml.includes('mi_onSearchInput')) {
+                    log('Página unified_enrollments.html', 'pass', 'Página cargable y contiene la búsqueda en vivo de materias (mi_onSearchInput)');
                 } else {
-                    log('Página unified_enrollments.html', 'fail', 'Página no contiene mi_onProgramChange()');
+                    log('Página unified_enrollments.html', 'fail', 'Página no contiene mi_onSearchInput()');
                 }
             } else {
                 log('Página unified_enrollments.html', 'fail', `Error ${enrollPageRes.status}`);
@@ -132,7 +133,7 @@
             log('DOM Estado', 'warn', `Documento aún cargando (${document.readyState})`);
         }
 
-        log('DIAGNÓSTICO', 'pass', '✓ Diagnóstico completado. Si todos los tests pasaron, ve a http://localhost:3000/ui/unified-enrollments');
+        log('DIAGNÓSTICO', 'pass', '✓ Diagnóstico completado. Si todos los tests pasaron, ve a <a href="/ui/unified-enrollments" style="color:#90ee90;">/ui/unified-enrollments</a>');
     }
 
     // Run diagnostics when page loads
