@@ -1982,6 +1982,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
     col_estado = -1
     col_nombre = -1
     col_sis = -1
+    col_docente = -1
     for i, h in enumerate(headers_raw):
         h_lower = h.lower()
         if "estado" in h_lower or ("canvas" in h_lower and "id" in h_lower):
@@ -1990,6 +1991,8 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
             if col_nombre == -1: col_nombre = i
         if "identificaci" in h_lower or "sis" in h_lower:
             if col_sis == -1: col_sis = i
+        if "docente" in h_lower or "usuario institucional" in h_lower or "instructor" in h_lower or "profesor" in h_lower:
+            if col_docente == -1: col_docente = i
 
     courses_to_create = 0
     courses_already_created = 0
@@ -2010,7 +2013,8 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
             if len(course_details) < 10:
                 course_details.append({
                     "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
-                    "sis_id": row_vals[col_sis] if col_sis >= 0 else ""
+                    "sis_id": row_vals[col_sis] if col_sis >= 0 else "",
+                    "docente": row_vals[col_docente] if col_docente >= 0 else ""
                 })
             
         if len(sample_rows) < 10:
@@ -2112,6 +2116,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     col_canvas_id = get_col("canvas id", "id canvas")
     col_teams_id = get_col("teams id", "id teams")
     col_estado = get_col("estado")
+    col_docente = get_col("docente", "usuario institucional", "instructor", "profesor")
 
     if not col_nombre:
         raise HTTPException(status_code=400, detail="No se encontró la columna de nombre del curso.")
@@ -2155,6 +2160,9 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         sis_id = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
         periodo = str(ws.cell(row=r_idx, column=col_periodo).value or "").strip() if col_periodo else ""
+        docente_email = str(ws.cell(row=r_idx, column=col_docente).value or "").strip() if col_docente else ""
+        if docente_email and "@" not in docente_email:
+            docente_email = ""
 
         if not nombre:
             return
@@ -2165,8 +2173,12 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
         error_canvas = None
         error_teams = None
+        error_docente_canvas = None
+        error_docente_teams = None
         canvas_id = None
         teams_id = None
+        docente_canvas_ok = False
+        docente_teams_ok = False
 
         course_code_str = f"{nombre} {periodo}".strip()
 
@@ -2200,19 +2212,54 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             except Exception as e:
                 error_canvas = str(e)
 
+            # 1b. Inscribir al docente indicado como Teacher del curso recién creado
+            if canvas_id and docente_email:
+                try:
+                    matches = await canvas.get(
+                        f"/accounts/{_ACCOUNT_LOCAL}/users",
+                        params={"search_term": docente_email},
+                    )
+                    docente_canvas_id = matches[0]["id"] if matches else None
+                    if not docente_canvas_id:
+                        error_docente_canvas = f"No se encontró el usuario '{docente_email}' en Canvas"
+                    else:
+                        await canvas.post(f"/courses/{canvas_id}/enrollments", {
+                            "enrollment": {
+                                "user_id": docente_canvas_id,
+                                "type": "TeacherEnrollment",
+                                "enrollment_state": "active",
+                                "notify": False,
+                            }
+                        })
+                        docente_canvas_ok = True
+                except Exception as e:
+                    error_docente_canvas = str(e)
+
         # 2. Teams Creation
         if default_plat in ("teams", "both"):
+            docente_azure_id = None
+            if docente_email:
+                try:
+                    found = await graph.search_users(docente_email)
+                    docente_azure_id = found[0]["id"] if found else None
+                    if not docente_azure_id:
+                        error_docente_teams = f"No se encontró el usuario '{docente_email}' en Microsoft 365"
+                except Exception as e:
+                    error_docente_teams = str(e)
+
             try:
                 nickname = re.sub(r'[^a-zA-Z0-9]', '', course_code_str).lower()
                 nickname = f"{nickname}{int(time.time() * 1000) % 100000}" if nickname else f"grupo{int(time.time())}"
-                
+
                 owner_ids = []
                 try:
                     admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
                     if admin_user and admin_user.get("id"):
                         owner_ids.append(admin_user["id"])
                 except: pass
-    
+                if docente_azure_id and docente_azure_id not in owner_ids:
+                    owner_ids.append(docente_azure_id)
+
                 new_team = await create_team_via_group(
                     display_name=nombre,
                     mail_nickname=nickname,
@@ -2221,6 +2268,8 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     owner_ids=owner_ids
                 )
                 teams_id = new_team.get("id")
+                if docente_azure_id and teams_id:
+                    docente_teams_ok = True
             except Exception as e:
                 error_teams = str(e)
 
@@ -2235,18 +2284,33 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         final_errors = []
         if error_canvas: final_errors.append(f"Canvas: {error_canvas}")
         if error_teams: final_errors.append(f"Teams: {error_teams}")
-        
+
+        docente_warnings = []
+        if docente_email:
+            if error_docente_canvas: docente_warnings.append(f"Docente/Canvas: {error_docente_canvas}")
+            if error_docente_teams: docente_warnings.append(f"Docente/Teams: {error_docente_teams}")
+
+        succeeded_entry = {
+            "nombre": nombre,
+            "canvas_id": canvas_id,
+            "teams_id": teams_id,
+            "sis_course_id": sis_id,
+        }
+        if docente_email:
+            succeeded_entry["docente_email"] = docente_email
+            succeeded_entry["docente_canvas_enrolled"] = docente_canvas_ok
+            succeeded_entry["docente_teams_enrolled"] = docente_teams_ok
+
         if not final_errors:
-            ws.cell(row=r_idx, column=col_estado, value="✅ OK")
-            ws.cell(row=r_idx, column=col_estado).font = Font(color="00B050", bold=True)
-            result.succeeded.append({
-                "nombre": nombre,
-                "canvas_id": canvas_id,
-                "teams_id": teams_id,
-                "sis_course_id": sis_id
-            })
+            if docente_warnings:
+                ws.cell(row=r_idx, column=col_estado, value=f"✅ OK ⚠️ {' | '.join(docente_warnings)}")
+                ws.cell(row=r_idx, column=col_estado).font = Font(color="D97706", bold=True)
+            else:
+                ws.cell(row=r_idx, column=col_estado, value="✅ OK")
+                ws.cell(row=r_idx, column=col_estado).font = Font(color="00B050", bold=True)
+            result.succeeded.append(succeeded_entry)
         else:
-            error_msg = " | ".join(final_errors)
+            error_msg = " | ".join(final_errors + docente_warnings)
             ws.cell(row=r_idx, column=col_estado, value=f"⚠️ {error_msg}")
             ws.cell(row=r_idx, column=col_estado).font = Font(color="FF0000", bold=True)
             result.failed.append({"input": {"nombre": nombre}, "error": error_msg})
