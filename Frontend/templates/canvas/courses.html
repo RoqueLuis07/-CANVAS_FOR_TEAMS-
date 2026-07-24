@@ -27,6 +27,11 @@
       <i class="bi bi-unlock-fill me-2"></i>Liberar SIS ID
     </button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link fw-bold text-warning" id="release-term-sis-tab" data-bs-toggle="tab" data-bs-target="#release-term-sis" type="button" role="tab" aria-controls="release-term-sis" aria-selected="false">
+      <i class="bi bi-unlock-fill me-2"></i>Liberar Período
+    </button>
+  </li>
 </ul>
 
 <div class="tab-content" id="coursesTabsContent">
@@ -276,6 +281,72 @@
       </div>
     </div>
   </div> <!-- End Tab Liberar SIS ID -->
+
+  <!-- Tab: Liberar Período -->
+  <div class="tab-pane fade" id="release-term-sis" role="tabpanel" aria-labelledby="release-term-sis-tab">
+    <div class="row">
+      <div class="col-md-8 offset-md-2 mb-4">
+        <div class="card shadow-sm border-warning h-100">
+          <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-unlock-fill me-2"></i>Liberar SIS ID de un Período bloqueado</h5>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info">
+              Igual que con los cursos: cuando un <b>período académico</b> se elimina en Canvas, su SIS ID
+              no se libera automáticamente — el período desaparece de los listados normales pero sigue
+              reservando ese ID, bloqueando la creación de un período nuevo con el mismo SIS ID. Esto limpia
+              el campo SIS ID de esos períodos viejos <b>sin tocar los cursos</b> que tuvieron.
+            </div>
+
+            <div id="releaseTermSisFormWrap">
+              <label class="form-label fw-bold">SIS IDs o IDs de Canvas de períodos bloqueados</label>
+              <textarea class="form-control mb-3" id="releaseTermSisTextarea" rows="6" placeholder="GA2026-02&#10;10"></textarea>
+              <div class="d-flex justify-content-end">
+                <button class="btn btn-warning" id="btnPreviewReleaseTermSis" onclick="previewReleaseTermSis()">
+                  <i class="bi bi-search me-1"></i>Verificar Períodos
+                </button>
+              </div>
+            </div>
+
+            <div id="releaseTermSisPreviewWrap" style="display:none;">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold mb-0">Períodos Encontrados (<span id="releaseTermSisCount">0</span>)</h6>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="selectAllReleaseTermSis" onchange="toggleSelectAllReleaseTermSis()">
+                  <label class="form-check-label fw-bold text-warning" for="selectAllReleaseTermSis">Seleccionar Todos</label>
+                </div>
+              </div>
+              <div class="table-responsive border rounded bg-white" style="max-height:300px; overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th style="width: 40px;"></th>
+                      <th>ID Canvas</th>
+                      <th>Nombre</th>
+                      <th>SIS ID actual</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody id="releaseTermSisList"></tbody>
+                </table>
+              </div>
+              <div id="releaseTermSisNotFoundWrap" style="display:none;" class="alert alert-warning mt-3 mb-0">
+                <strong>No encontrados:</strong> <span id="releaseTermSisNotFound"></span>
+              </div>
+              <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-outline-secondary me-2" onclick="cancelReleaseTermSisPreview()">
+                  <i class="bi bi-arrow-left me-1"></i>Volver
+                </button>
+                <button class="btn btn-warning" id="btnExecuteReleaseTermSis" onclick="executeReleaseTermSis()" disabled>
+                  <i class="bi bi-unlock-fill me-1"></i>Liberar Seleccionados (<span id="selectedReleaseTermSisCount">0</span>)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div> <!-- End Tab Liberar Período -->
 </div> <!-- End Tabs Content -->
 
 <!-- Modal: Eliminación por Período -->
@@ -1554,6 +1625,115 @@ async function executeReleaseSis() {
 
         document.getElementById('releaseSisTextarea').value = '';
         cancelReleaseSisPreview();
+    } catch (e) {
+        toast('Error liberando SIS ID: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// ==========================================
+// LIBERAR SIS ID DE PERIODOS BLOQUEADOS
+// ==========================================
+
+let currentReleaseTermSisCandidates = [];
+
+async function previewReleaseTermSis() {
+    const raw = document.getElementById('releaseTermSisTextarea').value;
+    const entries = _parseReleaseSisEntries(raw);
+
+    if (entries.length === 0) {
+        toast('Ingresa al menos un SIS ID o ID de período.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnPreviewReleaseTermSis');
+    setLoading(btn, true);
+
+    try {
+        const resolved = await api.post('/canvas/terms/release-sis-id/resolve', { entries });
+        currentReleaseTermSisCandidates = resolved.filter(r => r.found);
+        const notFound = resolved.filter(r => !r.found);
+
+        const tbody = document.getElementById('releaseTermSisList');
+        let html = '';
+        currentReleaseTermSisCandidates.forEach(r => {
+            const cfg = _STATE_CFG[r.workflow_state] || { label: r.workflow_state || '—', bg: '#6C7982' };
+            html += `
+            <tr>
+                <td><input class="form-check-input release-term-sis-checkbox" type="checkbox" value="${r.term_id}" onchange="updateSelectedReleaseTermSisCount()"></td>
+                <td>${r.term_id}</td>
+                <td>${r.name}</td>
+                <td><span class="badge bg-secondary">${r.current_sis_id || '—'}</span></td>
+                <td><span class="badge" style="background:${cfg.bg};">${cfg.label}</span></td>
+            </tr>`;
+        });
+        if (currentReleaseTermSisCandidates.length === 0) {
+            html = `<tr><td colspan="5" class="text-center text-muted">Ningún período encontrado.</td></tr>`;
+        }
+        tbody.innerHTML = html;
+        document.getElementById('releaseTermSisCount').innerText = currentReleaseTermSisCandidates.length;
+        document.getElementById('selectAllReleaseTermSis').checked = false;
+
+        if (notFound.length > 0) {
+            document.getElementById('releaseTermSisNotFoundWrap').style.display = 'block';
+            document.getElementById('releaseTermSisNotFound').innerText = notFound.map(r => r.input).join(', ');
+        } else {
+            document.getElementById('releaseTermSisNotFoundWrap').style.display = 'none';
+        }
+
+        document.getElementById('releaseTermSisFormWrap').style.display = 'none';
+        document.getElementById('releaseTermSisPreviewWrap').style.display = 'block';
+        updateSelectedReleaseTermSisCount();
+    } catch (e) {
+        toast('Error verificando períodos: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function cancelReleaseTermSisPreview() {
+    document.getElementById('releaseTermSisFormWrap').style.display = 'block';
+    document.getElementById('releaseTermSisPreviewWrap').style.display = 'none';
+}
+
+function toggleSelectAllReleaseTermSis() {
+    const selectAll = document.getElementById('selectAllReleaseTermSis').checked;
+    document.querySelectorAll('.release-term-sis-checkbox').forEach(cb => cb.checked = selectAll);
+    updateSelectedReleaseTermSisCount();
+}
+
+function updateSelectedReleaseTermSisCount() {
+    const selected = document.querySelectorAll('.release-term-sis-checkbox:checked').length;
+    document.getElementById('selectedReleaseTermSisCount').innerText = selected;
+    document.getElementById('btnExecuteReleaseTermSis').disabled = selected === 0;
+}
+
+async function executeReleaseTermSis() {
+    const checkboxes = document.querySelectorAll('.release-term-sis-checkbox:checked');
+    const termIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (termIds.length === 0) return;
+
+    if (!confirm(`¿Liberar el SIS ID de los ${termIds.length} períodos seleccionados? No se tocan los cursos que tuvieron, solo se les quita el SIS ID para que quede disponible para un período nuevo.`)) return;
+
+    const btn = document.getElementById('btnExecuteReleaseTermSis');
+    setLoading(btn, true);
+
+    try {
+        const res = await api.post('/canvas/terms/release-sis-id', { term_ids: termIds });
+
+        let msg = `Éxito: ${res.succeeded.length} SIS ID liberados.`;
+        if (res.failed.length > 0) {
+            msg += ` Errores: ${res.failed.length}. Revisa la consola para detalles.`;
+            console.error("Períodos fallidos:", res.failed);
+            toast(msg, 'warning');
+        } else {
+            toast(msg, 'success');
+        }
+
+        document.getElementById('releaseTermSisTextarea').value = '';
+        cancelReleaseTermSisPreview();
     } catch (e) {
         toast('Error liberando SIS ID: ' + (e.detail || e.message || e), 'danger');
     } finally {
