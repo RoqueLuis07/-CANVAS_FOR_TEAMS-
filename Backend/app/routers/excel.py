@@ -2263,20 +2263,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                 data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
                 canvas_id = data.get("id")
             except Exception as e:
-                err_text = getattr(e, "detail", None) or str(e)
-                # Un intento anterior (ej. antes de que la creación pasara a
-                # correr en segundo plano) puede haber creado el curso en
-                # Canvas sin que la planilla llegara a guardarse con su ID.
-                # Si el rechazo es por SIS ID duplicado, reutilizamos el
-                # curso existente en vez de marcar la fila como fallida.
-                if sis_id and sis_id != "None" and "sis" in err_text.lower() and "already" in err_text.lower():
-                    try:
-                        existing = await canvas.get(f"/courses/sis_course_id:{sis_id}")
-                        canvas_id = existing.get("id")
-                    except Exception:
-                        pass
-                if not canvas_id:
-                    error_canvas = err_text
+                error_canvas = str(e)
 
             # 1b. Inscribir al docente indicado como Teacher del curso recién creado
             if canvas_id and docente_email:
@@ -2355,45 +2342,29 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
 
                 await asyncio.gather(*(_resolve_coordinador_teams(e) for e in coordinador_emails))
 
-            owner_ids = []
             try:
-                admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
-                if admin_user and admin_user.get("id"):
-                    owner_ids.append(admin_user["id"])
-            except: pass
-            if docente_azure_id and docente_azure_id not in owner_ids:
-                owner_ids.append(docente_azure_id)
-            for coord_id in coordinador_azure_ids:
-                if coord_id not in owner_ids:
-                    owner_ids.append(coord_id)
+                nickname = _safe_mail_nickname(course_code_str, suffix=str(int(time.time() * 1000) % 100000))
 
-            try:
-                # Igual que con Canvas: un intento anterior puede haber creado
-                # ya el equipo (la planilla no llegó a guardarse con su ID).
-                # Reutilizamos el equipo existente en vez de crear uno duplicado.
-                teams_id = await graph.search_group_by_name(nombre)
+                owner_ids = []
+                try:
+                    admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
+                    if admin_user and admin_user.get("id"):
+                        owner_ids.append(admin_user["id"])
+                except: pass
+                if docente_azure_id and docente_azure_id not in owner_ids:
+                    owner_ids.append(docente_azure_id)
+                for coord_id in coordinador_azure_ids:
+                    if coord_id not in owner_ids:
+                        owner_ids.append(coord_id)
 
-                if not teams_id:
-                    nickname = _safe_mail_nickname(course_code_str, suffix=str(int(time.time() * 1000) % 100000))
-                    new_team = await create_team_via_group(
-                        display_name=nombre,
-                        mail_nickname=nickname,
-                        description=f"Grupo para {nombre}",
-                        visibility="Private",
-                        owner_ids=owner_ids
-                    )
-                    teams_id = new_team.get("id")
-                else:
-                    # Equipo reutilizado: asegurar que docente/coordinadores queden
-                    # como owners aunque ya existiera (ignorando "ya es owner").
-                    for oid in owner_ids:
-                        try:
-                            await graph.post(f"/groups/{teams_id}/owners/$ref", {
-                                "@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{oid}"
-                            })
-                        except Exception:
-                            pass
-
+                new_team = await create_team_via_group(
+                    display_name=nombre,
+                    mail_nickname=nickname,
+                    description=f"Grupo para {nombre}",
+                    visibility="Private",
+                    owner_ids=owner_ids
+                )
+                teams_id = new_team.get("id")
                 if docente_azure_id and teams_id:
                     docente_teams_ok = True
             except Exception as e:
