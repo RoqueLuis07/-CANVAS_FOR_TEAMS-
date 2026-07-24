@@ -1987,6 +1987,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
     col_nombre = -1
     col_sis = -1
     col_docente = -1
+    col_coordinadores = -1
     for i, h in enumerate(headers_raw):
         h_lower = h.lower()
         if "estado" in h_lower or ("canvas" in h_lower and "id" in h_lower):
@@ -1997,6 +1998,8 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
             if col_sis == -1: col_sis = i
         if "docente" in h_lower or "usuario institucional" in h_lower or "instructor" in h_lower or "profesor" in h_lower:
             if col_docente == -1: col_docente = i
+        if "coordinador" in h_lower or "diseñador" in h_lower or "disenador" in h_lower or "designer" in h_lower:
+            if col_coordinadores == -1: col_coordinadores = i
 
     courses_to_create = 0
     courses_already_created = 0
@@ -2018,6 +2021,7 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
                 "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
                 "sis_id": row_vals[col_sis] if col_sis >= 0 else "",
                 "docente": row_vals[col_docente] if col_docente >= 0 else "",
+                "coordinadores": row_vals[col_coordinadores] if col_coordinadores >= 0 else "",
                 "row": {h: v for h, v in zip(headers_raw, row_vals) if h}
             })
 
@@ -2155,6 +2159,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
     col_teams_id = get_col("teams id", "id teams")
     col_estado = get_col("estado")
     col_docente = get_col("docente", "usuario institucional", "instructor", "profesor")
+    col_coordinadores = get_col("coordinador", "coordinadores", "diseñador", "disenador", "designer")
 
     if not col_nombre:
         await jobs.fail_job(job_id, "No se encontró la columna de nombre del curso.")
@@ -2203,6 +2208,11 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
         if docente_email and "@" not in docente_email:
             docente_email = ""
 
+        coordinadores_raw = str(ws.cell(row=r_idx, column=col_coordinadores).value or "").strip() if col_coordinadores else ""
+        coordinador_emails = [
+            e.strip() for e in re.split(r'[,;/\n]+', coordinadores_raw) if e.strip() and "@" in e.strip()
+        ]
+
         if not nombre:
             return
 
@@ -2218,6 +2228,10 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
         teams_id = None
         docente_canvas_ok = False
         docente_teams_ok = False
+        coordinadores_canvas_ok: list[str] = []
+        coordinadores_canvas_failed: list[str] = []
+        coordinadores_teams_ok: list[str] = []
+        coordinadores_teams_failed: list[str] = []
 
         course_code_str = f"{nombre} {periodo}".strip()
 
@@ -2274,6 +2288,32 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                 except Exception as e:
                     error_docente_canvas = str(e)
 
+            # 1c. Inscribir a cada coordinador/diseñador como DesignerEnrollment del curso
+            if canvas_id and coordinador_emails:
+                async def _enroll_coordinador_canvas(email: str):
+                    try:
+                        matches = await canvas.get(
+                            f"/accounts/{_ACCOUNT_LOCAL}/users",
+                            params={"search_term": email},
+                        )
+                        coord_canvas_id = matches[0]["id"] if matches else None
+                        if not coord_canvas_id:
+                            coordinadores_canvas_failed.append(f"{email} (no encontrado en Canvas)")
+                            return
+                        await canvas.post(f"/courses/{canvas_id}/enrollments", {
+                            "enrollment": {
+                                "user_id": coord_canvas_id,
+                                "type": "DesignerEnrollment",
+                                "enrollment_state": "active",
+                                "notify": False,
+                            }
+                        })
+                        coordinadores_canvas_ok.append(email)
+                    except Exception as e:
+                        coordinadores_canvas_failed.append(f"{email} ({e})")
+
+                await asyncio.gather(*(_enroll_coordinador_canvas(e) for e in coordinador_emails))
+
         # 2. Teams Creation
         if default_plat in ("teams", "both"):
             docente_azure_id = None
@@ -2286,6 +2326,22 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                 except Exception as e:
                     error_docente_teams = str(e)
 
+            coordinador_azure_ids: list[str] = []
+            if coordinador_emails:
+                async def _resolve_coordinador_teams(email: str):
+                    try:
+                        found = await graph.search_users(email)
+                        azure_id = found[0]["id"] if found else None
+                        if azure_id:
+                            coordinador_azure_ids.append(azure_id)
+                            coordinadores_teams_ok.append(email)
+                        else:
+                            coordinadores_teams_failed.append(f"{email} (no encontrado en Microsoft 365)")
+                    except Exception as e:
+                        coordinadores_teams_failed.append(f"{email} ({e})")
+
+                await asyncio.gather(*(_resolve_coordinador_teams(e) for e in coordinador_emails))
+
             try:
                 nickname = _safe_mail_nickname(course_code_str, suffix=str(int(time.time() * 1000) % 100000))
 
@@ -2297,6 +2353,9 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                 except: pass
                 if docente_azure_id and docente_azure_id not in owner_ids:
                     owner_ids.append(docente_azure_id)
+                for coord_id in coordinador_azure_ids:
+                    if coord_id not in owner_ids:
+                        owner_ids.append(coord_id)
 
                 new_team = await create_team_via_group(
                     display_name=nombre,
@@ -2310,6 +2369,12 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                     docente_teams_ok = True
             except Exception as e:
                 error_teams = str(e)
+
+            if not teams_id and coordinadores_teams_ok:
+                # El equipo no se creó — ningún coordinador quedó como owner realmente,
+                # aunque se hayan resuelto sus cuentas en Microsoft 365.
+                coordinadores_teams_failed.extend(f"{e} (equipo no creado)" for e in coordinadores_teams_ok)
+                coordinadores_teams_ok = []
 
         # Update Excel
         ws.cell(row=r_idx, column=col_fecha, value=datetime.now().strftime("%d/%m/%Y"))
@@ -2327,6 +2392,10 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
         if docente_email:
             if error_docente_canvas: docente_warnings.append(f"Docente/Canvas: {error_docente_canvas}")
             if error_docente_teams: docente_warnings.append(f"Docente/Teams: {error_docente_teams}")
+        if coordinadores_canvas_failed:
+            docente_warnings.append(f"Coordinadores/Canvas: {', '.join(coordinadores_canvas_failed)}")
+        if coordinadores_teams_failed:
+            docente_warnings.append(f"Coordinadores/Teams: {', '.join(coordinadores_teams_failed)}")
 
         succeeded_entry = {
             "nombre": nombre,
@@ -2338,6 +2407,9 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
             succeeded_entry["docente_email"] = docente_email
             succeeded_entry["docente_canvas_enrolled"] = docente_canvas_ok
             succeeded_entry["docente_teams_enrolled"] = docente_teams_ok
+        if coordinador_emails:
+            succeeded_entry["coordinadores_canvas_enrolled"] = coordinadores_canvas_ok
+            succeeded_entry["coordinadores_teams_enrolled"] = coordinadores_teams_ok
 
         if not final_errors:
             if docente_warnings:

@@ -44,7 +44,10 @@
         <div id="coursesOdFormWrap">
             <div class="alert alert-info">
               Pega el <b>enlace compartido de OneDrive</b> de la planilla de cursos.<br>
-              <small class="text-muted">La planilla debe tener columnas: <b>Nombre del Curso</b> y <b>SIS ID</b>.</small>
+              <small class="text-muted">La planilla debe tener columnas: <b>Nombre del Curso</b> y <b>SIS ID</b>.
+              Opcionalmente, una columna <b>Docente</b> (inscribe como Teacher/Owner) y una columna
+              <b>Coordinadores</b> (varios correos separados por coma, punto y coma o salto de línea —
+              se inscriben como Designer en Canvas y Owner en Teams).</small>
             </div>
             <div class="row">
               <div class="col-md-10 offset-md-1">
@@ -908,6 +911,9 @@ async function doPreviewCourses() {
         const hLower = h.toLowerCase();
         if (hLower.includes('docente') || hLower.includes('instructor') || hLower.includes('profesor')) {
           tableHtml += `<td>${val ? `<span class="badge bg-info text-dark">${val}</span>` : '<span class="text-muted">—</span>'}</td>`;
+        } else if (hLower.includes('coordinador') || hLower.includes('diseñador') || hLower.includes('disenador')) {
+          const emails = String(val).split(/[,;/\n]+/).map(s => s.trim()).filter(Boolean);
+          tableHtml += `<td>${emails.length ? emails.map(e => `<span class="badge bg-secondary me-1 mb-1">${e}</span>`).join('') : '<span class="text-muted">—</span>'}</td>`;
         } else {
           tableHtml += `<td>${val || '<span class="text-muted">—</span>'}</td>`;
         }
@@ -921,7 +927,8 @@ async function doPreviewCourses() {
         <strong>Revisa los datos cuidadosamente antes de continuar.</strong><br>
         Se van a crear <b>${preview.courses_to_create}</b> cursos nuevos en Canvas.<br>
         <small class="text-muted">Cursos ignorados (ya creados): ${preview.courses_already_created}</small><br>
-        ${preview.course_details.some(c => c.docente) ? '<small class="text-muted"><i class="bi bi-person-check"></i> Los cursos con docente indicado inscribirán automáticamente a ese usuario como Teacher/Owner al crearse.</small>' : ''}
+        ${preview.course_details.some(c => c.docente) ? '<small class="text-muted d-block"><i class="bi bi-person-check"></i> Los cursos con docente indicado inscribirán automáticamente a ese usuario como Teacher en Canvas y Owner en Teams.</small>' : ''}
+        ${preview.course_details.some(c => c.coordinadores) ? '<small class="text-muted d-block"><i class="bi bi-people-fill"></i> Los coordinadores/diseñadores indicados se inscribirán como Designer en Canvas y Owner en Teams.</small>' : ''}
       </div>
       ${tableHtml}
     `;
