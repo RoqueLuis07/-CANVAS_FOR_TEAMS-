@@ -22,6 +22,11 @@
       <i class="bi bi-trash3-fill me-2"></i>Eliminación Masiva
     </button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link fw-bold text-warning" id="release-sis-tab" data-bs-toggle="tab" data-bs-target="#release-sis" type="button" role="tab" aria-controls="release-sis" aria-selected="false">
+      <i class="bi bi-unlock-fill me-2"></i>Liberar SIS ID
+    </button>
+  </li>
 </ul>
 
 <div class="tab-content" id="coursesTabsContent">
@@ -205,6 +210,72 @@
         </div>
     </div>
   </div> <!-- End Tab Eliminación -->
+
+  <!-- Tab: Liberar SIS ID -->
+  <div class="tab-pane fade" id="release-sis" role="tabpanel" aria-labelledby="release-sis-tab">
+    <div class="row">
+      <div class="col-md-8 offset-md-2 mb-4">
+        <div class="card shadow-sm border-warning h-100">
+          <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-unlock-fill me-2"></i>Liberar SIS ID bloqueado</h5>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info">
+              Cuando un curso se elimina en Canvas, el <b>SIS ID no se libera automáticamente</b> —
+              el curso desaparece de los listados normales pero sigue reservando ese ID, bloqueando la
+              creación de un curso nuevo con el mismo SIS ID (típico al recrear una materia en un período nuevo).
+              Esto limpia el campo SIS ID de esos cursos viejos <b>sin tocar su contenido</b>.
+            </div>
+
+            <div id="releaseSisFormWrap">
+              <label class="form-label fw-bold">SIS IDs o IDs de Canvas bloqueados</label>
+              <textarea class="form-control mb-3" id="releaseSisTextarea" rows="6" placeholder="GA26050&#10;GA26051&#10;4321"></textarea>
+              <div class="d-flex justify-content-end">
+                <button class="btn btn-warning" id="btnPreviewReleaseSis" onclick="previewReleaseSis()">
+                  <i class="bi bi-search me-1"></i>Verificar Cursos
+                </button>
+              </div>
+            </div>
+
+            <div id="releaseSisPreviewWrap" style="display:none;">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold mb-0">Cursos Encontrados (<span id="releaseSisCount">0</span>)</h6>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="selectAllReleaseSis" onchange="toggleSelectAllReleaseSis()">
+                  <label class="form-check-label fw-bold text-warning" for="selectAllReleaseSis">Seleccionar Todos</label>
+                </div>
+              </div>
+              <div class="table-responsive border rounded bg-white" style="max-height:300px; overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th style="width: 40px;"></th>
+                      <th>ID Canvas</th>
+                      <th>Nombre</th>
+                      <th>SIS ID actual</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody id="releaseSisList"></tbody>
+                </table>
+              </div>
+              <div id="releaseSisNotFoundWrap" style="display:none;" class="alert alert-warning mt-3 mb-0">
+                <strong>No encontrados:</strong> <span id="releaseSisNotFound"></span>
+              </div>
+              <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-outline-secondary me-2" onclick="cancelReleaseSisPreview()">
+                  <i class="bi bi-arrow-left me-1"></i>Volver
+                </button>
+                <button class="btn btn-warning" id="btnExecuteReleaseSis" onclick="executeReleaseSis()" disabled>
+                  <i class="bi bi-unlock-fill me-1"></i>Liberar Seleccionados (<span id="selectedReleaseSisCount">0</span>)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div> <!-- End Tab Liberar SIS ID -->
 </div> <!-- End Tabs Content -->
 
 <!-- Modal: Eliminación por Período -->
@@ -1368,6 +1439,123 @@ async function executeIdDelete() {
         idDeleteModal.hide();
     } catch (e) {
         toast('Error durante la eliminación masiva: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// ==========================================
+// LIBERAR SIS ID BLOQUEADO
+// ==========================================
+
+let currentReleaseSisCandidates = [];
+
+function _parseReleaseSisEntries(raw) {
+    return [...new Set(
+        raw.split(/[\n,;]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+    )];
+}
+
+async function previewReleaseSis() {
+    const raw = document.getElementById('releaseSisTextarea').value;
+    const entries = _parseReleaseSisEntries(raw);
+
+    if (entries.length === 0) {
+        toast('Ingresa al menos un SIS ID o ID de Canvas.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnPreviewReleaseSis');
+    setLoading(btn, true);
+
+    try {
+        const resolved = await api.post('/canvas/courses/release-sis-id/resolve', { entries });
+        currentReleaseSisCandidates = resolved.filter(r => r.found);
+        const notFound = resolved.filter(r => !r.found);
+
+        const tbody = document.getElementById('releaseSisList');
+        let html = '';
+        currentReleaseSisCandidates.forEach(r => {
+            const cfg = _STATE_CFG[r.workflow_state] || { label: r.workflow_state || '—', bg: '#6C7982' };
+            html += `
+            <tr>
+                <td><input class="form-check-input release-sis-checkbox" type="checkbox" value="${r.course_id}" onchange="updateSelectedReleaseSisCount()"></td>
+                <td>${r.course_id}</td>
+                <td>${r.name}</td>
+                <td><span class="badge bg-secondary">${r.current_sis_id || '—'}</span></td>
+                <td><span class="badge" style="background:${cfg.bg};">${cfg.label}</span></td>
+            </tr>`;
+        });
+        if (currentReleaseSisCandidates.length === 0) {
+            html = `<tr><td colspan="5" class="text-center text-muted">Ningún curso encontrado.</td></tr>`;
+        }
+        tbody.innerHTML = html;
+        document.getElementById('releaseSisCount').innerText = currentReleaseSisCandidates.length;
+        document.getElementById('selectAllReleaseSis').checked = false;
+
+        if (notFound.length > 0) {
+            document.getElementById('releaseSisNotFoundWrap').style.display = 'block';
+            document.getElementById('releaseSisNotFound').innerText = notFound.map(r => r.input).join(', ');
+        } else {
+            document.getElementById('releaseSisNotFoundWrap').style.display = 'none';
+        }
+
+        document.getElementById('releaseSisFormWrap').style.display = 'none';
+        document.getElementById('releaseSisPreviewWrap').style.display = 'block';
+        updateSelectedReleaseSisCount();
+    } catch (e) {
+        toast('Error verificando cursos: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function cancelReleaseSisPreview() {
+    document.getElementById('releaseSisFormWrap').style.display = 'block';
+    document.getElementById('releaseSisPreviewWrap').style.display = 'none';
+}
+
+function toggleSelectAllReleaseSis() {
+    const selectAll = document.getElementById('selectAllReleaseSis').checked;
+    document.querySelectorAll('.release-sis-checkbox').forEach(cb => cb.checked = selectAll);
+    updateSelectedReleaseSisCount();
+}
+
+function updateSelectedReleaseSisCount() {
+    const selected = document.querySelectorAll('.release-sis-checkbox:checked').length;
+    document.getElementById('selectedReleaseSisCount').innerText = selected;
+    document.getElementById('btnExecuteReleaseSis').disabled = selected === 0;
+}
+
+async function executeReleaseSis() {
+    const checkboxes = document.querySelectorAll('.release-sis-checkbox:checked');
+    const courseIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (courseIds.length === 0) return;
+
+    if (!confirm(`¿Liberar el SIS ID de los ${courseIds.length} cursos seleccionados? No se toca su contenido, solo se les quita el SIS ID para que quede disponible para un curso nuevo.`)) return;
+
+    const btn = document.getElementById('btnExecuteReleaseSis');
+    setLoading(btn, true);
+
+    try {
+        const res = await api.post('/canvas/courses/release-sis-id', { course_ids: courseIds });
+
+        let msg = `Éxito: ${res.succeeded.length} SIS ID liberados.`;
+        if (res.failed.length > 0) {
+            msg += ` Errores: ${res.failed.length}. Revisa la consola para detalles.`;
+            console.error("Cursos fallidos:", res.failed);
+            toast(msg, 'warning');
+        } else {
+            toast(msg, 'success');
+        }
+
+        document.getElementById('releaseSisTextarea').value = '';
+        cancelReleaseSisPreview();
+    } catch (e) {
+        toast('Error liberando SIS ID: ' + (e.detail || e.message || e), 'danger');
     } finally {
         setLoading(btn, false);
     }

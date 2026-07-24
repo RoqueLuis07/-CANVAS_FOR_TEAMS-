@@ -175,8 +175,85 @@ async def bulk_delete_courses(req: BulkDeleteCoursesRequest):
             result["failed"].append({"course_id": cid, "name": course_name, "error": error.strip(" | ")})
         else:
             result["succeeded"].append({"course_id": cid, "name": course_name, "notes": error.strip(" | ")})
-            
+
     return result
+
+
+# ── Liberar SIS ID de cursos eliminados que bloquean su reuso ──────────────────
+#
+# Canvas no libera el sis_course_id cuando un curso se elimina (soft-delete):
+# el curso desaparece de los listados normales, pero el SIS ID sigue
+# "en uso" y bloquea crear un curso nuevo con ese mismo ID — típicamente
+# al recrear una materia en un período nuevo. Esto limpia el campo SIS ID
+# de esos cursos viejos (sin tocar su contenido) para liberar el ID.
+
+class ReleaseSisIdResolveRequest(BaseModel):
+    entries: list[str]
+
+
+@router.post("/release-sis-id/resolve", summary="Resolver cursos por SIS ID o ID de Canvas (previsualización)")
+async def resolve_release_sis_id(req: ReleaseSisIdResolveRequest):
+    seen: set[str] = set()
+
+    async def resolve_one(raw: str):
+        entry = raw.strip()
+        if not entry or entry in seen:
+            return None
+        seen.add(entry)
+
+        course = None
+        try:
+            course = await canvas.get(f"/courses/sis_course_id:{entry}")
+        except Exception:
+            pass
+        if not course:
+            try:
+                course = await canvas.get(f"/courses/{entry}")
+            except Exception:
+                pass
+
+        if not course:
+            return {"input": entry, "course_id": None, "name": None, "current_sis_id": None,
+                    "workflow_state": None, "found": False}
+
+        return {
+            "input": entry,
+            "course_id": str(course.get("id")),
+            "name": course.get("name"),
+            "current_sis_id": course.get("sis_course_id"),
+            "workflow_state": course.get("workflow_state"),
+            "found": True,
+        }
+
+    results = await asyncio.gather(*(resolve_one(e) for e in req.entries))
+    return [r for r in results if r is not None]
+
+
+class ReleaseSisIdRequest(BaseModel):
+    course_ids: list[str]
+
+
+@router.post("/release-sis-id", summary="Liberar el SIS ID de una lista de cursos (sin tocar su contenido)")
+async def release_sis_id(req: ReleaseSisIdRequest):
+    result = {"succeeded": [], "failed": []}
+
+    for cid in req.course_ids:
+        name = f"Curso {cid}"
+        try:
+            course = await canvas.get(f"/courses/{cid}")
+            name = course.get("name", name)
+        except Exception as e:
+            result["failed"].append({"course_id": cid, "name": name, "error": f"No se pudo obtener el curso: {e}"})
+            continue
+
+        try:
+            await canvas.put(f"/courses/{cid}", {"course": {"sis_course_id": ""}})
+            result["succeeded"].append({"course_id": cid, "name": name})
+        except Exception as e:
+            result["failed"].append({"course_id": cid, "name": name, "error": str(e)})
+
+    return result
+
 
 @router.delete("/{course_id}", summary="Eliminar / concluir curso")
 async def delete_course(
