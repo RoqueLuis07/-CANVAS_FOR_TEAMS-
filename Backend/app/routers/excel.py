@@ -2263,7 +2263,25 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                 data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
                 canvas_id = data.get("id")
             except Exception as e:
-                error_canvas = str(e)
+                err_text = getattr(e, "detail", None) or str(e)
+                # Diagnóstico: si el rechazo es por SIS ID duplicado, casi
+                # siempre es un curso eliminado (soft-delete) que retiene el
+                # SIS ID sin aparecer en los listados normales. Se identifica
+                # el curso real que lo está bloqueando para no tener que
+                # buscarlo a mano — NO se reutiliza automáticamente.
+                if sis_id and sis_id != "None" and "sis" in err_text.lower() and "already" in err_text.lower():
+                    try:
+                        blocking = await canvas.get(f"/courses/sis_course_id:{sis_id}")
+                        if blocking:
+                            err_text += (
+                                f" — El SIS ID '{sis_id}' ya está en uso por el curso ID {blocking.get('id')} "
+                                f"'{blocking.get('name')}' (estado: {blocking.get('workflow_state')}). "
+                                f"Si ese curso está eliminado y no lo necesitás, hay que liberar el SIS ID "
+                                f"desde Canvas (o asignarle un SIS ID distinto a esta fila)."
+                            )
+                    except Exception:
+                        pass
+                error_canvas = err_text
 
             # 1b. Inscribir al docente indicado como Teacher del curso recién creado
             if canvas_id and docente_email:
