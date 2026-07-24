@@ -2010,13 +2010,12 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
             courses_already_created += 1
         else:
             courses_to_create += 1
-            if len(course_details) < 10:
-                course_details.append({
-                    "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
-                    "sis_id": row_vals[col_sis] if col_sis >= 0 else "",
-                    "docente": row_vals[col_docente] if col_docente >= 0 else ""
-                })
-            
+            course_details.append({
+                "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
+                "sis_id": row_vals[col_sis] if col_sis >= 0 else "",
+                "docente": row_vals[col_docente] if col_docente >= 0 else ""
+            })
+
         if len(sample_rows) < 10:
             sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
             
