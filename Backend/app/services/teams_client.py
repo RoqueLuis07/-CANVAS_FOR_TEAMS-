@@ -458,6 +458,20 @@ async def get_subscribed_skus() -> list:
         return r.json().get("value", [])
 
 
+async def list_deleted_groups() -> list[dict]:
+    """Lista los Microsoft 365 Groups eliminados recientemente — recuperables
+    desde la papelera de Azure AD hasta 30 días después de su borrado."""
+    return await paginate(
+        "/directory/deletedItems/microsoft.graph.group",
+        params={"$select": "id,displayName,mailNickname,createdDateTime,deletedDateTime"},
+    )
+
+
+async def restore_deleted_group(group_id: str) -> dict:
+    """Restaura un grupo eliminado (dentro de la ventana de 30 días)."""
+    return await post(f"/directory/deletedItems/{group_id}/restore", {})
+
+
 async def get_group_name_by_id(group_id: str) -> str | None:
     """Get Microsoft 365 Group name by ID."""
     try:

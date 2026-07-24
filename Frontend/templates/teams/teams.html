@@ -9,6 +9,7 @@
     <button class="btn btn-primary" onclick="openExcelMembers()"><i class="bi bi-file-earmark-excel-fill me-1"></i>Añadir miembros Excel</button>
     <a href="/excel/template/teams-members" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>Plantilla Excel</a>
     <button class="btn btn-outline-danger" onclick="openTeamsIdDeleteModal()"><i class="bi bi-list-ol me-1"></i>Eliminación Masiva</button>
+    <button class="btn btn-outline-warning" onclick="openDeletedGroupsModal()"><i class="bi bi-recycle me-1"></i>Grupos Eliminados (Papelera)</button>
   </div>
 </div>
 
@@ -81,6 +82,79 @@
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
         <button type="button" class="btn btn-danger" id="btnExecuteTeamsIdDelete" onclick="executeTeamsIdDelete()" disabled>
             <i class="bi bi-exclamation-triangle-fill me-1"></i>Eliminar Seleccionados (<span id="selectedTeamsIdDeleteCount">0</span>)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Grupos Eliminados (Papelera de 30 días) -->
+<div class="modal fade" id="deletedGroupsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content border-warning">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title"><i class="bi bi-recycle me-2"></i>Grupos Eliminados (Papelera de 30 días)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bg-light">
+        <div class="alert alert-info">
+          Los grupos eliminados de Microsoft 365 quedan recuperables durante <b>30 días</b> antes de purgarse
+          definitivamente. Seleccioná los que quieras verificar — el sistema los <b>restaura</b> y cuenta sus
+          propietarios y miembros reales, para que decidas cuáles conservar (tenían gente matriculada) y cuáles
+          volver a eliminar (estaban vacíos).
+        </div>
+
+        <div id="deletedGroupsListWrap">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="selectAllDeletedGroups" onchange="toggleSelectAllDeletedGroups()">
+              <label class="form-check-label fw-bold text-warning" for="selectAllDeletedGroups">Seleccionar Todos</label>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadDeletedGroups()"><i class="bi bi-arrow-clockwise me-1"></i>Recargar</button>
+          </div>
+          <div class="table-responsive border rounded bg-white" style="max-height:350px; overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th style="width: 40px;"></th>
+                  <th>Nombre</th>
+                  <th>Eliminado el</th>
+                </tr>
+              </thead>
+              <tbody id="deletedGroupsList">
+                <tr><td colspan="3" class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="deletedGroupsResultsWrap" style="display:none;" class="mt-3">
+          <h6 class="fw-bold">Resultado de la verificación</h6>
+          <div class="table-responsive border rounded bg-white" style="max-height:350px; overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th>Nombre</th>
+                  <th>Propietarios</th>
+                  <th>Miembros</th>
+                  <th>¿Tenía gente matriculada?</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="deletedGroupsResults"></tbody>
+            </table>
+          </div>
+          <small class="text-muted d-block mt-2">
+            "Miembros" incluye a los propietarios — si Miembros &gt; Propietarios, hay gente matriculada además del
+            admin/docente/coordinadores. Todos los grupos verificados ya quedaron <b>restaurados y activos</b>;
+            los que marques como vacíos podés volver a eliminarlos con "Eliminación Masiva" pegando su ID.
+          </small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-warning" id="btnRestoreAndCheck" onclick="executeRestoreAndCheck()" disabled>
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar y Verificar (<span id="selectedDeletedGroupsCount">0</span>)
         </button>
       </div>
     </div>
@@ -445,6 +519,106 @@ async function executeTeamsIdDelete() {
     loadTeams();
   } catch (e) {
     toast('Error durante la eliminación masiva: ' + (e.detail || e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+// ==========================================
+// GRUPOS ELIMINADOS (PAPELERA DE 30 DIAS)
+// ==========================================
+
+let deletedGroupsModal = null;
+let currentDeletedGroups = [];
+
+function openDeletedGroupsModal() {
+  if (!deletedGroupsModal) {
+    deletedGroupsModal = new bootstrap.Modal(document.getElementById('deletedGroupsModal'));
+  }
+  document.getElementById('deletedGroupsListWrap').style.display = 'block';
+  document.getElementById('deletedGroupsResultsWrap').style.display = 'none';
+  document.getElementById('btnRestoreAndCheck').style.display = 'inline-block';
+  deletedGroupsModal.show();
+  loadDeletedGroups();
+}
+
+async function loadDeletedGroups() {
+  const tbody = document.getElementById('deletedGroupsList');
+  tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></td></tr>';
+  document.getElementById('selectAllDeletedGroups').checked = false;
+  updateSelectedDeletedGroupsCount();
+
+  try {
+    currentDeletedGroups = await api.get('/teams/teams/deleted');
+    if (currentDeletedGroups.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">No hay grupos eliminados en la papelera.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = currentDeletedGroups.map(g => `
+      <tr>
+        <td><input class="form-check-input deleted-group-checkbox" type="checkbox" value="${g.id}" onchange="updateSelectedDeletedGroupsCount()"></td>
+        <td>${g.displayName || '—'}</td>
+        <td class="small text-muted">${g.deletedDateTime ? new Date(g.deletedDateTime).toLocaleString('es-ES') : '—'}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-4">Error cargando grupos eliminados: ${e.detail || e.message || e}</td></tr>`;
+  }
+}
+
+function toggleSelectAllDeletedGroups() {
+  const selectAll = document.getElementById('selectAllDeletedGroups').checked;
+  document.querySelectorAll('.deleted-group-checkbox').forEach(cb => cb.checked = selectAll);
+  updateSelectedDeletedGroupsCount();
+}
+
+function updateSelectedDeletedGroupsCount() {
+  const selected = document.querySelectorAll('.deleted-group-checkbox:checked').length;
+  document.getElementById('selectedDeletedGroupsCount').innerText = selected;
+  document.getElementById('btnRestoreAndCheck').disabled = selected === 0;
+}
+
+async function executeRestoreAndCheck() {
+  const checkboxes = document.querySelectorAll('.deleted-group-checkbox:checked');
+  const groupIds = Array.from(checkboxes).map(cb => cb.value);
+  if (groupIds.length === 0) return;
+
+  if (!confirm(`¿Restaurar y verificar ${groupIds.length} grupo(s)? Quedarán activos de nuevo mientras se cuentan sus miembros — los que resulten vacíos los podés volver a eliminar después con "Eliminación Masiva".`)) return;
+
+  const btn = document.getElementById('btnRestoreAndCheck');
+  setLoading(btn, true);
+
+  try {
+    const results = await api.post('/teams/teams/deleted/restore-and-check', { group_ids: groupIds });
+
+    const tbody = document.getElementById('deletedGroupsResults');
+    tbody.innerHTML = results.map(r => {
+      if (r.error && !r.restored) {
+        return `<tr><td>${r.name || r.group_id}</td><td colspan="2" class="text-danger small">${r.error}</td><td colspan="2"></td></tr>`;
+      }
+      const hasExtra = (r.members_count ?? 0) > (r.owners_count ?? 0);
+      const badge = hasExtra
+        ? '<span class="badge bg-success">Sí — tenía gente matriculada</span>'
+        : '<span class="badge bg-secondary">No — solo owners (parece duplicado vacío)</span>';
+      return `
+        <tr>
+          <td>${r.name || r.group_id}</td>
+          <td>${r.owners_count ?? '—'}</td>
+          <td>${r.members_count ?? '—'}</td>
+          <td>${badge}</td>
+          <td><button class="btn btn-sm btn-link p-0" onclick="copyToClipboard('${r.group_id}', 'ID')">Copiar ID</button></td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('deletedGroupsListWrap').style.display = 'none';
+    document.getElementById('deletedGroupsResultsWrap').style.display = 'block';
+    document.getElementById('btnRestoreAndCheck').style.display = 'none';
+
+    const withMembers = results.filter(r => (r.members_count ?? 0) > (r.owners_count ?? 0)).length;
+    toast(`${results.length} restaurados y verificados. ${withMembers} tenían gente matriculada.`, withMembers > 0 ? 'warning' : 'success');
+    loadTeams();
+  } catch (e) {
+    toast('Error restaurando/verificando: ' + (e.detail || e.message || e), 'danger');
   } finally {
     setLoading(btn, false);
   }

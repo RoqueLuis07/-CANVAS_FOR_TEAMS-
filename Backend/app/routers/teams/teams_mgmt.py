@@ -77,6 +77,60 @@ async def create_team(body: TeamsTeamCreateSimple):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+# NOTA: /deleted debe registrarse ANTES de /{team_id} — de lo contrario
+# Starlette matchea GET /deleted contra la ruta genérica /{team_id} primero
+# (mismo método, registrada antes) y nunca llega a este endpoint.
+@router.get("/deleted", summary="Listar grupos eliminados recuperables (papelera de 30 días)")
+async def list_deleted_teams():
+    return await graph.list_deleted_groups()
+
+
+class RestoreAndCheckRequest(BaseModel):
+    group_ids: list[str]
+
+
+@router.post("/deleted/restore-and-check", summary="Restaurar grupos eliminados y contar propietarios/miembros")
+async def restore_and_check_deleted(req: RestoreAndCheckRequest):
+    """Restaura cada grupo de la papelera y cuenta sus propietarios y miembros
+    reales, para decidir con datos si conviene dejarlo restaurado (tenía gente
+    matriculada) o volver a eliminarlo (estaba vacío, era un duplicado)."""
+    results = []
+
+    for gid in req.group_ids:
+        entry = {"group_id": gid, "name": None, "restored": False,
+                  "owners_count": None, "members_count": None, "error": None}
+        try:
+            await graph.restore_deleted_group(gid)
+            entry["restored"] = True
+        except Exception as e:
+            entry["error"] = f"No se pudo restaurar: {e}"
+            results.append(entry)
+            continue
+
+        try:
+            info = await graph.get(f"/groups/{gid}", params={"$select": "displayName"})
+            entry["name"] = info.get("displayName")
+        except Exception:
+            pass
+
+        try:
+            owners = await graph.paginate(f"/groups/{gid}/owners", params={"$select": "id"})
+            entry["owners_count"] = len(owners)
+        except Exception as e:
+            entry["error"] = f"Restaurado, pero no se pudo contar propietarios: {e}"
+
+        try:
+            members = await graph.paginate(f"/groups/{gid}/members", params={"$select": "id"})
+            entry["members_count"] = len(members)
+        except Exception as e:
+            prev = entry["error"] + " | " if entry["error"] else ""
+            entry["error"] = f"{prev}No se pudo contar miembros: {e}"
+
+        results.append(entry)
+
+    return results
+
+
 @router.get("/{team_id}", summary="Obtener Team por ID")
 async def get_team(team_id: str):
     try:
