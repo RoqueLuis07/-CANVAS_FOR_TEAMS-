@@ -2233,6 +2233,11 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
         coordinadores_teams_ok: list[str] = []
         coordinadores_teams_failed: list[str] = []
 
+        # course_code_str combina nombre+período — se usa SOLO para derivar el
+        # mailNickname del equipo de Teams (necesita distinguir períodos, ver
+        # search_group_by_name_and_nickname_prefix). El código del curso en
+        # Canvas (course_code) debe ser igual al nombre del curso, sin el
+        # período pegado atrás — eso es lo que se pedía corregir.
         course_code_str = f"{nombre} {periodo}".strip()
 
         # 1. Canvas Creation
@@ -2253,7 +2258,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                     payload = {
                         "course": {
                             "name": nombre,
-                            "course_code": course_code_str,
+                            "course_code": nombre,
                         }
                     }
                     if sis_id and sis_id != "None":
