@@ -8,6 +8,7 @@
   <div class="ms-auto d-flex gap-2 flex-wrap">
     <button class="btn btn-primary" onclick="openExcelMembers()"><i class="bi bi-file-earmark-excel-fill me-1"></i>Añadir miembros Excel</button>
     <a href="/excel/template/teams-members" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>Plantilla Excel</a>
+    <button class="btn btn-outline-danger" onclick="openTeamsIdDeleteModal()"><i class="bi bi-list-ol me-1"></i>Eliminación Masiva</button>
   </div>
 </div>
 
@@ -20,6 +21,69 @@
   </div>
   <div id="tableWrap" class="table-responsive">
     <div class="text-center py-5"><span class="spinner-border"></span></div>
+  </div>
+</div>
+
+<!-- Modal: Eliminación masiva de Teams por ID o nombre -->
+<div class="modal fade" id="teamsIdDeleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content border-danger">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title"><i class="bi bi-list-ol me-2"></i>Eliminar Equipos por ID o Nombre</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bg-light">
+        <div id="teamsIdDeleteFormWrap">
+            <div class="alert alert-info">
+                Pega <b>IDs de grupo/Team</b> o <b>nombres exactos de equipo</b> a eliminar (uno por línea, o separados por coma). Se puede mezclar IDs y nombres en la misma lista.
+            </div>
+            <label class="form-label fw-bold">IDs o Nombres de Equipo</label>
+            <textarea class="form-control mb-3" id="teamsIdDeleteTextarea" rows="6" placeholder="a1b2c3d4-...&#10;Gestión de Empresas GA2026&#10;Matemática II"></textarea>
+            <div class="d-flex justify-content-end">
+                <button class="btn btn-danger" id="btnPreviewTeamsIdDelete" onclick="previewTeamsIdDelete()">
+                    <i class="bi bi-search me-1"></i>Verificar Equipos
+                </button>
+            </div>
+        </div>
+
+        <div id="teamsIdDeletePreviewWrap" style="display:none;">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold mb-0">Equipos Encontrados (<span id="teamsIdDeleteCount">0</span>)</h6>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="selectAllTeamsIdDelete" onchange="toggleSelectAllTeamsIdDelete()">
+                    <label class="form-check-label fw-bold text-danger" for="selectAllTeamsIdDelete">Seleccionar Todos</label>
+                </div>
+            </div>
+            <div class="table-responsive border rounded bg-white" style="max-height:300px; overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th style="width: 40px;"></th>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Ingresado como</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teamsIdDeleteList"></tbody>
+                </table>
+            </div>
+            <div id="teamsIdDeleteNotFoundWrap" style="display:none;" class="alert alert-warning mt-3 mb-0">
+                <strong>No encontrados:</strong> <span id="teamsIdDeleteNotFound"></span>
+            </div>
+            <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-outline-secondary me-2" onclick="cancelTeamsIdDeletePreview()">
+                    <i class="bi bi-arrow-left me-1"></i>Volver
+                </button>
+            </div>
+        </div>
+      </div>
+      <div class="modal-footer" id="teamsIdDeleteFooter" style="display:none;">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btnExecuteTeamsIdDelete" onclick="executeTeamsIdDelete()" disabled>
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>Eliminar Seleccionados (<span id="selectedTeamsIdDeleteCount">0</span>)
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -254,6 +318,136 @@ function deleteTeam(id, name) {
     try { await api.del('/teams/teams/' + id); toast('Team eliminado', 'success'); loadTeams(); }
     catch(e) { toast('Error: ' + e.message, 'danger'); }
   });
+}
+
+// ==========================================
+// ELIMINACION MASIVA DE TEAMS (POR ID O NOMBRE)
+// ==========================================
+
+let teamsIdDeleteModal = null;
+let currentTeamsIdCandidates = [];
+
+function openTeamsIdDeleteModal() {
+  if (!teamsIdDeleteModal) {
+    teamsIdDeleteModal = new bootstrap.Modal(document.getElementById('teamsIdDeleteModal'));
+  }
+  document.getElementById('teamsIdDeleteTextarea').value = '';
+  document.getElementById('teamsIdDeleteFormWrap').style.display = 'block';
+  document.getElementById('teamsIdDeletePreviewWrap').style.display = 'none';
+  document.getElementById('teamsIdDeleteFooter').style.display = 'none';
+  currentTeamsIdCandidates = [];
+  teamsIdDeleteModal.show();
+}
+
+function _parseTeamsEntryList(raw) {
+  return [...new Set(
+    raw.split(/[\n,;]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+  )];
+}
+
+async function previewTeamsIdDelete() {
+  const raw = document.getElementById('teamsIdDeleteTextarea').value;
+  const entries = _parseTeamsEntryList(raw);
+
+  if (entries.length === 0) {
+    toast('Ingresa al menos un ID o nombre de equipo.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btnPreviewTeamsIdDelete');
+  setLoading(btn, true);
+
+  try {
+    const resolved = await api.post('/teams/teams/resolve', { entries });
+    currentTeamsIdCandidates = resolved.filter(r => r.found);
+    const notFound = resolved.filter(r => !r.found);
+
+    const tbody = document.getElementById('teamsIdDeleteList');
+    let html = '';
+    currentTeamsIdCandidates.forEach(r => {
+      html += `
+      <tr>
+        <td><input class="form-check-input teams-id-checkbox" type="checkbox" value="${r.team_id}" onchange="updateSelectedTeamsIdDeleteCount()"></td>
+        <td class="small text-muted">${r.team_id}</td>
+        <td>${r.name}</td>
+        <td><span class="badge bg-secondary">${r.input}</span></td>
+      </tr>`;
+    });
+    if (currentTeamsIdCandidates.length === 0) {
+      html = `<tr><td colspan="4" class="text-center text-muted">Ningún equipo encontrado.</td></tr>`;
+    }
+    tbody.innerHTML = html;
+    document.getElementById('teamsIdDeleteCount').innerText = currentTeamsIdCandidates.length;
+    document.getElementById('selectAllTeamsIdDelete').checked = false;
+
+    if (notFound.length > 0) {
+      document.getElementById('teamsIdDeleteNotFoundWrap').style.display = 'block';
+      document.getElementById('teamsIdDeleteNotFound').innerText = notFound.map(r => r.input).join(', ');
+    } else {
+      document.getElementById('teamsIdDeleteNotFoundWrap').style.display = 'none';
+    }
+
+    document.getElementById('teamsIdDeleteFormWrap').style.display = 'none';
+    document.getElementById('teamsIdDeletePreviewWrap').style.display = 'block';
+    document.getElementById('teamsIdDeleteFooter').style.display = 'flex';
+    updateSelectedTeamsIdDeleteCount();
+  } catch (e) {
+    toast('Error verificando equipos: ' + (e.detail || e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function cancelTeamsIdDeletePreview() {
+  document.getElementById('teamsIdDeleteFormWrap').style.display = 'block';
+  document.getElementById('teamsIdDeletePreviewWrap').style.display = 'none';
+  document.getElementById('teamsIdDeleteFooter').style.display = 'none';
+}
+
+function toggleSelectAllTeamsIdDelete() {
+  const selectAll = document.getElementById('selectAllTeamsIdDelete').checked;
+  document.querySelectorAll('.teams-id-checkbox').forEach(cb => cb.checked = selectAll);
+  updateSelectedTeamsIdDeleteCount();
+}
+
+function updateSelectedTeamsIdDeleteCount() {
+  const selected = document.querySelectorAll('.teams-id-checkbox:checked').length;
+  document.getElementById('selectedTeamsIdDeleteCount').innerText = selected;
+  document.getElementById('btnExecuteTeamsIdDelete').disabled = selected === 0;
+}
+
+async function executeTeamsIdDelete() {
+  const checkboxes = document.querySelectorAll('.teams-id-checkbox:checked');
+  const teamIds = Array.from(checkboxes).map(cb => cb.value);
+
+  if (teamIds.length === 0) return;
+
+  if (!confirm(`¿Está absolutamente seguro de ELIMINAR los ${teamIds.length} equipos seleccionados? Esta acción NO SE PUEDE DESHACER.`)) return;
+
+  const btn = document.getElementById('btnExecuteTeamsIdDelete');
+  setLoading(btn, true);
+
+  try {
+    const res = await api.post('/teams/teams/bulk-delete', { team_ids: teamIds });
+
+    let msg = `Éxito: ${res.succeeded.length} eliminados.`;
+    if (res.failed.length > 0) {
+      msg += ` Errores: ${res.failed.length}. Revisa la consola para detalles.`;
+      console.error("Equipos fallidos:", res.failed);
+      toast(msg, 'warning');
+    } else {
+      toast(msg, 'success');
+    }
+
+    teamsIdDeleteModal.hide();
+    loadTeams();
+  } catch (e) {
+    toast('Error durante la eliminación masiva: ' + (e.detail || e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
 }
 
 function openExcelMembers() {

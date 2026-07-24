@@ -30,6 +30,20 @@ _TRANSIENT = (
     httpx.ReadError,
 )
 
+def safe_mail_nickname(name: str, suffix: str = "") -> str:
+    """Genera un mailNickname válido para Microsoft Graph a partir de un nombre libre.
+
+    Graph rechaza el grupo con 400 'Invalid value specified for property
+    mailNickname' si el resultado supera 64 caracteres — algo fácil de pisar
+    con nombres de curso/equipo largos. Se trunca la base ANTES de agregar
+    el sufijo (típicamente un timestamp para unicidad) para no superar el
+    límite nunca."""
+    base = re.sub(r'[^a-zA-Z0-9]', '', name or '').lower()
+    max_base_len = 64 - len(suffix)
+    base = base[:max_base_len] if base else ""
+    return f"{base}{suffix}" if base else f"grupo{int(time.time())}"[:64]
+
+
 def _should_retry(e: Exception) -> bool:
     if isinstance(e, _TRANSIENT):
         return True

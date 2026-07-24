@@ -62,9 +62,7 @@ class TeamsTeamCreateSimple(BaseModel):
 
 @router.post("", summary="Crear un Team nuevo")
 async def create_team(body: TeamsTeamCreateSimple):
-    nickname = re.sub(r'[^a-zA-Z0-9]', '', body.display_name).lower()
-    if not nickname:
-        nickname = f"team{int(time.time())}"
+    nickname = graph.safe_mail_nickname(body.display_name)
     try:
         return await create_team_via_group(
             display_name=body.display_name,
@@ -113,6 +111,63 @@ async def delete_team(team_id: str):
         raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ── Eliminación masiva por ID o nombre ─────────────────────────────────────────
+
+_UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
+
+class TeamsResolveRequest(BaseModel):
+    entries: list[str] = Field(..., description="IDs de grupo/Team o nombres de equipo, uno por entrada")
+
+
+@router.post("/resolve", summary="Resolver Teams por ID o nombre (previsualización antes de eliminar)")
+async def resolve_teams(req: TeamsResolveRequest):
+    """Acepta una mezcla de IDs de grupo/Team y nombres de equipo, y devuelve
+    para cada entrada si se encontró el equipo real y su ID/nombre resuelto —
+    para que el usuario confirme antes de eliminar en lote."""
+    seen: set[str] = set()
+
+    async def resolve_one(raw: str):
+        entry = raw.strip()
+        if not entry or entry in seen:
+            return None
+        seen.add(entry)
+
+        if _UUID_RE.match(entry):
+            name = await graph.get_group_name_by_id(entry)
+            return {"input": entry, "team_id": entry, "name": name, "found": name is not None}
+        else:
+            team_id = await graph.search_group_by_name(entry)
+            name = await graph.get_group_name_by_id(team_id) if team_id else None
+            return {"input": entry, "team_id": team_id, "name": name or entry, "found": team_id is not None}
+
+    results = await asyncio.gather(*(resolve_one(e) for e in req.entries))
+    return [r for r in results if r is not None]
+
+
+class BulkDeleteTeamsRequest(BaseModel):
+    team_ids: list[str]
+
+
+@router.post("/bulk-delete", summary="Eliminación masiva de Teams por ID")
+async def bulk_delete_teams(req: BulkDeleteTeamsRequest):
+    """Toma una lista de IDs de grupo/Team (ya resueltos vía /resolve) y los elimina en lote."""
+    result = {"succeeded": [], "failed": []}
+
+    async def delete_one(team_id: str):
+        name = await graph.get_group_name_by_id(team_id) or team_id
+        try:
+            await graph.delete(f"/groups/{team_id}")
+            result["succeeded"].append({"team_id": team_id, "name": name})
+        except Exception as e:
+            result["failed"].append({"team_id": team_id, "name": name, "error": str(e)})
+
+    for tid in req.team_ids:
+        await delete_one(tid)
+
+    return result
 
 
 # ── Members ───────────────────────────────────────────────────────────────────

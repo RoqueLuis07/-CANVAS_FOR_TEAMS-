@@ -61,16 +61,9 @@ def _norm(s: str) -> str:
 def _safe_mail_nickname(name: str, suffix: str = "") -> str:
     """Genera un mailNickname válido para Microsoft Graph a partir de un nombre libre.
 
-    Graph rechaza el grupo con 400 'Invalid value specified for property
-    mailNickname' si el resultado supera 64 caracteres — algo fácil de pisar
-    con nombres de curso largos (ej. "Comportamiento del Consumidor/Consumer
-    Behavior/Business Management..."). Se trunca la base ANTES de agregar el
-    sufijo (típicamente un timestamp) para no superar el límite nunca."""
-    import time
-    base = re.sub(r'[^a-zA-Z0-9]', '', name or '').lower()
-    max_base_len = 64 - len(suffix)
-    base = base[:max_base_len] if base else ""
-    return f"{base}{suffix}" if base else f"grupo{int(time.time())}"[:64]
+    Ver app.services.teams_client.safe_mail_nickname (misma lógica, centralizada
+    ahí porque también la necesita el router de Teams)."""
+    return graph.safe_mail_nickname(name, suffix=suffix)
 
 
 def _clean_cedula(v: str) -> str:
