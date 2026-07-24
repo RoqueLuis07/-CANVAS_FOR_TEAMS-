@@ -1614,17 +1614,15 @@ async function executeReleaseSis() {
     try {
         const res = await api.post('/canvas/courses/release-sis-id', { course_ids: courseIds });
 
-        let msg = `Éxito: ${res.succeeded.length} SIS ID liberados.`;
-        if (res.failed.length > 0) {
-            msg += ` Errores: ${res.failed.length}. Revisa la consola para detalles.`;
-            console.error("Cursos fallidos:", res.failed);
-            toast(msg, 'warning');
-        } else {
-            toast(msg, 'success');
-        }
+        renderReleaseErrorDetails('releaseSisErrorsWrap', res.failed, 'course_id');
 
-        document.getElementById('releaseSisTextarea').value = '';
-        cancelReleaseSisPreview();
+        if (res.failed.length > 0) {
+            toast(`Éxito: ${res.succeeded.length} SIS ID liberados. Errores: ${res.failed.length} (detalle abajo).`, 'warning');
+        } else {
+            toast(`Éxito: ${res.succeeded.length} SIS ID liberados.`, 'success');
+            document.getElementById('releaseSisTextarea').value = '';
+            cancelReleaseSisPreview();
+        }
     } catch (e) {
         toast('Error liberando SIS ID: ' + (e.detail || e.message || e), 'danger');
     } finally {
@@ -1723,22 +1721,47 @@ async function executeReleaseTermSis() {
     try {
         const res = await api.post('/canvas/terms/release-sis-id', { term_ids: termIds });
 
-        let msg = `Éxito: ${res.succeeded.length} SIS ID liberados.`;
-        if (res.failed.length > 0) {
-            msg += ` Errores: ${res.failed.length}. Revisa la consola para detalles.`;
-            console.error("Períodos fallidos:", res.failed);
-            toast(msg, 'warning');
-        } else {
-            toast(msg, 'success');
-        }
+        renderReleaseErrorDetails('releaseTermSisErrorsWrap', res.failed, 'term_id');
 
-        document.getElementById('releaseTermSisTextarea').value = '';
-        cancelReleaseTermSisPreview();
+        if (res.failed.length > 0) {
+            toast(`Éxito: ${res.succeeded.length} SIS ID liberados. Errores: ${res.failed.length} (detalle abajo).`, 'warning');
+        } else {
+            toast(`Éxito: ${res.succeeded.length} SIS ID liberados.`, 'success');
+            document.getElementById('releaseTermSisTextarea').value = '';
+            cancelReleaseTermSisPreview();
+        }
     } catch (e) {
         toast('Error liberando SIS ID: ' + (e.detail || e.message || e), 'danger');
     } finally {
         setLoading(btn, false);
     }
+}
+
+// Muestra el detalle de errores de una operación en lote directamente en
+// pantalla (en vez de solo en la consola del navegador, que muchos usuarios
+// no llegan a abrir).
+function renderReleaseErrorDetails(containerId, failed, idKey) {
+    let container = document.getElementById(containerId);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        // Se inserta después del botón "Liberar Seleccionados" correspondiente
+        const anchor = containerId === 'releaseTermSisErrorsWrap'
+            ? document.getElementById('releaseTermSisPreviewWrap')
+            : document.getElementById('releaseSisPreviewWrap');
+        anchor.appendChild(container);
+    }
+    if (!failed || failed.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = `
+        <div class="alert alert-danger mt-3 mb-0">
+            <strong>Detalle de errores:</strong>
+            <ul class="mb-0 mt-2">
+                ${failed.map(f => `<li><b>${f.name || f[idKey]}</b> (ID ${f[idKey]}): ${f.error}</li>`).join('')}
+            </ul>
+        </div>`;
 }
 
 
