@@ -2237,31 +2237,43 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
 
         # 1. Canvas Creation
         if default_plat in ("canvas", "both"):
+            # Si ya existe un curso con este SIS ID exacto (el SIS ID ya es
+            # específico de nombre+período por diseño), lo reutilizamos en
+            # vez de intentar crear uno duplicado.
+            if sis_id and sis_id != "None":
+                try:
+                    existing = await canvas.get(f"/courses/sis_course_id:{sis_id}")
+                    if existing:
+                        canvas_id = existing.get("id")
+                except Exception:
+                    pass
+
             try:
-                payload = {
-                    "course": {
-                        "name": nombre,
-                        "course_code": course_code_str,
+                if not canvas_id:
+                    payload = {
+                        "course": {
+                            "name": nombre,
+                            "course_code": course_code_str,
+                        }
                     }
-                }
-                if sis_id and sis_id != "None":
-                    payload["course"]["sis_course_id"] = sis_id
-                if periodo:
-                    term_val = f"sis_term_id:{periodo}"
-                    if periodo.isdigit():
-                        term_val = periodo
-                    else:
-                        p_lower = periodo.strip().lower()
-                        for t in terms_data:
-                            t_name = str(t.get("name") or "").strip().lower()
-                            t_sis = str(t.get("sis_term_id") or "").strip().lower()
-                            if t_name == p_lower or str(t.get("id")) == periodo or t_sis == p_lower:
-                                term_val = t.get("id")
-                                break
-                    payload["course"]["term_id"] = term_val
-    
-                data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
-                canvas_id = data.get("id")
+                    if sis_id and sis_id != "None":
+                        payload["course"]["sis_course_id"] = sis_id
+                    if periodo:
+                        term_val = f"sis_term_id:{periodo}"
+                        if periodo.isdigit():
+                            term_val = periodo
+                        else:
+                            p_lower = periodo.strip().lower()
+                            for t in terms_data:
+                                t_name = str(t.get("name") or "").strip().lower()
+                                t_sis = str(t.get("sis_term_id") or "").strip().lower()
+                                if t_name == p_lower or str(t.get("id")) == periodo or t_sis == p_lower:
+                                    term_val = t.get("id")
+                                    break
+                        payload["course"]["term_id"] = term_val
+
+                    data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
+                    canvas_id = data.get("id")
             except Exception as e:
                 err_text = getattr(e, "detail", None) or str(e)
                 # Diagnóstico: si el rechazo es por SIS ID duplicado, casi
@@ -2361,7 +2373,14 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                 await asyncio.gather(*(_resolve_coordinador_teams(e) for e in coordinador_emails))
 
             try:
-                nickname = _safe_mail_nickname(course_code_str, suffix=str(int(time.time() * 1000) % 100000))
+                # base_nickname identifica nombre+período (sin el sufijo random
+                # de unicidad). Si ya existe un equipo con el mismo displayName
+                # Y cuyo mailNickname arranca con esta base, es el MISMO curso
+                # del MISMO período — se reutiliza. Si el nombre coincide pero
+                # el mailNickname no (otro período con la misma materia), NO
+                # se reutiliza: se crea un equipo nuevo para este período.
+                base_nickname = _safe_mail_nickname(course_code_str)
+                teams_id = await graph.search_group_by_name_and_nickname_prefix(nombre, base_nickname)
 
                 owner_ids = []
                 try:
@@ -2375,14 +2394,27 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                     if coord_id not in owner_ids:
                         owner_ids.append(coord_id)
 
-                new_team = await create_team_via_group(
-                    display_name=nombre,
-                    mail_nickname=nickname,
-                    description=f"Grupo para {nombre}",
-                    visibility="Private",
-                    owner_ids=owner_ids
-                )
-                teams_id = new_team.get("id")
+                if not teams_id:
+                    nickname = f"{base_nickname}{int(time.time() * 1000) % 100000}"[:64]
+                    new_team = await create_team_via_group(
+                        display_name=nombre,
+                        mail_nickname=nickname,
+                        description=f"Grupo para {nombre}",
+                        visibility="Private",
+                        owner_ids=owner_ids
+                    )
+                    teams_id = new_team.get("id")
+                else:
+                    # Equipo reutilizado: asegurar que docente/coordinadores
+                    # queden como owners aunque ya existiera (ignorando "ya es owner").
+                    for oid in owner_ids:
+                        try:
+                            await graph.post(f"/groups/{teams_id}/owners/$ref", {
+                                "@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{oid}"
+                            })
+                        except Exception:
+                            pass
+
                 if docente_azure_id and teams_id:
                     docente_teams_ok = True
             except Exception as e:

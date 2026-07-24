@@ -262,7 +262,7 @@ async def paginate_limited(path: str, params: dict | None = None,
 async def search_group_by_name(name: str) -> str | None:
     """Search for a Microsoft 365 group by exactly matching the displayName. Returns the group ID if found."""
     try:
-        # We use $filter to get groups that start with the name to narrow it down, 
+        # We use $filter to get groups that start with the name to narrow it down,
         # then check exact match in Python to be safe (Graph API filtering can be finicky).
         # Note: $filter requires ConsistencyLevel: eventual for some properties, but startswith on displayName is usually supported.
         params = {
@@ -277,6 +277,33 @@ async def search_group_by_name(name: str) -> str | None:
         return None
     except Exception as e:
         print(f"Error searching group by name {name}: {e}")
+        return None
+
+
+async def search_group_by_name_and_nickname_prefix(name: str, nickname_prefix: str) -> str | None:
+    """Busca un grupo que coincida por displayName exacto Y cuyo mailNickname
+    empiece con el prefijo dado. El mismo nombre de curso puede repetirse en
+    distintos períodos académicos (materias que se repiten cada semestre) —
+    matchear solo por nombre reutilizaría por error el equipo de un período
+    viejo. El mailNickname se genera a partir de nombre+período (ver
+    safe_mail_nickname), así que su prefijo identifica el período real."""
+    if not nickname_prefix:
+        return None
+    try:
+        params = {
+            "$filter": f"startswith(displayName, '{name}')",
+            "$select": "id,displayName,mailNickname"
+        }
+        res = await get("/groups", params=params)
+        groups = res.get("value", [])
+        for g in groups:
+            if g.get("displayName", "").strip().lower() != name.strip().lower():
+                continue
+            if (g.get("mailNickname") or "").lower().startswith(nickname_prefix.lower()):
+                return g.get("id")
+        return None
+    except Exception as e:
+        print(f"Error searching group by name+nickname {name}: {e}")
         return None
 
 async def search_users(query: str, select: str | None = None) -> list[Any]:
