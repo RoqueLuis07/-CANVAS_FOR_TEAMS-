@@ -2013,7 +2013,8 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
             course_details.append({
                 "nombre": row_vals[col_nombre] if col_nombre >= 0 else "",
                 "sis_id": row_vals[col_sis] if col_sis >= 0 else "",
-                "docente": row_vals[col_docente] if col_docente >= 0 else ""
+                "docente": row_vals[col_docente] if col_docente >= 0 else "",
+                "row": {h: v for h, v in zip(headers_raw, row_vals) if h}
             })
 
         if len(sample_rows) < 10:

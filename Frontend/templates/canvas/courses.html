@@ -891,20 +891,28 @@ async function doPreviewCourses() {
       return;
     }
 
-    let tableHtml = `<div class="table-responsive mt-3" style="max-height:300px;overflow-y:auto">
+    const cols = preview.headers && preview.headers.length ? preview.headers : ['Nombre del Curso', 'SIS ID', 'Docente'];
+
+    let tableHtml = `<div class="table-responsive mt-3" style="max-height:400px;overflow-y:auto">
       <table class="table table-sm table-bordered table-striped table-hover">
         <thead class="table-light" style="position:sticky;top:0;z-index:1">
-          <tr><th class="text-center" style="width:50px">Nº</th><th>Nombre del Curso</th><th>SIS ID</th><th>Docente</th></tr>
+          <tr><th class="text-center" style="width:50px">Nº</th>${cols.map(h => `<th>${h}</th>`).join('')}</tr>
         </thead>
         <tbody>`;
 
     preview.course_details.forEach((c, idx) => {
-      tableHtml += `<tr>
-        <td class="text-center">${idx + 1}</td>
-        <td>${c.nombre}</td>
-        <td><span class="badge bg-secondary">${c.sis_id || '—'}</span></td>
-        <td>${c.docente ? `<span class="badge bg-info text-dark">${c.docente}</span>` : '<span class="text-muted">—</span>'}</td>
-      </tr>`;
+      const row = c.row || {};
+      tableHtml += `<tr><td class="text-center">${idx + 1}</td>`;
+      cols.forEach(h => {
+        const val = row[h] ?? '';
+        const hLower = h.toLowerCase();
+        if (hLower.includes('docente') || hLower.includes('instructor') || hLower.includes('profesor')) {
+          tableHtml += `<td>${val ? `<span class="badge bg-info text-dark">${val}</span>` : '<span class="text-muted">—</span>'}</td>`;
+        } else {
+          tableHtml += `<td>${val || '<span class="text-muted">—</span>'}</td>`;
+        }
+      });
+      tableHtml += '</tr>';
     });
     tableHtml += '</tbody></table></div>';
 
