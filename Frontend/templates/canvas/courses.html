@@ -75,7 +75,7 @@
         <div id="coursesOdPreviewWrap" style="display:none;">
             <div id="coursesOdPreviewContent"></div>
             <div class="d-flex justify-content-end gap-2 mt-4">
-              <button type="button" class="btn btn-outline-secondary" onclick="cancelPreviewCourses()">Cancelar y Volver</button>
+              <button type="button" class="btn btn-outline-secondary" id="btnCancelCourses" onclick="cancelPreviewCourses()">Cancelar y Volver</button>
               <button type="button" class="btn btn-success" id="btnConfirmCourses" onclick="executeCreateCourses()">
                 <i class="bi bi-check-circle me-1"></i>Confirmar y Crear Cursos
               </button>
@@ -939,38 +939,81 @@ async function doPreviewCourses() {
   }
 }
 
+let _coursesJobPollInterval = null;
+
 async function executeCreateCourses() {
   const urlInput = window._coursesOdCurrentUrl;
   const sheetInput = window._coursesOdCurrentSheet;
 
   const btn = document.getElementById('btnConfirmCourses');
   setLoading(btn, true);
-  toast('Creando cursos en Canvas, esto puede tardar un momento...', 'info');
 
   try {
     const reportUrl = localStorage.getItem('masterReportUrl') || '';
-
     const res = await api.post('/excel/courses', { url: urlInput, sheet_name: sheetInput, report_url: reportUrl });
-    const successCount = res.succeeded?.length || 0;
-    const failCount = res.failed?.length || 0;
 
-    toast(`✅ ${successCount} cursos creados exitosamente.${failCount > 0 ? ` ❌ ${failCount} fallaron.` : ''}`, successCount > 0 ? 'success' : 'danger');
-
-    // Remove old Auto-download report Excel
-    if (reportUrl) {
-      toast('✅ Cursos creados y reporte maestro en OneDrive actualizado exitosamente.', 'success');
+    if (!res.job_id) {
+      throw new Error('No se recibió ID del trabajo.');
     }
-
-    cancelPreviewCourses(); // Regresa al form
-    document.getElementById('coursesOdUrl').value = '';
-    document.getElementById('coursesOdSheet').innerHTML = '<option value="">Primero haz clic en Cargar Pestañas...</option>';
-    
-    loadCourses();
+    toast('Creación de cursos iniciada en segundo plano.', 'info');
+    startCoursesJobPolling(res.job_id);
   } catch (e) {
     toast('Error: ' + (e.detail || e.message || e), 'danger');
-  } finally {
     setLoading(btn, false);
   }
+}
+
+function startCoursesJobPolling(jobId) {
+  const btn = document.getElementById('btnConfirmCourses');
+  const cancelBtn = document.getElementById('btnCancelCourses');
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (_coursesJobPollInterval) clearInterval(_coursesJobPollInterval);
+
+  document.getElementById('coursesOdPreviewContent').insertAdjacentHTML('beforeend', `
+    <div id="coursesJobProgressWrap" class="alert alert-info mt-3">
+      <div class="mb-2"><b>Procesando en segundo plano...</b> (Trabajo #${jobId})</div>
+      <div class="progress" style="height: 20px;">
+        <div id="coursesJobProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 5%;">5%</div>
+      </div>
+      <div id="coursesJobProgressDetail" class="mt-2 small text-muted">Inicializando (los equipos de Teams pueden tardar hasta 1 minuto cada uno)...</div>
+    </div>
+  `);
+
+  _coursesJobPollInterval = setInterval(async () => {
+    try {
+      const job = await api.get(`/excel/jobs/${jobId}`);
+      if (!job) return;
+
+      const total = job.data_json ? (JSON.parse(job.data_json).total_to_process || 0) : 0;
+      const processed = (job.result_count || 0) + (job.error_count || 0);
+      const percent = total > 0 ? Math.round((processed / total) * 100) : (job.status === 'completed' || job.status === 'completed_with_errors' || job.status === 'failed' ? 100 : 5);
+
+      const bar = document.getElementById('coursesJobProgressBar');
+      if (bar) { bar.style.width = `${percent}%`; bar.innerText = `${percent}%`; }
+      const detail = document.getElementById('coursesJobProgressDetail');
+      if (detail) detail.innerHTML = `Completados: ${job.result_count || 0} | Errores: ${job.error_count || 0}${total > 0 ? ' | Total: ' + total : ''}`;
+
+      if (['completed', 'completed_with_errors', 'failed'].includes(job.status)) {
+        clearInterval(_coursesJobPollInterval);
+        setLoading(btn, false);
+        if (cancelBtn) cancelBtn.disabled = false;
+
+        if (job.status === 'failed') {
+          toast('❌ El proceso falló: ' + (job.error_message || ''), 'danger');
+        } else {
+          const failCount = job.error_count || 0;
+          toast(`✅ ${job.result_count || 0} cursos creados.${failCount > 0 ? ` ⚠️ ${failCount} con advertencias/errores.` : ''} ${job.error_message || ''}`, failCount > 0 ? 'warning' : 'success');
+        }
+
+        cancelPreviewCourses();
+        document.getElementById('coursesOdUrl').value = '';
+        document.getElementById('coursesOdSheet').innerHTML = '<option value="">Primero haz clic en Cargar Pestañas...</option>';
+        loadCourses();
+      }
+    } catch (e) {
+      console.error('Error consultando estado del trabajo', e);
+    }
+  }, 4000);
 }
 
 // ==========================================

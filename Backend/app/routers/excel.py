@@ -58,6 +58,21 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
 
 
+def _safe_mail_nickname(name: str, suffix: str = "") -> str:
+    """Genera un mailNickname válido para Microsoft Graph a partir de un nombre libre.
+
+    Graph rechaza el grupo con 400 'Invalid value specified for property
+    mailNickname' si el resultado supera 64 caracteres — algo fácil de pisar
+    con nombres de curso largos (ej. "Comportamiento del Consumidor/Consumer
+    Behavior/Business Management..."). Se trunca la base ANTES de agregar el
+    sufijo (típicamente un timestamp) para no superar el límite nunca."""
+    import time
+    base = re.sub(r'[^a-zA-Z0-9]', '', name or '').lower()
+    max_base_len = 64 - len(suffix)
+    base = base[:max_base_len] if base else ""
+    return f"{base}{suffix}" if base else f"grupo{int(time.time())}"[:64]
+
+
 def _clean_cedula(v: str) -> str:
     """Quita puntos/guiones/espacios de una cédula leída de Excel (ej. '3.517.784'
     → '3517784'), para que el formato de credenciales (cedula-Iniciales) sea
@@ -1201,10 +1216,8 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     if existing_tid:
                         global_team_id = existing_tid
                     else:
-                        import re, time
-                        nickname = re.sub(r'[^a-zA-Z0-9]', '', global_team_name).lower()
-                        if not nickname: nickname = f"grupo{int(time.time())}"
-                        
+                        nickname = _safe_mail_nickname(global_team_name)
+
                         owner_ids = list(_DIPLOMADO_DEFAULT_OWNERS)
                         try:
                             admin_user = await graph.get(f"/users/resteche@usil.edu.py", params={"$select": "id"})
@@ -1320,9 +1333,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                         if existing_tid:
                             target_equipo = existing_tid
                         else:
-                            import re, time
-                            nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
-                            if not nickname: nickname = f"grupo{int(time.time())}"
+                            nickname = _safe_mail_nickname(curso_nombre)
                             new_team = await graph.create_team_via_group(
                                 display_name=curso_nombre,
                                 mail_nickname=nickname,
@@ -2073,8 +2084,15 @@ async def append_report_onedrive(report_url: str, succeeded: list, failed: list)
         print(f"Error actualizando reporte maestro: {str(e)}")
 
 @router.post("/excel/courses", summary="Crear cursos en Canvas desde planilla OneDrive")
-async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
-    """Crea cursos simultáneamente en Canvas y equipos en Teams leyendo de OneDrive."""
+async def import_courses_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks) -> dict:
+    """Descarga y valida la planilla, y dispara la creación de cursos en segundo plano.
+
+    Crear cursos + equipos de Teams (con espera de replicación de Azure AD
+    de ~20-60s por equipo) es demasiado lento para una request HTTP síncrona
+    con lotes de más de un puñado de filas — el proxy/navegador corta la
+    conexión antes de que termine y en el frontend "no pasa nada". Por eso
+    esto ahora sigue el mismo patrón de job en segundo plano que
+    Matriculaciones Masivas (ver _process_matriculaciones_bg)."""
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
 
@@ -2085,12 +2103,38 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
 
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
-    except Exception as e:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        if req.sheet_name not in wb.sheetnames:
+            raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+        wb.close()
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
 
+    job_id = await jobs.create_job(
+        job_type="creacion_cursos_onedrive",
+        operation="Creación masiva de cursos",
+        username="admin",
+    )
+    bg_tasks.add_task(_process_courses_bg, job_id, req, contents, encoded_url)
+
+    return {"status": "success", "job_id": job_id, "message": "Creación de cursos iniciada en segundo plano."}
+
+
+async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: bytes, encoded_url: str):
+    """Crea cursos simultáneamente en Canvas y equipos en Teams leyendo de OneDrive."""
+    await jobs.start_job(job_id)
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        await jobs.fail_job(job_id, f"El archivo no es un Excel válido: {e}")
+        return
+
     if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+        await jobs.fail_job(job_id, f"La pestaña '{req.sheet_name}' no existe.")
+        return
 
     _ACCOUNT_LOCAL = settings.canvas_account_id
     result = BulkResult()
@@ -2100,7 +2144,8 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
 
     if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+        await jobs.fail_job(job_id, "No se encontró la fila de encabezados.")
+        return
 
     def get_col(*keys):
         for k in keys:
@@ -2119,7 +2164,8 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     col_docente = get_col("docente", "usuario institucional", "instructor", "profesor")
 
     if not col_nombre:
-        raise HTTPException(status_code=400, detail="No se encontró la columna de nombre del curso.")
+        await jobs.fail_job(job_id, "No se encontró la columna de nombre del curso.")
+        return
 
     next_col = ws.max_column + 1
     if not col_fecha:
@@ -2248,8 +2294,7 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     error_docente_teams = str(e)
 
             try:
-                nickname = re.sub(r'[^a-zA-Z0-9]', '', course_code_str).lower()
-                nickname = f"{nickname}{int(time.time() * 1000) % 100000}" if nickname else f"grupo{int(time.time())}"
+                nickname = _safe_mail_nickname(course_code_str, suffix=str(int(time.time() * 1000) % 100000))
 
                 owner_ids = []
                 try:
@@ -2315,28 +2360,39 @@ async def import_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             ws.cell(row=r_idx, column=col_estado).font = Font(color="FF0000", bold=True)
             result.failed.append({"input": {"nombre": nombre}, "error": error_msg})
 
-    tasks = []
-    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        tasks.append(create_course_row(r_idx))
-    
+    row_idxs = list(range(header_row_idx + 1, ws.max_row + 1))
+    total_rows = len(row_idxs)
+
     batch_size = 3
-    for i in range(0, len(tasks), batch_size):
-        await asyncio.gather(*tasks[i:i+batch_size])
+    for i in range(0, total_rows, batch_size):
+        chunk = row_idxs[i:i + batch_size]
+        await asyncio.gather(*(create_course_row(r) for r in chunk))
+        await jobs.update_job_progress(
+            job_id,
+            len(result.succeeded),
+            len(result.failed),
+            data_json=f'{{"total_to_process": {total_rows}, "processed": {len(result.succeeded) + len(result.failed)}}}'
+        )
 
     out_io = io.BytesIO()
     wb.save(out_io)
     out_io.seek(0)
-    
+
     try:
         await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+        save_note = ""
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+        save_note = f" (⚠️ no se pudo guardar el archivo actualizado en OneDrive: {e})"
 
     if req.report_url and (result.succeeded or result.failed):
-        # We need to map succeeded list format, wait, succeeded might just be a dict inside result
         await append_report_onedrive(req.report_url, result.succeeded, result.failed)
 
-    return result
+    await jobs.complete_job(
+        job_id,
+        len(result.succeeded),
+        len(result.failed),
+        f"{len(result.succeeded)} cursos creados, {len(result.failed)} fallaron.{save_note}"
+    )
 
 
 
@@ -2879,9 +2935,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     if existing_tid:
                         id_equipo = existing_tid
                     else:
-                        import re, time
-                        nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
-                        if not nickname: nickname = f"grupo{int(time.time())}"
+                        nickname = _safe_mail_nickname(curso_nombre)
                         owner_ids = [azure_id] if azure_id else []
                         new_team = await graph.create_team_via_group(
                             display_name=curso_nombre,
@@ -3632,8 +3686,7 @@ async def import_diplomados_json(req: JsonDataRequest):
                     if existing_tid:
                         target_equipo = existing_tid
                     else:
-                        nickname = re.sub(r'[^a-zA-Z0-9]', '', curso_nombre).lower()
-                        if not nickname: nickname = f"grupo{int(time.time())}"
+                        nickname = _safe_mail_nickname(curso_nombre)
                         new_team = await graph.create_team_via_group(
                             display_name=curso_nombre,
                             mail_nickname=nickname,
