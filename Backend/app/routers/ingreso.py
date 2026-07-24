@@ -462,7 +462,7 @@ async def preview_credentials(body: StudentIn):
 
 @router.post("/create", summary="Crear credenciales para un alumno o docente")
 async def create_student(body: StudentIn):
-    """Crea un usuario en Canvas y/o Teams y envía el correo de bienvenida."""
+    """Crea un usuario en Canvas y/o Teams. NO envía correo — ver /resend-credentials."""
     return await _create_student(body)
 
 
