@@ -414,8 +414,11 @@ function openTeamsIdDeleteModal() {
 }
 
 function _parseTeamsEntryList(raw) {
+  // Solo separa por línea o ";" — NO por coma: muchos nombres de curso/equipo
+  // contienen comas de verdad (ej. "Sociedad, Estado y Empresa (GA) 2026-02"),
+  // y separar por coma los partía en fragmentos que no matcheaban nada.
   return [...new Set(
-    raw.split(/[\n,;]+/)
+    raw.split(/[\n;]+/)
       .map(s => s.trim())
       .filter(s => s.length > 0)
   )];
