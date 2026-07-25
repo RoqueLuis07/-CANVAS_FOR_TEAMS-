@@ -6,7 +6,7 @@
 
 {% block content %}
 <div class="page-body">
-  <h1 class="page-title">📊 Reportes</h1>
+  <h1 class="page-title"><i class="bi bi-bar-chart-fill me-2"></i>Reportes</h1>
   <p class="page-subtitle">Licencias ocupadas por cuentas abandonadas, actividad de Teams y verificación de envíos.</p>
 
   <!-- Licencias Huérfanas -->
@@ -256,8 +256,8 @@ async function verifyEmailSent() {
     try {
         const res = await api.post('/reports/verify-email-sent', { to_email: to, since_iso: sinceIso });
         resultDiv.innerHTML = res.found_in_sent_items
-            ? '<div class="alert alert-success py-2 small mb-0">✅ Encontrado en Enviados: el correo sí salió del buzón.</div>'
-            : '<div class="alert alert-warning py-2 small mb-0">⚠️ No se encontró en Enviados para ese correo/fecha.</div>';
+            ? '<div class="alert alert-success py-2 small mb-0"><i class="bi bi-check-circle-fill me-1"></i>Encontrado en Enviados: el correo sí salió del buzón.</div>'
+            : '<div class="alert alert-warning py-2 small mb-0"><i class="bi bi-exclamation-triangle-fill me-1"></i>No se encontró en Enviados para ese correo/fecha.</div>';
     } catch (e) {
         resultDiv.innerHTML = `<div class="alert alert-danger py-2 small mb-0">${e.message}</div>`;
     }
@@ -283,7 +283,7 @@ async function loadUnusedAccounts() {
 
         const body = document.getElementById('unusedAccountsBody');
         if (!unusedAccounts.length) {
-            body.innerHTML = '<tr><td colspan="6" class="text-muted small p-3">No se encontraron cuentas sin uso. 🎉</td></tr>';
+            body.innerHTML = '<tr><td colspan="6" class="text-muted small p-3"><i class="bi bi-check-circle-fill text-success me-1"></i>No se encontraron cuentas sin uso.</td></tr>';
             document.getElementById('chkAllUnused').checked = false;
             updateDeleteUnusedButton();
             return;
