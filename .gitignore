@@ -22,3 +22,6 @@ dist/
 
 # Local test/temp scripts
 tmp_*.py
+
+# Claude Code local tooling (skills, worktrees) — not part of the app
+.claude/
