@@ -31,6 +31,14 @@ def init_audit_db():
         )
     """)
 
+    # get_audit_logs() ordena por timestamp DESC y filtra por username/endpoint
+    # en cada carga de /ui/audit, y la tabla crece con cada request de la app
+    # (vía el middleware de auditoría) — sin estos índices, esas consultas
+    # escanean la tabla completa cada vez.
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_username ON audit_logs(username)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_endpoint ON audit_logs(endpoint)")
+
     conn.commit()
     conn.close()
 

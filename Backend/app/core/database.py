@@ -61,13 +61,23 @@ async def init_db():
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS canvas_enrollments (
                     id BIGINT PRIMARY KEY,
-                    course_id INTEGER NOT NULL,
-                    user_id INTEGER NOT NULL,
+                    course_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     role TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (course_id) REFERENCES canvas_courses(id),
                     FOREIGN KEY (user_id) REFERENCES canvas_users(id)
                 )
+            """)
+
+            # Migración: tablas creadas antes de este fix tenían course_id/user_id
+            # como INTEGER, pero referencian canvas_courses.id/canvas_users.id que
+            # son BIGINT — ensanchar INTEGER -> BIGINT es siempre seguro en
+            # Postgres (nunca trunca ni falla), así que se aplica también a
+            # instalaciones ya existentes.
+            cursor.execute("""
+                ALTER TABLE canvas_enrollments ALTER COLUMN course_id TYPE BIGINT;
+                ALTER TABLE canvas_enrollments ALTER COLUMN user_id TYPE BIGINT;
             """)
 
             cursor.execute("""
@@ -284,7 +294,7 @@ async def upsert_canvas_users(users: list) -> int:
                     """, (
                         user.get('id'),
                         user.get('name', ''),
-                        user.get('email', ''),
+                        user.get('email') or None,
                         user.get('login_id', ''),
                         datetime.utcnow()
                     ))
@@ -416,7 +426,7 @@ async def upsert_azure_users(users: list) -> int:
                     """, (
                         user.get('id'),
                         user.get('displayName', ''),
-                        user.get('mail', ''),
+                        user.get('mail') or None,
                         user.get('userPrincipalName', ''),
                         datetime.utcnow()
                     ))
