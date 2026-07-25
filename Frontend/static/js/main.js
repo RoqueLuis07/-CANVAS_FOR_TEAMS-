@@ -1174,19 +1174,6 @@ function setupAutocomplete(inputId, hiddenId, resultsId, searchUrl, itemFormatte
   });
 }
 
-// Auto-expand active sidebar menu
-document.addEventListener("DOMContentLoaded", () => {
-  const activeLink = document.querySelector(".sidebar-link.active");
-  if (activeLink) {
-    const collapseParent = activeLink.closest(".collapse");
-    if (collapseParent) {
-      collapseParent.classList.add("show");
-      const trigger = document.querySelector(`[href="#${collapseParent.id}"]`);
-      if (trigger) trigger.setAttribute("aria-expanded", "true");
-    }
-  }
-});
-
 /* 🟢 Excel Upload that returns a blob (download modified excel) */
 async function uploadExcelDownloadBlob(url, fileInputId) {
   const inp = document.getElementById(fileInputId);

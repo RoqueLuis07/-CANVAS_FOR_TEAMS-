@@ -29,61 +29,46 @@
   </a>
 
   <!-- Directorio & Ingresos -->
-  <a class="sidebar-link" data-bs-toggle="collapse" href="#menuUsuarios" role="button" aria-expanded="false" aria-controls="menuUsuarios">
-    <i class="bi bi-people-fill"></i><span>Directorio & Ingresos</span>
-    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
+  <div class="sidebar-section mt-3">Directorio & Ingresos</div>
+  <a href="/ui/unified-users" class="sidebar-link {% block nav_uu %}{% endblock %}">
+    <i class="bi bi-search"></i><span>Buscar Usuarios</span>
   </a>
-  <div class="collapse" id="menuUsuarios">
-    <a href="/ui/unified-users" class="sidebar-link ps-5 {% block nav_uu %}{% endblock %}">
-      <i class="bi bi-search"></i><span>Buscar Usuarios</span>
-    </a>
-    <a href="/ui/ingreso" class="sidebar-link ps-5 {% block nav_ni %}{% endblock %}">
-      <i class="bi bi-person-plus-fill"></i><span>Alta Unificada</span>
-    </a>
-    <a href="/egreso" class="sidebar-link ps-5 {% block nav_egreso %}{% endblock %}">
-      <i class="bi bi-person-dash-fill"></i><span>Egreso / Desvinculación</span>
-    </a>
-  </div>
+  <a href="/ui/ingreso" class="sidebar-link {% block nav_ni %}{% endblock %}">
+    <i class="bi bi-person-plus-fill"></i><span>Alta Unificada</span>
+  </a>
+  <a href="/egreso" class="sidebar-link {% block nav_egreso %}{% endblock %}">
+    <i class="bi bi-person-dash-fill"></i><span>Egreso / Desvinculación</span>
+  </a>
 
   <!-- Gestión Académica -->
-  <a class="sidebar-link" data-bs-toggle="collapse" href="#menuAcademico" role="button" aria-expanded="false" aria-controls="menuAcademico">
-    <i class="bi bi-mortarboard-fill"></i><span>Gestión Académica</span>
-    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
+  <div class="sidebar-section mt-3">Gestión Académica</div>
+  <a href="/ui/canvas/courses" class="sidebar-link {% block nav_cc %}{% endblock %}">
+    <i class="bi bi-book-fill"></i><span>Cursos (Canvas)</span>
   </a>
-  <div class="collapse" id="menuAcademico">
-    <a href="/ui/canvas/courses" class="sidebar-link ps-5 {% block nav_cc %}{% endblock %}">
-      <i class="bi bi-book-fill"></i><span>Cursos (Canvas)</span>
-    </a>
-    <a href="/ui/teams/teams" class="sidebar-link ps-5 {% block nav_tt %}{% endblock %}">
-      <i class="bi bi-microsoft-teams"></i><span>Equipos (Teams)</span>
-    </a>
-    <a href="/ui/unified-enrollments" class="sidebar-link ps-5 {% block nav_ue %}{% endblock %}">
-      <i class="bi bi-person-lines-fill"></i><span>Matriculaciones</span>
-    </a>
-    <a href="/ui/canvas/attendance" class="sidebar-link ps-5 {% block nav_ca %}{% endblock %}">
-      <i class="bi bi-clipboard-check-fill"></i><span>Asistencias</span>
-    </a>
-    <a href="/ui/sync" class="sidebar-link ps-5 {% block nav_sy %}{% endblock %}">
-      <i class="bi bi-arrow-left-right"></i><span>Sincronización</span>
-    </a>
-  </div>
+  <a href="/ui/teams/teams" class="sidebar-link {% block nav_tt %}{% endblock %}">
+    <i class="bi bi-microsoft-teams"></i><span>Equipos (Teams)</span>
+  </a>
+  <a href="/ui/unified-enrollments" class="sidebar-link {% block nav_ue %}{% endblock %}">
+    <i class="bi bi-person-lines-fill"></i><span>Matriculaciones</span>
+  </a>
+  <a href="/ui/canvas/attendance" class="sidebar-link {% block nav_ca %}{% endblock %}">
+    <i class="bi bi-clipboard-check-fill"></i><span>Asistencias</span>
+  </a>
+  <a href="/ui/sync" class="sidebar-link {% block nav_sy %}{% endblock %}">
+    <i class="bi bi-arrow-left-right"></i><span>Sincronización</span>
+  </a>
 
   <!-- Administración -->
-  <a class="sidebar-link" data-bs-toggle="collapse" href="#menuAdmin" role="button" aria-expanded="false" aria-controls="menuAdmin">
-    <i class="bi bi-gear-fill"></i><span>Administración</span>
-    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
+  <div class="sidebar-section mt-3">Administración</div>
+  <a href="/ui/jobs" class="sidebar-link {% block nav_jh %}{% endblock %}">
+    <i class="bi bi-clipboard-data-fill"></i><span>Historial Trabajos</span>
   </a>
-  <div class="collapse" id="menuAdmin">
-    <a href="/ui/jobs" class="sidebar-link ps-5 {% block nav_jh %}{% endblock %}">
-      <i class="bi bi-clipboard-list"></i><span>Historial Trabajos</span>
-    </a>
-    <a href="/ui/audit" class="sidebar-link ps-5 {% block nav_au %}{% endblock %}">
-      <i class="bi bi-shield-lock-fill"></i><span>Auditoría</span>
-    </a>
-    <a href="/ui/reports" class="sidebar-link ps-5 {% block nav_rp %}{% endblock %}">
-      <i class="bi bi-graph-up-arrow"></i><span>Reportes</span>
-    </a>
-  </div>
+  <a href="/ui/audit" class="sidebar-link {% block nav_au %}{% endblock %}">
+    <i class="bi bi-shield-lock-fill"></i><span>Auditoría</span>
+  </a>
+  <a href="/ui/reports" class="sidebar-link {% block nav_rp %}{% endblock %}">
+    <i class="bi bi-graph-up-arrow"></i><span>Reportes</span>
+  </a>
 
   <div class="sidebar-section mt-3">Personal</div>
   <a href="/ui/profile" class="sidebar-link {% block nav_pf %}{% endblock %}">
@@ -275,7 +260,7 @@
 
 <script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/static/vendor/xlsx/xlsx.full.min.js"></script>
-<script src="/static/js/main.js?v=9"></script>
+<script src="/static/js/main.js?v=10"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
