@@ -190,7 +190,9 @@ html:not(.dark-mode) .sidebar-brand-logo { filter: brightness(0) invert(1); }
 .sidebar-section {
   padding: 14px 18px 4px;
   font-size: .6rem; font-weight: 700; letter-spacing: .12em;
-  color: rgba(255,255,255,.3); text-transform: uppercase;
+  /* .3 daba ~2.65:1 de contraste contra el fondo del sidebar — por debajo
+     del mínimo WCAG AA de 4.5:1 para texto de este tamaño. .5 da ~5.3:1. */
+  color: rgba(255,255,255,.5); text-transform: uppercase;
   white-space: nowrap; flex-shrink: 0;
 }
 
@@ -222,6 +224,14 @@ html:not(.dark-mode) .sidebar-brand-logo { filter: brightness(0) invert(1); }
   border-left-color: var(--canvas-orange);
 }
 .sidebar-link.active i { opacity: 1; }
+/* Anillo de foco visible para navegación por teclado — el outline por
+   defecto del navegador es poco visible contra el fondo oscuro del sidebar. */
+.sidebar-link:focus-visible {
+  outline: 2px solid var(--canvas-orange);
+  outline-offset: -2px;
+  background: var(--sidebar-hover-bg);
+  color: var(--sidebar-text-hover);
+}
 
 /* Sidebar footer */
 .sidebar-footer {
@@ -299,6 +309,22 @@ html.dark-mode .topbar { background: var(--topbar-bg); }
   padding: 0;
 }
 .btn-icon:hover { background: var(--table-hover-bg); }
+.btn-icon:focus-visible {
+  outline: 2px solid var(--canvas-blue);
+  outline-offset: 1px;
+}
+
+/* Anillo de foco consistente para componentes con estilos propios que no
+   definían ningún estado de foco (dependían del outline por defecto del
+   navegador, inconsistente entre navegadores y con el resto del diseño). */
+.tile-link:focus-visible,
+.pg-btn:focus-visible,
+.gs-item:focus-visible,
+.copy-btn:focus-visible {
+  outline: 2px solid var(--canvas-blue);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
 
 /* ── 7. Page body ── */
 .page-body { padding: 24px 28px; flex: 1; }
