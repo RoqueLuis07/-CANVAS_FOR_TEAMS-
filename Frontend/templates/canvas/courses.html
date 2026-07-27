@@ -2,6 +2,8 @@
 {% block title %}Cursos Canvas{% endblock %}
 {% block breadcrumb %}Canvas LMS › Cursos{% endblock %}
 {% block nav_cc %}active{% endblock %}
+{% block nav_cc_expanded %}true{% endblock %}
+{% block nav_cc_show %}show{% endblock %}
 {% block content %}
 <div class="d-flex align-items-center mb-4 gap-3 flex-wrap">
   <div><div class="page-title">Cursos Canvas</div><div class="page-subtitle">Gestión de cursos de la plataforma</div></div>
@@ -2066,6 +2068,14 @@ async function executeFixCoordRole() {
         setLoading(btn, false);
     }
 }
+
+// Activa la pestaña indicada por ?tab= (llegando desde el submenú del sidebar)
+(function activateTabFromQuery() {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (!tab) return;
+    const btn = document.getElementById(tab + '-tab');
+    if (btn) new bootstrap.Tab(btn).show();
+})();
 
 loadCourses();
 </script>
