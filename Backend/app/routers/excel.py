@@ -73,6 +73,29 @@ def _clean_cedula(v: str) -> str:
     return re.sub(r"[.\-\s]", "", v or "")
 
 
+_coordinador_role_id_cache: str | None = None
+
+
+async def _get_coordinador_role_id() -> str | None:
+    """Busca el rol personalizado 'Coordinador' (basado en Designer) en la cuenta
+    de Canvas. Se cachea en memoria porque no cambia entre requests. Devuelve
+    None si el rol todavía no existe (hay que crearlo en Canvas Admin > Permisos)."""
+    global _coordinador_role_id_cache
+    if _coordinador_role_id_cache:
+        return _coordinador_role_id_cache
+    try:
+        roles = await canvas.paginate(
+            f"/accounts/{settings.canvas_account_id}/roles", params={"show_inactive": "false"}
+        )
+        for r in roles:
+            if (r.get("label") or "").strip().lower() == "coordinador":
+                _coordinador_role_id_cache = str(r.get("id"))
+                return _coordinador_role_id_cache
+    except Exception:
+        pass
+    return None
+
+
 def _validate_file(file: UploadFile) -> None:
     """Validar tipo y tamaño del archivo."""
     # Validar tipo MIME
@@ -2039,6 +2062,184 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
     )
 
 
+# ── Corregir rol de Coordinadores (Diseñador → Coordinador) ────────────────────
+#
+# Antes de que existiera el rol personalizado "Coordinador" en Canvas, los
+# coordinadores/diseñadores se inscribían con el rol base "Designer". Esto
+# detecta, para los cursos/coordinadores de una planilla ya cargada, cuáles
+# quedaron con el rol base y los migra al rol personalizado "Coordinador"
+# (se borra la inscripción vieja y se crea una nueva con el role_id correcto,
+# porque Canvas no permite cambiar el rol de una inscripción existente).
+
+class FixCoordinadorRoleItem(BaseModel):
+    course_id: str
+    course_name: str = ""
+    sis_id: str = ""
+    email: str = ""
+    user_id: str
+    enrollment_id: str
+    current_role: str = ""
+
+
+@router.post("/excel/courses/fix-coordinador-role/preview", summary="Detectar coordinadores inscritos como Diseñador para migrarlos al rol Coordinador")
+async def preview_fix_coordinador_role(req: DiplomadosUrlRequest):
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    coordinador_role_id = await _get_coordinador_role_id()
+    if not coordinador_role_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontró el rol personalizado 'Coordinador' en la cuenta de Canvas (Admin > Permisos).",
+        )
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+    ws = wb[req.sheet_name]
+
+    header_row_idx, _, headers_raw = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    col_nombre = -1
+    col_sis = -1
+    col_coordinadores = -1
+    for i, h in enumerate(headers_raw):
+        h_lower = h.lower()
+        if ("nombre" in h_lower or "curso" in h_lower) and col_nombre == -1:
+            col_nombre = i
+        if ("identificaci" in h_lower or "sis" in h_lower) and col_sis == -1:
+            col_sis = i
+        if ("coordinador" in h_lower or "diseñador" in h_lower or "disenador" in h_lower or "designer" in h_lower) and col_coordinadores == -1:
+            col_coordinadores = i
+
+    rows = []
+    for row_idx in range(header_row_idx + 1, ws.max_row + 1):
+        row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
+        if not any(row_vals):
+            continue
+        sis_id = row_vals[col_sis] if 0 <= col_sis < len(row_vals) else ""
+        coordinadores_raw = row_vals[col_coordinadores] if 0 <= col_coordinadores < len(row_vals) else ""
+        nombre = row_vals[col_nombre] if 0 <= col_nombre < len(row_vals) else ""
+        emails = [e.strip() for e in re.split(r'[,;/\n]+', coordinadores_raw) if e.strip() and "@" in e.strip()]
+        if sis_id and emails:
+            rows.append({"nombre": nombre, "sis_id": sis_id, "emails": emails})
+    wb.close()
+
+    items: list[FixCoordinadorRoleItem] = []
+    not_found: list[str] = []
+    already_correct = 0
+
+    async def process_row(row):
+        nonlocal already_correct
+        sis_id = row["sis_id"]
+        try:
+            course = await canvas.get(f"/courses/sis_course_id:{sis_id}")
+        except Exception:
+            course = None
+        if not course:
+            not_found.append(f"{row['nombre']} (SIS {sis_id}): curso no encontrado")
+            return
+        course_id = str(course.get("id"))
+        course_name = course.get("name") or row["nombre"]
+
+        async def process_email(email: str):
+            nonlocal already_correct
+            try:
+                matches = await canvas.get(f"/accounts/{_ACCOUNT}/users", params={"search_term": email})
+                user_id = str(matches[0]["id"]) if matches else None
+            except Exception:
+                user_id = None
+            if not user_id:
+                not_found.append(f"{course_name}: {email} (no encontrado en Canvas)")
+                return
+            try:
+                enrollments = await canvas.get(f"/courses/{course_id}/enrollments", params={"user_id": user_id})
+            except Exception:
+                enrollments = []
+
+            target = None
+            has_coordinador = False
+            for en in enrollments or []:
+                if en.get("enrollment_state") == "deleted":
+                    continue
+                if en.get("role") == "Coordinador":
+                    has_coordinador = True
+                elif en.get("type") == "DesignerEnrollment" and target is None:
+                    target = en
+
+            if target:
+                items.append(FixCoordinadorRoleItem(
+                    course_id=course_id,
+                    course_name=course_name,
+                    sis_id=sis_id,
+                    email=email,
+                    user_id=user_id,
+                    enrollment_id=str(target.get("id")),
+                    current_role=target.get("role") or target.get("type") or "",
+                ))
+            elif has_coordinador:
+                already_correct += 1
+            else:
+                not_found.append(f"{course_name}: {email} (sin inscripción de Diseñador para migrar)")
+
+        await asyncio.gather(*(process_email(e) for e in row["emails"]))
+
+    await asyncio.gather(*(process_row(r) for r in rows))
+
+    return {"items": [i.model_dump() for i in items], "not_found": not_found, "already_correct": already_correct}
+
+
+class FixCoordinadorRoleRequest(BaseModel):
+    items: list[FixCoordinadorRoleItem]
+
+
+@router.post("/excel/courses/fix-coordinador-role/execute", summary="Migrar inscripciones seleccionadas de Diseñador a Coordinador")
+async def execute_fix_coordinador_role(req: FixCoordinadorRoleRequest):
+    coordinador_role_id = await _get_coordinador_role_id()
+    if not coordinador_role_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontró el rol personalizado 'Coordinador' en la cuenta de Canvas (Admin > Permisos).",
+        )
+
+    result = {"succeeded": [], "failed": []}
+
+    async def fix_one(item: FixCoordinadorRoleItem):
+        label = f"{item.course_name or item.course_id}: {item.email or item.user_id}"
+        try:
+            await canvas.delete(f"/courses/{item.course_id}/enrollments/{item.enrollment_id}", params={"task": "delete"})
+        except Exception as e:
+            result["failed"].append({"item": label, "error": f"No se pudo remover la inscripción de Diseñador: {e}"})
+            return
+        try:
+            await canvas.post(f"/courses/{item.course_id}/enrollments", {
+                "enrollment": {
+                    "user_id": item.user_id,
+                    "role_id": coordinador_role_id,
+                    "enrollment_state": "active",
+                    "notify": False,
+                }
+            })
+            result["succeeded"].append(label)
+        except Exception as e:
+            result["failed"].append({"item": label, "error": f"Se removió Diseñador pero falló la inscripción como Coordinador: {e}"})
+
+    await asyncio.gather(*(fix_one(i) for i in req.items))
+    return result
+
+
 async def append_report_onedrive(report_url: str, succeeded: list, failed: list):
     try:
         import datetime, io, base64, openpyxl
@@ -2193,6 +2394,8 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
         terms_data = terms_res.get("enrollment_terms", [])
     except: pass
 
+    coordinador_role_id = await _get_coordinador_role_id()
+
     sheet_lower = req.sheet_name.lower()
     default_plat = "both"
     if "canvas" in sheet_lower and "teams" not in sheet_lower:
@@ -2335,14 +2538,16 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                         if not coord_canvas_id:
                             coordinadores_canvas_failed.append(f"{email} (no encontrado en Canvas)")
                             return
-                        await canvas.post(f"/courses/{canvas_id}/enrollments", {
-                            "enrollment": {
-                                "user_id": coord_canvas_id,
-                                "type": "DesignerEnrollment",
-                                "enrollment_state": "active",
-                                "notify": False,
-                            }
-                        })
+                        enrollment_payload = {
+                            "user_id": coord_canvas_id,
+                            "enrollment_state": "active",
+                            "notify": False,
+                        }
+                        if coordinador_role_id:
+                            enrollment_payload["role_id"] = coordinador_role_id
+                        else:
+                            enrollment_payload["type"] = "DesignerEnrollment"
+                        await canvas.post(f"/courses/{canvas_id}/enrollments", {"enrollment": enrollment_payload})
                         coordinadores_canvas_ok.append(email)
                     except Exception as e:
                         coordinadores_canvas_failed.append(f"{email} ({e})")
