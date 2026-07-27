@@ -371,21 +371,46 @@
             </div>
 
             <div id="fixCoordRoleFormWrap">
-              <label class="form-label fw-bold">URL de OneDrive de la planilla de cursos</label>
-              <div class="input-group mb-2">
-                <input type="url" id="fixCoordRoleUrl" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/...">
-                <button class="btn btn-outline-primary" id="btnLoadFixCoordRoleSheets" onclick="fetchFixCoordRoleSheets()">
-                  <i class="bi bi-arrow-repeat me-1"></i>Cargar pestañas
+              <div class="btn-group mb-3" role="group" aria-label="Modo de búsqueda">
+                <button type="button" class="btn btn-primary" id="btnFixCoordModeExcel" onclick="setFixCoordRoleMode('excel')">
+                  <i class="bi bi-file-earmark-spreadsheet me-1"></i>Por Planilla
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="btnFixCoordModeCourse" onclick="setFixCoordRoleMode('course')">
+                  <i class="bi bi-hash me-1"></i>Por ID de Curso
                 </button>
               </div>
-              <label class="form-label fw-bold">Pestaña</label>
-              <select class="form-select mb-3" id="fixCoordRoleSheet">
-                <option value="">Selecciona una pestaña...</option>
-              </select>
-              <div class="d-flex justify-content-end">
-                <button class="btn btn-primary" id="btnPreviewFixCoordRole" onclick="previewFixCoordRole()">
-                  <i class="bi bi-search me-1"></i>Detectar Coordinadores
-                </button>
+
+              <div id="fixCoordRoleExcelMode">
+                <label class="form-label fw-bold">URL de OneDrive de la planilla de cursos</label>
+                <div class="input-group mb-2">
+                  <input type="url" id="fixCoordRoleUrl" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/...">
+                  <button class="btn btn-outline-primary" id="btnLoadFixCoordRoleSheets" onclick="fetchFixCoordRoleSheets()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Cargar pestañas
+                  </button>
+                </div>
+                <label class="form-label fw-bold">Pestaña</label>
+                <select class="form-select mb-3" id="fixCoordRoleSheet">
+                  <option value="">Selecciona una pestaña...</option>
+                </select>
+                <div class="d-flex justify-content-end">
+                  <button class="btn btn-primary" id="btnPreviewFixCoordRole" onclick="previewFixCoordRole()">
+                    <i class="bi bi-search me-1"></i>Detectar Coordinadores
+                  </button>
+                </div>
+              </div>
+
+              <div id="fixCoordRoleCourseMode" style="display:none;">
+                <label class="form-label fw-bold">IDs de Canvas o SIS IDs de los cursos a corregir</label>
+                <textarea class="form-control mb-3" id="fixCoordRoleCourseTextarea" rows="6" placeholder="1963&#10;GA26050&#10;1970"></textarea>
+                <div class="alert alert-secondary small py-2 mb-3">
+                  Busca <b>todos</b> los inscritos como Diseñador en cada curso indicado (sin necesitar
+                  la planilla) — útil para corregir solo algunos cursos puntuales.
+                </div>
+                <div class="d-flex justify-content-end">
+                  <button class="btn btn-primary" id="btnPreviewFixCoordRoleByCourse" onclick="previewFixCoordRoleByCourse()">
+                    <i class="bi bi-search me-1"></i>Buscar en esos Cursos
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1889,6 +1914,56 @@ async function fetchFixCoordRoleSheets() {
     }
 }
 
+function setFixCoordRoleMode(mode) {
+    const isExcel = mode === 'excel';
+    document.getElementById('fixCoordRoleExcelMode').style.display = isExcel ? 'block' : 'none';
+    document.getElementById('fixCoordRoleCourseMode').style.display = isExcel ? 'none' : 'block';
+    document.getElementById('btnFixCoordModeExcel').classList.toggle('btn-primary', isExcel);
+    document.getElementById('btnFixCoordModeExcel').classList.toggle('btn-outline-primary', !isExcel);
+    document.getElementById('btnFixCoordModeCourse').classList.toggle('btn-primary', !isExcel);
+    document.getElementById('btnFixCoordModeCourse').classList.toggle('btn-outline-primary', isExcel);
+}
+
+function _renderFixCoordRolePreview(res) {
+    currentFixCoordRoleItems = res.items || [];
+
+    const tbody = document.getElementById('fixCoordRoleList');
+    let html = '';
+    currentFixCoordRoleItems.forEach((it, idx) => {
+        html += `
+        <tr>
+            <td><input class="form-check-input fix-coord-role-checkbox" type="checkbox" value="${idx}" onchange="updateSelectedFixCoordRoleCount()"></td>
+            <td>${it.course_name || it.course_id}</td>
+            <td>${it.email}</td>
+            <td><span class="badge bg-secondary">${it.current_role || 'Diseñador'}</span></td>
+        </tr>`;
+    });
+    if (currentFixCoordRoleItems.length === 0) {
+        html = `<tr><td colspan="4" class="text-center text-muted">Ninguna inscripción de Diseñador pendiente de migrar.</td></tr>`;
+    }
+    tbody.innerHTML = html;
+    document.getElementById('fixCoordRoleCount').innerText = currentFixCoordRoleItems.length;
+    document.getElementById('selectAllFixCoordRole').checked = false;
+
+    if (res.already_correct > 0) {
+        document.getElementById('fixCoordRoleAlreadyOkWrap').style.display = 'block';
+        document.getElementById('fixCoordRoleAlreadyOk').innerText = res.already_correct;
+    } else {
+        document.getElementById('fixCoordRoleAlreadyOkWrap').style.display = 'none';
+    }
+
+    if (res.not_found && res.not_found.length > 0) {
+        document.getElementById('fixCoordRoleNotFoundWrap').style.display = 'block';
+        document.getElementById('fixCoordRoleNotFound').innerText = res.not_found.join('; ');
+    } else {
+        document.getElementById('fixCoordRoleNotFoundWrap').style.display = 'none';
+    }
+
+    document.getElementById('fixCoordRoleFormWrap').style.display = 'none';
+    document.getElementById('fixCoordRolePreviewWrap').style.display = 'block';
+    updateSelectedFixCoordRoleCount();
+}
+
 async function previewFixCoordRole() {
     const urlInput = document.getElementById('fixCoordRoleUrl').value.trim();
     const sheetInput = document.getElementById('fixCoordRoleSheet').value.trim();
@@ -1901,45 +1976,35 @@ async function previewFixCoordRole() {
 
     try {
         const res = await api.post('/excel/courses/fix-coordinador-role/preview', { url: urlInput, sheet_name: sheetInput });
-        currentFixCoordRoleItems = res.items || [];
-
-        const tbody = document.getElementById('fixCoordRoleList');
-        let html = '';
-        currentFixCoordRoleItems.forEach((it, idx) => {
-            html += `
-            <tr>
-                <td><input class="form-check-input fix-coord-role-checkbox" type="checkbox" value="${idx}" onchange="updateSelectedFixCoordRoleCount()"></td>
-                <td>${it.course_name || it.course_id}</td>
-                <td>${it.email}</td>
-                <td><span class="badge bg-secondary">${it.current_role || 'Diseñador'}</span></td>
-            </tr>`;
-        });
-        if (currentFixCoordRoleItems.length === 0) {
-            html = `<tr><td colspan="4" class="text-center text-muted">Ninguna inscripción de Diseñador pendiente de migrar.</td></tr>`;
-        }
-        tbody.innerHTML = html;
-        document.getElementById('fixCoordRoleCount').innerText = currentFixCoordRoleItems.length;
-        document.getElementById('selectAllFixCoordRole').checked = false;
-
-        if (res.already_correct > 0) {
-            document.getElementById('fixCoordRoleAlreadyOkWrap').style.display = 'block';
-            document.getElementById('fixCoordRoleAlreadyOk').innerText = res.already_correct;
-        } else {
-            document.getElementById('fixCoordRoleAlreadyOkWrap').style.display = 'none';
-        }
-
-        if (res.not_found && res.not_found.length > 0) {
-            document.getElementById('fixCoordRoleNotFoundWrap').style.display = 'block';
-            document.getElementById('fixCoordRoleNotFound').innerText = res.not_found.join('; ');
-        } else {
-            document.getElementById('fixCoordRoleNotFoundWrap').style.display = 'none';
-        }
-
-        document.getElementById('fixCoordRoleFormWrap').style.display = 'none';
-        document.getElementById('fixCoordRolePreviewWrap').style.display = 'block';
-        updateSelectedFixCoordRoleCount();
+        _renderFixCoordRolePreview(res);
     } catch (e) {
         toast('Error detectando coordinadores: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function _parseFixCoordRoleCourseEntries(raw) {
+    return (raw || '').split(/[\n;]+/).map(s => s.trim()).filter(Boolean);
+}
+
+async function previewFixCoordRoleByCourse() {
+    const raw = document.getElementById('fixCoordRoleCourseTextarea').value;
+    const entries = _parseFixCoordRoleCourseEntries(raw);
+    if (entries.length === 0) {
+        toast('Ingresa al menos un ID de Canvas o SIS ID de curso.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnPreviewFixCoordRoleByCourse');
+    setLoading(btn, true);
+    toast('Buscando inscripciones de Diseñador...', 'info');
+
+    try {
+        const res = await api.post('/excel/courses/fix-coordinador-role/resolve-by-course', { entries });
+        _renderFixCoordRolePreview(res);
+    } catch (e) {
+        toast('Error buscando en los cursos: ' + (e.detail || e.message || e), 'danger');
     } finally {
         setLoading(btn, false);
     }

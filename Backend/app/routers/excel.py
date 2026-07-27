@@ -2201,6 +2201,80 @@ async def preview_fix_coordinador_role(req: DiplomadosUrlRequest):
     return {"items": [i.model_dump() for i in items], "not_found": not_found, "already_correct": already_correct}
 
 
+class FixCoordinadorRoleByCourseRequest(BaseModel):
+    entries: list[str]
+
+
+@router.post("/excel/courses/fix-coordinador-role/resolve-by-course", summary="Detectar inscripciones de Diseñador a migrar a partir de una lista de IDs/SIS IDs de curso")
+async def resolve_fix_coordinador_role_by_course(req: FixCoordinadorRoleByCourseRequest):
+    coordinador_role_id = await _get_coordinador_role_id()
+    if not coordinador_role_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontró el rol personalizado 'Coordinador' en la cuenta de Canvas (Admin > Permisos).",
+        )
+
+    items: list[FixCoordinadorRoleItem] = []
+    not_found: list[str] = []
+    already_correct = 0
+    seen: set[str] = set()
+
+    async def process_entry(raw: str):
+        nonlocal already_correct
+        entry = raw.strip()
+        if not entry or entry in seen:
+            return
+        seen.add(entry)
+
+        course = None
+        try:
+            course = await canvas.get(f"/courses/sis_course_id:{entry}")
+        except Exception:
+            pass
+        if not course:
+            try:
+                course = await canvas.get(f"/courses/{entry}")
+            except Exception:
+                pass
+        if not course:
+            not_found.append(f"{entry}: curso no encontrado")
+            return
+
+        course_id = str(course.get("id"))
+        course_name = course.get("name") or entry
+
+        try:
+            enrollments = await canvas.paginate(f"/courses/{course_id}/enrollments", params={"type[]": "DesignerEnrollment"})
+        except Exception as e:
+            not_found.append(f"{course_name}: no se pudieron leer las inscripciones ({e})")
+            return
+
+        found_any = False
+        for en in enrollments or []:
+            if en.get("enrollment_state") == "deleted":
+                continue
+            if en.get("role") == "Coordinador":
+                already_correct += 1
+                continue
+            found_any = True
+            user = en.get("user") or {}
+            items.append(FixCoordinadorRoleItem(
+                course_id=course_id,
+                course_name=course_name,
+                sis_id=entry,
+                email=user.get("login_id") or user.get("email") or user.get("name") or f"user {en.get('user_id')}",
+                user_id=str(en.get("user_id")),
+                enrollment_id=str(en.get("id")),
+                current_role=en.get("role") or en.get("type") or "",
+            ))
+        if not found_any and not any(en.get("role") == "Coordinador" for en in (enrollments or [])):
+            not_found.append(f"{course_name}: sin inscripciones de Diseñador")
+
+    await asyncio.gather(*(process_entry(e) for e in req.entries))
+
+    return {"items": [i.model_dump() for i in items], "not_found": not_found, "already_correct": already_correct}
+
+
 class FixCoordinadorRoleRequest(BaseModel):
     items: list[FixCoordinadorRoleItem]
 
