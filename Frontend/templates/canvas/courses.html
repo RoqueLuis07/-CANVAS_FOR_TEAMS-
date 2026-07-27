@@ -32,6 +32,11 @@
       <i class="bi bi-unlock-fill me-2"></i>Liberar Período
     </button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link fw-bold text-primary" id="fix-coord-role-tab" data-bs-toggle="tab" data-bs-target="#fix-coord-role" type="button" role="tab" aria-controls="fix-coord-role" aria-selected="false">
+      <i class="bi bi-person-gear me-2"></i>Corregir Rol Coordinador
+    </button>
+  </li>
 </ul>
 
 <div class="tab-content" id="coursesTabsContent">
@@ -347,6 +352,109 @@
       </div>
     </div>
   </div> <!-- End Tab Liberar Período -->
+
+  <!-- Tab: Corregir Rol Coordinador -->
+  <div class="tab-pane fade" id="fix-coord-role" role="tabpanel" aria-labelledby="fix-coord-role-tab">
+    <div class="row">
+      <div class="col-md-8 offset-md-2 mb-4">
+        <div class="card shadow-sm border-primary h-100">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-person-gear me-2"></i>Corregir Rol de Coordinador (Diseñador → Coordinador)</h5>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info">
+              Los coordinadores/diseñadores cargados desde la planilla se inscribieron con el rol
+              base <b>Diseñador</b> antes de que existiera el rol personalizado <b>Coordinador</b> en Canvas.
+              Esto lee la misma planilla de cursos, detecta esas inscripciones y las migra al rol
+              <b>Coordinador</b> (se quita la inscripción de Diseñador y se crea una nueva como Coordinador,
+              porque Canvas no permite cambiar el rol de una inscripción existente).
+            </div>
+
+            <div id="fixCoordRoleFormWrap">
+              <div class="btn-group mb-3" role="group" aria-label="Modo de búsqueda">
+                <button type="button" class="btn btn-primary" id="btnFixCoordModeExcel" onclick="setFixCoordRoleMode('excel')">
+                  <i class="bi bi-file-earmark-spreadsheet me-1"></i>Por Planilla
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="btnFixCoordModeCourse" onclick="setFixCoordRoleMode('course')">
+                  <i class="bi bi-hash me-1"></i>Por ID de Curso
+                </button>
+              </div>
+
+              <div id="fixCoordRoleExcelMode">
+                <label class="form-label fw-bold">URL de OneDrive de la planilla de cursos</label>
+                <div class="input-group mb-2">
+                  <input type="url" id="fixCoordRoleUrl" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/...">
+                  <button class="btn btn-outline-primary" id="btnLoadFixCoordRoleSheets" onclick="fetchFixCoordRoleSheets()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Cargar pestañas
+                  </button>
+                </div>
+                <label class="form-label fw-bold">Pestaña</label>
+                <select class="form-select mb-3" id="fixCoordRoleSheet">
+                  <option value="">Selecciona una pestaña...</option>
+                </select>
+                <div class="d-flex justify-content-end">
+                  <button class="btn btn-primary" id="btnPreviewFixCoordRole" onclick="previewFixCoordRole()">
+                    <i class="bi bi-search me-1"></i>Detectar Coordinadores
+                  </button>
+                </div>
+              </div>
+
+              <div id="fixCoordRoleCourseMode" style="display:none;">
+                <label class="form-label fw-bold">IDs de Canvas o SIS IDs de los cursos a corregir</label>
+                <textarea class="form-control mb-3" id="fixCoordRoleCourseTextarea" rows="6" placeholder="1963&#10;GA26050&#10;1970"></textarea>
+                <div class="alert alert-secondary small py-2 mb-3">
+                  Busca <b>todos</b> los inscritos como Diseñador en cada curso indicado (sin necesitar
+                  la planilla) — útil para corregir solo algunos cursos puntuales.
+                </div>
+                <div class="d-flex justify-content-end">
+                  <button class="btn btn-primary" id="btnPreviewFixCoordRoleByCourse" onclick="previewFixCoordRoleByCourse()">
+                    <i class="bi bi-search me-1"></i>Buscar en esos Cursos
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="fixCoordRolePreviewWrap" style="display:none;">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold mb-0">Inscripciones a migrar (<span id="fixCoordRoleCount">0</span>)</h6>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="selectAllFixCoordRole" onchange="toggleSelectAllFixCoordRole()">
+                  <label class="form-check-label fw-bold text-primary" for="selectAllFixCoordRole">Seleccionar Todos</label>
+                </div>
+              </div>
+              <div class="table-responsive border rounded bg-white" style="max-height:300px; overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th style="width: 40px;"></th>
+                      <th>Curso</th>
+                      <th>Coordinador</th>
+                      <th>Rol actual</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fixCoordRoleList"></tbody>
+                </table>
+              </div>
+              <div id="fixCoordRoleAlreadyOkWrap" style="display:none;" class="alert alert-success mt-3 mb-0 py-2 small">
+                <span id="fixCoordRoleAlreadyOk"></span> coordinador(es) ya tenían el rol Coordinador correcto — no requieren cambios.
+              </div>
+              <div id="fixCoordRoleNotFoundWrap" style="display:none;" class="alert alert-warning mt-3 mb-0">
+                <strong>No encontrados / sin cambios:</strong> <span id="fixCoordRoleNotFound"></span>
+              </div>
+              <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-outline-secondary me-2" onclick="cancelFixCoordRolePreview()">
+                  <i class="bi bi-arrow-left me-1"></i>Volver
+                </button>
+                <button class="btn btn-primary" id="btnExecuteFixCoordRole" onclick="executeFixCoordRole()" disabled>
+                  <i class="bi bi-person-gear me-1"></i>Migrar Seleccionados (<span id="selectedFixCoordRoleCount">0</span>)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div> <!-- End Tab Corregir Rol Coordinador -->
 </div> <!-- End Tabs Content -->
 
 <!-- Modal: Eliminación por Período -->
@@ -1748,11 +1856,11 @@ function renderReleaseErrorDetails(containerId, failed, idKey) {
     if (!container) {
         container = document.createElement('div');
         container.id = containerId;
-        // Se inserta después del botón "Liberar Seleccionados" correspondiente
-        const anchor = containerId === 'releaseTermSisErrorsWrap'
-            ? document.getElementById('releaseTermSisPreviewWrap')
-            : document.getElementById('releaseSisPreviewWrap');
-        anchor.appendChild(container);
+        // Se inserta después del botón de acción correspondiente
+        const anchorId = containerId === 'releaseTermSisErrorsWrap' ? 'releaseTermSisPreviewWrap'
+            : containerId === 'fixCoordRoleErrorsWrap' ? 'fixCoordRolePreviewWrap'
+            : 'releaseSisPreviewWrap';
+        document.getElementById(anchorId).appendChild(container);
     }
     if (!failed || failed.length === 0) {
         container.innerHTML = '';
@@ -1767,6 +1875,197 @@ function renderReleaseErrorDetails(containerId, failed, idKey) {
         </div>`;
 }
 
+
+// ==========================================
+// CORREGIR ROL DE COORDINADOR (Diseñador -> Coordinador)
+// ==========================================
+
+let currentFixCoordRoleItems = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('fixCoordRoleUrl');
+    if (el) el.value = localStorage.getItem('coursesOdUrl') || '';
+});
+
+async function fetchFixCoordRoleSheets() {
+    const urlInput = document.getElementById('fixCoordRoleUrl').value.trim();
+    if (!urlInput) { toast('Por favor, ingresa la URL primero.', 'warning'); return; }
+    localStorage.setItem('coursesOdUrl', urlInput);
+
+    const btn = document.getElementById('btnLoadFixCoordRoleSheets');
+    const select = document.getElementById('fixCoordRoleSheet');
+    setLoading(btn, true);
+    select.innerHTML = '<option value="">Cargando pestañas...</option>';
+
+    try {
+        const sheets = await api.post('/excel/courses/sheets', { url: urlInput });
+        select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
+        (sheets || []).forEach(sheet => {
+            const opt = document.createElement('option');
+            opt.value = sheet; opt.textContent = sheet;
+            select.appendChild(opt);
+        });
+        toast('Pestañas cargadas correctamente.', 'success');
+    } catch (e) {
+        toast('Error al cargar pestañas: ' + (e.detail || e.message || e), 'danger');
+        select.innerHTML = '<option value="">Error al cargar.</option>';
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function setFixCoordRoleMode(mode) {
+    const isExcel = mode === 'excel';
+    document.getElementById('fixCoordRoleExcelMode').style.display = isExcel ? 'block' : 'none';
+    document.getElementById('fixCoordRoleCourseMode').style.display = isExcel ? 'none' : 'block';
+    document.getElementById('btnFixCoordModeExcel').classList.toggle('btn-primary', isExcel);
+    document.getElementById('btnFixCoordModeExcel').classList.toggle('btn-outline-primary', !isExcel);
+    document.getElementById('btnFixCoordModeCourse').classList.toggle('btn-primary', !isExcel);
+    document.getElementById('btnFixCoordModeCourse').classList.toggle('btn-outline-primary', isExcel);
+}
+
+function _renderFixCoordRolePreview(res) {
+    currentFixCoordRoleItems = res.items || [];
+
+    const tbody = document.getElementById('fixCoordRoleList');
+    let html = '';
+    currentFixCoordRoleItems.forEach((it, idx) => {
+        html += `
+        <tr>
+            <td><input class="form-check-input fix-coord-role-checkbox" type="checkbox" value="${idx}" onchange="updateSelectedFixCoordRoleCount()"></td>
+            <td>${it.course_name || it.course_id}</td>
+            <td>${it.email}</td>
+            <td><span class="badge bg-secondary">${it.current_role || 'Diseñador'}</span></td>
+        </tr>`;
+    });
+    if (currentFixCoordRoleItems.length === 0) {
+        html = `<tr><td colspan="4" class="text-center text-muted">Ninguna inscripción de Diseñador pendiente de migrar.</td></tr>`;
+    }
+    tbody.innerHTML = html;
+    document.getElementById('fixCoordRoleCount').innerText = currentFixCoordRoleItems.length;
+    document.getElementById('selectAllFixCoordRole').checked = false;
+
+    if (res.already_correct > 0) {
+        document.getElementById('fixCoordRoleAlreadyOkWrap').style.display = 'block';
+        document.getElementById('fixCoordRoleAlreadyOk').innerText = res.already_correct;
+    } else {
+        document.getElementById('fixCoordRoleAlreadyOkWrap').style.display = 'none';
+    }
+
+    if (res.not_found && res.not_found.length > 0) {
+        document.getElementById('fixCoordRoleNotFoundWrap').style.display = 'block';
+        document.getElementById('fixCoordRoleNotFound').innerText = res.not_found.join('; ');
+    } else {
+        document.getElementById('fixCoordRoleNotFoundWrap').style.display = 'none';
+    }
+
+    document.getElementById('fixCoordRoleFormWrap').style.display = 'none';
+    document.getElementById('fixCoordRolePreviewWrap').style.display = 'block';
+    updateSelectedFixCoordRoleCount();
+}
+
+async function previewFixCoordRole() {
+    const urlInput = document.getElementById('fixCoordRoleUrl').value.trim();
+    const sheetInput = document.getElementById('fixCoordRoleSheet').value.trim();
+    if (!urlInput) { toast('Por favor, ingresa la URL primero.', 'warning'); return; }
+    if (!sheetInput) { toast('Selecciona una pestaña primero.', 'warning'); return; }
+
+    const btn = document.getElementById('btnPreviewFixCoordRole');
+    setLoading(btn, true);
+    toast('Analizando la planilla...', 'info');
+
+    try {
+        const res = await api.post('/excel/courses/fix-coordinador-role/preview', { url: urlInput, sheet_name: sheetInput });
+        _renderFixCoordRolePreview(res);
+    } catch (e) {
+        toast('Error detectando coordinadores: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function _parseFixCoordRoleCourseEntries(raw) {
+    return (raw || '').split(/[\n;]+/).map(s => s.trim()).filter(Boolean);
+}
+
+async function previewFixCoordRoleByCourse() {
+    const raw = document.getElementById('fixCoordRoleCourseTextarea').value;
+    const entries = _parseFixCoordRoleCourseEntries(raw);
+    if (entries.length === 0) {
+        toast('Ingresa al menos un ID de Canvas o SIS ID de curso.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btnPreviewFixCoordRoleByCourse');
+    setLoading(btn, true);
+    toast('Buscando inscripciones de Diseñador...', 'info');
+
+    try {
+        const res = await api.post('/excel/courses/fix-coordinador-role/resolve-by-course', { entries });
+        _renderFixCoordRolePreview(res);
+    } catch (e) {
+        toast('Error buscando en los cursos: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function cancelFixCoordRolePreview() {
+    document.getElementById('fixCoordRoleFormWrap').style.display = 'block';
+    document.getElementById('fixCoordRolePreviewWrap').style.display = 'none';
+}
+
+function toggleSelectAllFixCoordRole() {
+    const selectAll = document.getElementById('selectAllFixCoordRole').checked;
+    document.querySelectorAll('.fix-coord-role-checkbox').forEach(cb => cb.checked = selectAll);
+    updateSelectedFixCoordRoleCount();
+}
+
+function updateSelectedFixCoordRoleCount() {
+    const selected = document.querySelectorAll('.fix-coord-role-checkbox:checked').length;
+    document.getElementById('selectedFixCoordRoleCount').innerText = selected;
+    document.getElementById('btnExecuteFixCoordRole').disabled = selected === 0;
+}
+
+async function executeFixCoordRole() {
+    const checkboxes = document.querySelectorAll('.fix-coord-role-checkbox:checked');
+    const items = Array.from(checkboxes).map(cb => currentFixCoordRoleItems[parseInt(cb.value, 10)]);
+    if (items.length === 0) return;
+
+    if (!confirm(`¿Migrar ${items.length} inscripción(es) de Diseñador a Coordinador? Se quita la inscripción de Diseñador y se crea una nueva como Coordinador para cada uno.`)) return;
+
+    const btn = document.getElementById('btnExecuteFixCoordRole');
+    setLoading(btn, true);
+
+    try {
+        const res = await api.post('/excel/courses/fix-coordinador-role/execute', { items });
+
+        let errWrap = document.getElementById('fixCoordRoleErrorsWrap');
+        if (!errWrap) {
+            errWrap = document.createElement('div');
+            errWrap.id = 'fixCoordRoleErrorsWrap';
+            document.getElementById('fixCoordRolePreviewWrap').appendChild(errWrap);
+        }
+        if (res.failed && res.failed.length > 0) {
+            errWrap.innerHTML = `
+                <div class="alert alert-danger mt-3 mb-0">
+                    <strong>Detalle de errores:</strong>
+                    <ul class="mb-0 mt-2">
+                        ${res.failed.map(f => `<li><b>${f.item}</b>: ${f.error}</li>`).join('')}
+                    </ul>
+                </div>`;
+            toast(`Éxito: ${res.succeeded.length} migrados. Errores: ${res.failed.length} (detalle abajo).`, 'warning');
+        } else {
+            errWrap.innerHTML = '';
+            toast(`Éxito: ${res.succeeded.length} coordinador(es) migrados a Coordinador.`, 'success');
+            cancelFixCoordRolePreview();
+        }
+    } catch (e) {
+        toast('Error migrando coordinadores: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
 
 loadCourses();
 </script>
