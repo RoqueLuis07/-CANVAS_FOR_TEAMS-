@@ -1266,3 +1266,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+// Resalta el sub-item del sidebar que corresponde al ?tab= actual y
+// despliega su submenú (ej. Cursos Canvas > Liberar SIS ID).
+document.addEventListener('DOMContentLoaded', () => {
+    const currentTab = new URLSearchParams(window.location.search).get('tab');
+    if (!currentTab) return;
+
+    document.querySelectorAll('.sidebar-sublink').forEach(link => {
+        const url = new URL(link.getAttribute('href'), window.location.origin);
+        if (url.pathname !== window.location.pathname || url.searchParams.get('tab') !== currentTab) return;
+
+        link.classList.add('active');
+        const submenu = link.closest('.collapse');
+        if (!submenu) return;
+        submenu.classList.add('show');
+        const group = submenu.previousElementSibling;
+        const caret = group && group.querySelector('.sidebar-caret-btn');
+        if (caret) caret.setAttribute('aria-expanded', 'true');
+    });
+});

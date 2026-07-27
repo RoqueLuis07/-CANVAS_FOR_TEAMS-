@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/vendor/bootstrap-icons/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="/static/css/style.css?v=23" rel="stylesheet">
+  <link href="/static/css/style.css?v=24" rel="stylesheet">
 </head>
 <body>
 
@@ -42,9 +42,33 @@
 
   <!-- Gestión Académica -->
   <div class="sidebar-section mt-3">Gestión Académica</div>
-  <a href="/ui/canvas/courses" class="sidebar-link {% block nav_cc %}{% endblock %}">
-    <i class="bi bi-book-fill"></i><span>Cursos (Canvas)</span>
-  </a>
+  <div class="sidebar-link-group">
+    <a href="/ui/canvas/courses" class="sidebar-link {% block nav_cc %}{% endblock %}">
+      <i class="bi bi-book-fill"></i><span>Cursos (Canvas)</span>
+    </a>
+    <button type="button" class="sidebar-caret-btn" data-bs-toggle="collapse" data-bs-target="#submenuCursos"
+            aria-expanded="{% block nav_cc_expanded %}false{% endblock %}" aria-controls="submenuCursos"
+            aria-label="Mostrar herramientas de Cursos Canvas">
+      <i class="bi bi-chevron-down"></i>
+    </button>
+  </div>
+  <div class="collapse {% block nav_cc_show %}{% endblock %}" id="submenuCursos">
+    <a href="/ui/canvas/courses?tab=create" class="sidebar-sublink" data-tab="create">
+      <i class="bi bi-plus-circle-fill"></i><span>Creación Masiva</span>
+    </a>
+    <a href="/ui/canvas/courses?tab=delete" class="sidebar-sublink" data-tab="delete">
+      <i class="bi bi-trash3-fill"></i><span>Eliminación Masiva</span>
+    </a>
+    <a href="/ui/canvas/courses?tab=release-sis" class="sidebar-sublink" data-tab="release-sis">
+      <i class="bi bi-unlock-fill"></i><span>Liberar SIS ID</span>
+    </a>
+    <a href="/ui/canvas/courses?tab=release-term-sis" class="sidebar-sublink" data-tab="release-term-sis">
+      <i class="bi bi-unlock-fill"></i><span>Liberar Período</span>
+    </a>
+    <a href="/ui/canvas/courses?tab=fix-coord-role" class="sidebar-sublink" data-tab="fix-coord-role">
+      <i class="bi bi-person-gear"></i><span>Corregir Rol Coordinador</span>
+    </a>
+  </div>
   <a href="/ui/teams/teams" class="sidebar-link {% block nav_tt %}{% endblock %}">
     <i class="bi bi-microsoft-teams"></i><span>Equipos (Teams)</span>
   </a>
@@ -260,7 +284,7 @@
 
 <script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/static/vendor/xlsx/xlsx.full.min.js"></script>
-<script src="/static/js/main.js?v=10"></script>
+<script src="/static/js/main.js?v=11"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
