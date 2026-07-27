@@ -2,6 +2,8 @@
 {% block title %}Desvinculación (Offboarding) | Canvas for Teams{% endblock %}
 {% block breadcrumb %}Directorio & Ingresos › Egreso / Desvinculación{% endblock %}
 {% block nav_egreso %}active{% endblock %}
+{% block nav_egreso_expanded %}true{% endblock %}
+{% block nav_egreso_show %}show{% endblock %}
 
 {% block content %}
 <div class="row mb-4 align-items-center">
@@ -372,6 +374,16 @@ async function confirmEgresoOneDrive() {
         btn.disabled = false;
     }
 }
+
+// Activa la pestaña indicada por ?tab= (llegando desde el submenú del sidebar).
+// En DOMContentLoaded porque este script va antes de bootstrap.bundle.min.js
+// en el HTML final (este bloque se renderiza antes que ese <script>).
+document.addEventListener('DOMContentLoaded', () => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (!tab) return;
+    const btn = document.getElementById(tab + '-tab');
+    if (btn) new bootstrap.Tab(btn).show();
+});
 
 </script>
 {% endblock %}

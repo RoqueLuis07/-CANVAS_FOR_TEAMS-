@@ -36,9 +36,24 @@
   <a href="/ui/ingreso" class="sidebar-link {% block nav_ni %}{% endblock %}">
     <i class="bi bi-person-plus-fill"></i><span>Alta Unificada</span>
   </a>
-  <a href="/egreso" class="sidebar-link {% block nav_egreso %}{% endblock %}">
-    <i class="bi bi-person-dash-fill"></i><span>Egreso / Desvinculación</span>
-  </a>
+  <div class="sidebar-link-group">
+    <a href="/egreso" class="sidebar-link {% block nav_egreso %}{% endblock %}">
+      <i class="bi bi-person-dash-fill"></i><span>Egreso / Desvinculación</span>
+    </a>
+    <button type="button" class="sidebar-caret-btn" data-bs-toggle="collapse" data-bs-target="#submenuEgreso"
+            aria-expanded="{% block nav_egreso_expanded %}false{% endblock %}" aria-controls="submenuEgreso"
+            aria-label="Mostrar herramientas de Egreso">
+      <i class="bi bi-chevron-down"></i>
+    </button>
+  </div>
+  <div class="collapse {% block nav_egreso_show %}{% endblock %}" id="submenuEgreso">
+    <a href="/egreso?tab=individual" class="sidebar-sublink" data-tab="individual">
+      <i class="bi bi-person-dash"></i><span>Egreso Individual</span>
+    </a>
+    <a href="/egreso?tab=masivo" class="sidebar-sublink" data-tab="masivo">
+      <i class="bi bi-cloud-arrow-down-fill"></i><span>Egreso Masivo</span>
+    </a>
+  </div>
 
   <!-- Gestión Académica -->
   <div class="sidebar-section mt-3">Gestión Académica</div>
