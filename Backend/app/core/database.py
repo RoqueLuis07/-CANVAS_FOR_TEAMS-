@@ -28,104 +28,137 @@ async def close_db():
         _conn = None
 
 
+async def _run(fn):
+    """Ejecuta `fn(conn)` en un hilo aparte, serializado por `_db_lock`.
+
+    Si `fn` lanza una excepción, hace rollback ANTES de propagarla. Sin esto,
+    la conexión global (`_conn`) queda en estado "transacción abortada" tras
+    cualquier error, y como se reutiliza en todas las llamadas siguientes,
+    UNA sola consulta fallida rompía todas las operaciones de base de datos
+    del resto de la app hasta reiniciar el proceso.
+    """
+    def _wrapped():
+        conn = _get_conn()
+        try:
+            return fn(conn)
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                # La conexión quedó en un estado irrecuperable (ej. se cayó
+                # la red a mitad de la transacción) — se descarta para que
+                # la próxima llamada abra una conexión nueva y limpia.
+                global _conn
+                _conn = None
+            raise
+
+    async with _db_lock:
+        return await asyncio.to_thread(_wrapped)
+
 
 async def init_db():
     """Initialize database - create tables if needed."""
-    try:
-        def _init():
-            conn = _get_conn()
-            cursor = conn.cursor()
+    def _init(conn):
+        cursor = conn.cursor()
 
-            # Create main tables
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS canvas_courses (
-                    id BIGINT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    course_code TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        # Create main tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS canvas_courses (
+                id BIGINT PRIMARY KEY,
+                name TEXT NOT NULL,
+                course_code TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS canvas_users (
-                    id BIGINT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    email TEXT UNIQUE,
-                    login_id TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS canvas_users (
+                id BIGINT PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE,
+                login_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS canvas_enrollments (
-                    id BIGINT PRIMARY KEY,
-                    course_id BIGINT NOT NULL,
-                    user_id BIGINT NOT NULL,
-                    role TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (course_id) REFERENCES canvas_courses(id),
-                    FOREIGN KEY (user_id) REFERENCES canvas_users(id)
-                )
-            """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS canvas_enrollments (
+                id BIGINT PRIMARY KEY,
+                course_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                role TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (course_id) REFERENCES canvas_courses(id),
+                FOREIGN KEY (user_id) REFERENCES canvas_users(id)
+            )
+        """)
 
-            # Migración: tablas creadas antes de este fix tenían course_id/user_id
-            # como INTEGER, pero referencian canvas_courses.id/canvas_users.id que
-            # son BIGINT — ensanchar INTEGER -> BIGINT es siempre seguro en
-            # Postgres (nunca trunca ni falla), así que se aplica también a
-            # instalaciones ya existentes.
-            cursor.execute("""
-                ALTER TABLE canvas_enrollments ALTER COLUMN course_id TYPE BIGINT;
-                ALTER TABLE canvas_enrollments ALTER COLUMN user_id TYPE BIGINT;
-            """)
+        # Migración: tablas creadas antes de este fix tenían course_id/user_id
+        # como INTEGER, pero referencian canvas_courses.id/canvas_users.id que
+        # son BIGINT — ensanchar INTEGER -> BIGINT es siempre seguro en
+        # Postgres (nunca trunca ni falla), así que se aplica también a
+        # instalaciones ya existentes.
+        cursor.execute("""
+            ALTER TABLE canvas_enrollments ALTER COLUMN course_id TYPE BIGINT;
+            ALTER TABLE canvas_enrollments ALTER COLUMN user_id TYPE BIGINT;
+        """)
 
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS azure_users (
-                    id TEXT PRIMARY KEY,
-                    display_name TEXT NOT NULL,
-                    mail TEXT UNIQUE,
-                    user_principal_name TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS azure_users (
+                id TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                mail TEXT UNIQUE,
+                user_principal_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sync_metadata (
-                    id BIGINT PRIMARY KEY,
-                    sync_type TEXT NOT NULL,
-                    last_sync TIMESTAMP,
-                    status TEXT DEFAULT 'pending',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(sync_type)
-                )
-            """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_metadata (
+                id BIGINT PRIMARY KEY,
+                sync_type TEXT NOT NULL,
+                last_sync TIMESTAMP,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(sync_type)
+            )
+        """)
 
-            conn.commit()
-            # conn.close()
-            logger.info("Database initialized at Supabase PostgreSQL")
+        conn.commit()
+        logger.info("Database initialized at Supabase PostgreSQL")
 
-        async with _db_lock:
-            await asyncio.to_thread(_init)
-    except Exception as e:
-        logger.error(f"Database initialization error: {e}", exc_info=True)
-        raise
+    # Reintenta la inicialización unas pocas veces con espera breve: si el
+    # contenedor de la app arranca antes de que Supabase esté accesible
+    # (carrera típica en plataformas como Railway), sin reintento las tablas
+    # nunca se crean y la app queda sirviendo tráfico en estado degradado
+    # permanente ("relation does not exist" en cada query) hasta reiniciar
+    # manualmente. Se mantiene corto (máx. ~7s) para no arriesgar el timeout
+    # de health-check de arranque de la plataforma.
+    attempts = 4
+    for attempt in range(1, attempts + 1):
+        try:
+            await _run(_init)
+            return
+        except Exception as e:
+            if attempt == attempts:
+                logger.error(f"Database initialization error tras {attempts} intentos: {e}", exc_info=True)
+                raise
+            wait = attempt  # 1s, 2s, 3s
+            logger.warning(f"Database initialization falló (intento {attempt}/{attempts}), reintentando en {wait}s: {e}")
+            await asyncio.sleep(wait)
 
 
 async def count_courses() -> int:
     """Count total courses."""
     try:
-        def _count():
-            conn = _get_conn()
+        def _count(conn):
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM canvas_courses")
-            count = cursor.fetchone()[0]
-            # conn.close()
-            return count
-
-        async with _db_lock:
-            return await asyncio.to_thread(_count)
+            return cursor.fetchone()[0]
+        return await _run(_count)
     except Exception as e:
         logger.error(f"Error counting courses: {e}")
         return 0
@@ -134,16 +167,11 @@ async def count_courses() -> int:
 async def count_canvas_users() -> int:
     """Count total Canvas users."""
     try:
-        def _count():
-            conn = _get_conn()
+        def _count(conn):
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM canvas_users")
-            count = cursor.fetchone()[0]
-            # conn.close()
-            return count
-
-        async with _db_lock:
-            return await asyncio.to_thread(_count)
+            return cursor.fetchone()[0]
+        return await _run(_count)
     except Exception as e:
         logger.error(f"Error counting Canvas users: {e}")
         return 0
@@ -152,16 +180,11 @@ async def count_canvas_users() -> int:
 async def count_azure_users() -> int:
     """Count total Azure users."""
     try:
-        def _count():
-            conn = _get_conn()
+        def _count(conn):
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM azure_users")
-            count = cursor.fetchone()[0]
-            # conn.close()
-            return count
-
-        async with _db_lock:
-            return await asyncio.to_thread(_count)
+            return cursor.fetchone()[0]
+        return await _run(_count)
     except Exception as e:
         logger.error(f"Error counting Azure users: {e}")
         return 0
@@ -179,8 +202,7 @@ def _stable_id(text: str) -> int:
 async def mark_synced(sync_type: str) -> bool:
     """Mark a sync as completed."""
     try:
-        def _mark():
-            conn = _get_conn()
+        def _mark(conn):
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO sync_metadata (id, sync_type, last_sync, status)
@@ -190,11 +212,8 @@ async def mark_synced(sync_type: str) -> bool:
                     status = EXCLUDED.status
             """, (_stable_id(sync_type), sync_type, datetime.utcnow()))
             conn.commit()
-            # conn.close()
             return True
-
-        async with _db_lock:
-            return await asyncio.to_thread(_mark)
+        return await _run(_mark)
     except Exception as e:
         logger.error(f"Error marking sync: {e}")
         return False
@@ -203,18 +222,14 @@ async def mark_synced(sync_type: str) -> bool:
 async def get_last_sync(sync_type: str) -> datetime | None:
     """Get the last sync time for a specific type."""
     try:
-        def _get():
-            conn = _get_conn()
+        def _get(conn):
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT last_sync FROM sync_metadata WHERE sync_type = %s
             """, (sync_type,))
             result = cursor.fetchone()
-            # conn.close()
             return result[0] if result else None
-
-        async with _db_lock:
-            result = await asyncio.to_thread(_get)
+        result = await _run(_get)
         if not result:
             return None
         # psycopg2 ya devuelve un datetime nativo para columnas TIMESTAMP.
@@ -241,33 +256,33 @@ async def is_stale(sync_type: str, ttl_seconds: int = 3600) -> bool:
 async def upsert_courses(courses: list) -> int:
     """Upsert courses into database. Returns count of inserted/updated."""
     try:
-        def _upsert():
-            conn = _get_conn()
+        def _upsert(conn):
             cursor = conn.cursor()
             count = 0
 
             for course in courses:
-                cursor.execute("""
-                    INSERT INTO canvas_courses (id, name, course_code, updated_at)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        course_code = EXCLUDED.course_code,
-                        updated_at = EXCLUDED.updated_at
-                """, (
-                    course.get('id'),
-                    course.get('name', ''),
-                    course.get('course_code', ''),
-                    datetime.utcnow()
-                ))
-                count += 1
+                try:
+                    cursor.execute("""
+                        INSERT INTO canvas_courses (id, name, course_code, updated_at)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            name = EXCLUDED.name,
+                            course_code = EXCLUDED.course_code,
+                            updated_at = EXCLUDED.updated_at
+                    """, (
+                        course.get('id'),
+                        course.get('name', ''),
+                        course.get('course_code', ''),
+                        datetime.utcnow()
+                    ))
+                    count += 1
+                except Exception as ce:
+                    conn.rollback()
+                    logger.warning(f"Skipping course {course.get('id')}: {ce}")
 
             conn.commit()
-            # conn.close()
             return count
-
-        async with _db_lock:
-            return await asyncio.to_thread(_upsert)
+        return await _run(_upsert)
     except Exception as e:
         logger.error(f"Error upserting courses: {e}")
         return 0
@@ -276,8 +291,7 @@ async def upsert_courses(courses: list) -> int:
 async def upsert_canvas_users(users: list) -> int:
     """Upsert Canvas users into database. Returns count of inserted/updated."""
     try:
-        def _upsert():
-            conn = _get_conn()
+        def _upsert(conn):
             cursor = conn.cursor()
             count = 0
 
@@ -305,11 +319,8 @@ async def upsert_canvas_users(users: list) -> int:
                     continue
 
             conn.commit()
-            # conn.close()
             return count
-
-        async with _db_lock:
-            return await asyncio.to_thread(_upsert)
+        return await _run(_upsert)
     except Exception as e:
         logger.error(f"Error upserting Canvas users: {e}")
         return 0
@@ -318,15 +329,11 @@ async def upsert_canvas_users(users: list) -> int:
 async def get_canvas_users() -> list:
     """Return all Canvas users from local DB."""
     try:
-        def _get():
-            conn = _get_conn()
+        def _get(conn):
             cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cursor.execute("SELECT id, name, email, login_id FROM canvas_users ORDER BY name")
-            rows = [dict(r) for r in cursor.fetchall()]
-            # conn.close()
-            return rows
-        async with _db_lock:
-            return await asyncio.to_thread(_get)
+            return [dict(r) for r in cursor.fetchall()]
+        return await _run(_get)
     except Exception as e:
         logger.error(f"Error getting Canvas users: {e}")
         return []
@@ -335,8 +342,7 @@ async def get_canvas_users() -> list:
 async def search_canvas_users(term: str, limit: int = 1000) -> list:
     """Search Canvas users in local DB by name, email or login_id."""
     try:
-        def _search():
-            conn = _get_conn()
+        def _search(conn):
             cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             pattern = f"%{term}%"
             cursor.execute("""
@@ -344,11 +350,8 @@ async def search_canvas_users(term: str, limit: int = 1000) -> list:
                 WHERE name LIKE %s OR email LIKE %s OR login_id LIKE %s
                 ORDER BY name LIMIT %s
             """, (pattern, pattern, pattern, limit))
-            rows = [dict(r) for r in cursor.fetchall()]
-            # conn.close()
-            return rows
-        async with _db_lock:
-            return await asyncio.to_thread(_search)
+            return [dict(r) for r in cursor.fetchall()]
+        return await _run(_search)
     except Exception as e:
         logger.error(f"Error searching Canvas users: {e}")
         return []
@@ -357,14 +360,11 @@ async def search_canvas_users(term: str, limit: int = 1000) -> list:
 async def delete_canvas_user(user_id: str) -> bool:
     """Delete a Canvas user from local DB."""
     try:
-        def _del():
-            conn = _get_conn()
+        def _del(conn):
             cursor = conn.cursor()
             cursor.execute("DELETE FROM canvas_users WHERE id = %s", (user_id,))
             conn.commit()
-            # conn.close()
-        async with _db_lock:
-            await asyncio.to_thread(_del)
+        await _run(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting Canvas user {user_id}: {e}")
@@ -374,15 +374,11 @@ async def delete_canvas_user(user_id: str) -> bool:
 async def get_courses() -> list:
     """Return all courses from local DB."""
     try:
-        def _get():
-            conn = _get_conn()
+        def _get(conn):
             cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             cursor.execute("SELECT id, name, course_code FROM canvas_courses ORDER BY name")
-            rows = [dict(r) for r in cursor.fetchall()]
-            # conn.close()
-            return rows
-        async with _db_lock:
-            return await asyncio.to_thread(_get)
+            return [dict(r) for r in cursor.fetchall()]
+        return await _run(_get)
     except Exception as e:
         logger.error(f"Error getting courses: {e}")
         return []
@@ -391,14 +387,11 @@ async def get_courses() -> list:
 async def delete_course(course_id: str) -> bool:
     """Delete a course from local DB."""
     try:
-        def _del():
-            conn = _get_conn()
+        def _del(conn):
             cursor = conn.cursor()
             cursor.execute("DELETE FROM canvas_courses WHERE id = %s", (course_id,))
             conn.commit()
-            # conn.close()
-        async with _db_lock:
-            await asyncio.to_thread(_del)
+        await _run(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting course {course_id}: {e}")
@@ -408,8 +401,7 @@ async def delete_course(course_id: str) -> bool:
 async def upsert_azure_users(users: list) -> int:
     """Upsert Azure AD users into local DB."""
     try:
-        def _upsert():
-            conn = _get_conn()
+        def _upsert(conn):
             cursor = conn.cursor()
             count = 0
             for user in users:
@@ -435,10 +427,8 @@ async def upsert_azure_users(users: list) -> int:
                     conn.rollback()
                     logger.warning(f"Skipping Azure user {user.get('id')}: {ue}")
             conn.commit()
-            # conn.close()
             return count
-        async with _db_lock:
-            return await asyncio.to_thread(_upsert)
+        return await _run(_upsert)
     except Exception as e:
         logger.error(f"Error upserting Azure users: {e}")
         return 0
@@ -447,8 +437,7 @@ async def upsert_azure_users(users: list) -> int:
 async def get_azure_users(search: str | None = None) -> list:
     """Return Azure AD users from local DB, optionally filtered by search term."""
     try:
-        def _get():
-            conn = _get_conn()
+        def _get(conn):
             cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             if search:
                 q = f"%{search.lower()}%"
@@ -465,11 +454,8 @@ async def get_azure_users(search: str | None = None) -> list:
                     SELECT id, display_name, mail, user_principal_name
                     FROM azure_users ORDER BY display_name
                 """)
-            rows = [dict(r) for r in cursor.fetchall()]
-            # conn.close()
-            return rows
-        async with _db_lock:
-            return await asyncio.to_thread(_get)
+            return [dict(r) for r in cursor.fetchall()]
+        return await _run(_get)
     except Exception as e:
         logger.error(f"Error getting Azure users: {e}")
         return []
@@ -478,14 +464,11 @@ async def get_azure_users(search: str | None = None) -> list:
 async def delete_azure_user(user_id: str) -> bool:
     """Delete an Azure AD user from local DB."""
     try:
-        def _del():
-            conn = _get_conn()
+        def _del(conn):
             cursor = conn.cursor()
             cursor.execute("DELETE FROM azure_users WHERE id = %s", (user_id,))
             conn.commit()
-            # conn.close()
-        async with _db_lock:
-            await asyncio.to_thread(_del)
+        await _run(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting Azure user {user_id}: {e}")
@@ -495,8 +478,7 @@ async def delete_azure_user(user_id: str) -> bool:
 async def upsert_enrollments(enrollments: list) -> int:
     """Upsert enrollments into local DB."""
     try:
-        def _upsert():
-            conn = _get_conn()
+        def _upsert(conn):
             cursor = conn.cursor()
             count = 0
             for e in enrollments:
@@ -520,10 +502,8 @@ async def upsert_enrollments(enrollments: list) -> int:
                     conn.rollback()
                     logger.warning(f"Skipping enrollment {e.get('id')}: {ue}")
             conn.commit()
-            # conn.close()
             return count
-        async with _db_lock:
-            return await asyncio.to_thread(_upsert)
+        return await _run(_upsert)
     except Exception as e:
         logger.error(f"Error upserting enrollments: {e}")
         return 0
@@ -532,14 +512,11 @@ async def upsert_enrollments(enrollments: list) -> int:
 async def delete_enrollment(enrollment_id: str) -> bool:
     """Delete an enrollment from local DB."""
     try:
-        def _del():
-            conn = _get_conn()
+        def _del(conn):
             cursor = conn.cursor()
             cursor.execute("DELETE FROM canvas_enrollments WHERE id = %s", (enrollment_id,))
             conn.commit()
-            # conn.close()
-        async with _db_lock:
-            await asyncio.to_thread(_del)
+        await _run(_del)
         return True
     except Exception as e:
         logger.error(f"Error deleting enrollment {enrollment_id}: {e}")
