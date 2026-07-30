@@ -158,39 +158,114 @@ def _build_diplomado_message(
 _ERP_DOCENTE_LINK = "https://erp-py.usil.digital/login"
 
 
+_ERP_DOCENTE_FEATURES = [
+    "Cargar calificaciones",
+    "Registrar asistencias",
+    "Consultar listas de alumnos",
+    "Revisar el cronograma académico",
+]
+
+
 def _build_erp_docente_message(
     *, full_name: str, username: str, password: str,
 ) -> tuple[str, str]:
     """Correo de bienvenida con acceso al Sistema Académico Docente (ERP
-    externo, erp-py.usil.digital, no gestionado por esta app). Mismo estilo
-    visual que el correo de Diplomados (caja celeste + botón en vez de
-    enlace plano), pero para cargar notas/asistencias en ese sistema."""
+    externo, erp-py.usil.digital, no gestionado por esta app). Basado en
+    tablas (compatible con Outlook), con encabezado de marca, tarjeta de
+    credenciales tipo "ticket" y lista de funcionalidades con íconos."""
     subject = "Bienvenido a la USIL — Acceso al Sistema Académico Docente"
+
+    features_rows = "".join(
+        f"""
+        <tr>
+          <td style="padding:4px 0; vertical-align:top; width:22px;">
+            <span style="display:inline-block; width:18px; height:18px; line-height:18px; text-align:center;
+                         background:#4b53bc; color:#ffffff; border-radius:50%; font-size:11px; font-weight:bold;">✓</span>
+          </td>
+          <td style="padding:4px 0 4px 8px; color:#333333;">{feature}</td>
+        </tr>
+        """
+        for feature in _ERP_DOCENTE_FEATURES
+    )
+
     html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">
-      <p>Hola {full_name},</p>
-      <p>¡Bienvenido a la USIL!</p>
-      <p>Te deseamos un excelente inicio de semestre, lleno de aprendizajes, logros y nuevas experiencias en esta nueva etapa con nosotros.</p>
-      <p>A continuación, te compartimos tus credenciales de acceso al <strong>Sistema Académico Docente</strong>:</p>
-
-      <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
-        <p style="margin:0;"><strong>Usuario:</strong> {username}</p>
-        <p style="margin:0;"><strong>Contraseña:</strong> {password}</p>
-      </div>
-
-      <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
-        <p style="margin:0 0 12px;">Desde esta plataforma podrás cargar calificaciones, registrar asistencias, consultar listas de alumnos y revisar el cronograma académico.</p>
-        <p style="margin:0;">
-          <a href="{_ERP_DOCENTE_LINK}" style="display:inline-block; background:#4b53bc; color:#ffffff; text-decoration:none; font-weight:bold; padding:10px 22px; border-radius:6px;">Acceder al Sistema Académico Docente</a>
-        </p>
-      </div>
-
-      <p>Ante cualquier duda o inconveniente, estamos para ayudarte.</p>
-      <p>¡Mucho éxito en este semestre!</p>
-
-      <hr style="border:none; border-top:1px solid #d0d5dd; margin:20px 0;">
-      <p style="margin:0;">Universidad San Ignacio de Loyola — Área de Tecnologías de la Información</p>
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="background:#eef1f6; padding:24px 0; font-family: Arial, Helvetica, sans-serif;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0"
+                 style="background:#ffffff; border-radius:10px; overflow:hidden; border:1px solid #dfe3ea;">
+            <tr>
+              <td style="background:#1f2a5c; padding:22px 32px;">
+                <span style="color:#ffffff; font-size:18px; font-weight:bold; letter-spacing:0.3px;">Universidad San Ignacio de Loyola</span><br>
+                <span style="color:#c7cdf0; font-size:13px;">Sistema Académico Docente</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 8px 32px; font-size:14px; color:#222222; line-height:1.55;">
+                <p style="margin:0 0 12px;">Hola <strong>{full_name}</strong>,</p>
+                <p style="margin:0 0 12px;">¡Bienvenido a la USIL! Te deseamos un excelente inicio de semestre, lleno de aprendizajes, logros y nuevas experiencias en esta nueva etapa con nosotros.</p>
+                <p style="margin:0 0 4px;">A continuación, te compartimos tus credenciales de acceso al <strong>Sistema Académico Docente</strong>:</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                       style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px;">
+                  <tr>
+                    <td style="padding:14px 18px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:14px;">
+                        <tr>
+                          <td style="padding:3px 0; color:#5b6472; width:110px;">Usuario</td>
+                          <td style="padding:3px 0; color:#111111; font-weight:bold;">{username}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:3px 0; color:#5b6472;">Contraseña</td>
+                          <td style="padding:3px 0; color:#111111; font-weight:bold;">{password}</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px 4px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                       style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px;">
+                  <tr>
+                    <td style="padding:16px 18px;">
+                      <p style="margin:0 0 10px; font-size:14px; color:#222222;">Desde esta plataforma podrás:</p>
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:13.5px;">
+                        {features_rows}
+                      </table>
+                      <div style="text-align:center; margin-top:16px;">
+                        <a href="{_ERP_DOCENTE_LINK}"
+                           style="display:inline-block; background:#4b53bc; color:#ffffff; text-decoration:none;
+                                  font-weight:bold; font-size:14px; padding:11px 28px; border-radius:6px;">
+                          Acceder al Sistema Académico Docente
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px 28px 32px; font-size:14px; color:#222222; line-height:1.55;">
+                <p style="margin:0 0 8px;">Ante cualquier duda o inconveniente, estamos para ayudarte.</p>
+                <p style="margin:0;">¡Mucho éxito en este semestre!</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 32px; background:#f5f7fa; border-top:1px solid #e3e7ee;">
+                <p style="margin:0; font-size:12px; color:#6b7280;">Universidad San Ignacio de Loyola — Área de Tecnologías de la Información</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
     """
     return subject, html
 
