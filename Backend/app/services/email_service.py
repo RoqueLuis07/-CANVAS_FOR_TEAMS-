@@ -155,6 +155,82 @@ def _build_diplomado_message(
     return subject, html
 
 
+_ERP_DOCENTE_LINK = "https://erp-py.usil.digital/login"
+
+
+def _build_erp_docente_message(
+    *, full_name: str, username: str, password: str,
+) -> tuple[str, str]:
+    """Correo de bienvenida con acceso al Sistema Académico Docente (ERP
+    externo, erp-py.usil.digital, no gestionado por esta app). Mismo estilo
+    visual que el correo de Diplomados (caja celeste + botón en vez de
+    enlace plano), pero para cargar notas/asistencias en ese sistema."""
+    subject = "Bienvenido a la USIL — Acceso al Sistema Académico Docente"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">
+      <p>Hola {full_name},</p>
+      <p>¡Bienvenido a la USIL!</p>
+      <p>Te deseamos un excelente inicio de semestre, lleno de aprendizajes, logros y nuevas experiencias en esta nueva etapa con nosotros.</p>
+      <p>A continuación, te compartimos tus credenciales de acceso al <strong>Sistema Académico Docente</strong>:</p>
+
+      <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
+        <p style="margin:0;"><strong>Usuario:</strong> {username}</p>
+        <p style="margin:0;"><strong>Contraseña:</strong> {password}</p>
+      </div>
+
+      <div style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px; padding:12px 16px; margin:16px 0;">
+        <p style="margin:0 0 12px;">Desde esta plataforma podrás cargar calificaciones, registrar asistencias, consultar listas de alumnos y revisar el cronograma académico.</p>
+        <p style="margin:0;">
+          <a href="{_ERP_DOCENTE_LINK}" style="display:inline-block; background:#4b53bc; color:#ffffff; text-decoration:none; font-weight:bold; padding:10px 22px; border-radius:6px;">Acceder al Sistema Académico Docente</a>
+        </p>
+      </div>
+
+      <p>Ante cualquier duda o inconveniente, estamos para ayudarte.</p>
+      <p>¡Mucho éxito en este semestre!</p>
+
+      <hr style="border:none; border-top:1px solid #d0d5dd; margin:20px 0;">
+      <p style="margin:0;">Universidad San Ignacio de Loyola — Área de Tecnologías de la Información</p>
+    </div>
+    """
+    return subject, html
+
+
+async def send_erp_docente_email(
+    *, to_email: str, full_name: str, username: str, password: str,
+) -> None:
+    """Envía el correo de bienvenida/acceso al Sistema Académico Docente
+    (ERP externo). El usuario/contraseña de ese sistema se ingresan
+    manualmente — no se generan ni se sincronizan desde esta app."""
+    if not settings.smtp_from:
+        raise RuntimeError("El envío de correo no está configurado (falta SMTP_FROM, el buzón remitente).")
+    if not to_email or "@" not in to_email:
+        raise ValueError("Correo de envío inválido o vacío.")
+
+    subject, html = _build_erp_docente_message(full_name=full_name, username=username, password=password)
+
+    try:
+        await graph.send_mail(
+            mailbox=settings.smtp_from, subject=subject, html_body=html,
+            to_email=to_email, cc=_BASE_CC, attachments=[],
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            logger.error("Error enviando correo ERP docente a %s: %s", to_email, exc.detail)
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Falta el permiso de aplicación 'Mail.Send' (con consentimiento de administrador) "
+                    "en Azure Portal → App Registrations → API Permissions, o el buzón SMTP_FROM no es "
+                    f"válido en este tenant. Detalle original: {exc.detail}"
+                ),
+            )
+        logger.error("Error enviando correo ERP docente a %s: %s", to_email, exc.detail)
+        raise
+    except Exception as exc:
+        logger.error("Error enviando correo ERP docente a %s: %s", to_email, exc)
+        raise
+
+
 async def send_credentials_email(
     *,
     to_email: str,

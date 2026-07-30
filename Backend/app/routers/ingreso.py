@@ -482,6 +482,51 @@ async def create_students_bulk(body: BulkStudentsIn) -> BulkResult:
     return result
 
 
+class ErpDocenteCredentialsIn(BaseModel):
+    """Datos para enviar el correo de acceso al Sistema Académico Docente
+    (ERP externo, erp-py.usil.digital). Usuario/contraseña son manuales —
+    ese sistema no lo gestiona esta app."""
+
+    full_name: str
+    to_email: str
+    username: str
+    password: str
+
+    @field_validator("full_name", "username", "password")
+    @classmethod
+    def v_required(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Este campo es requerido")
+        return v
+
+    @field_validator("to_email")
+    @classmethod
+    def v_email(cls, v: str) -> str:
+        v = v.strip()
+        if not v or "@" not in v:
+            raise ValueError("Correo de envío inválido")
+        return v
+
+
+@router.post("/send-erp-docente-credentials", summary="Enviar acceso al Sistema Académico Docente (ERP externo)")
+async def send_erp_docente_credentials(body: ErpDocenteCredentialsIn) -> dict[str, Any]:
+    """Envía el correo de bienvenida con el usuario/contraseña del ERP
+    docente (erp-py.usil.digital). Es un sistema externo, no vinculado a
+    Canvas/Teams — por eso no genera credenciales, solo envía las que se
+    le pasan."""
+    try:
+        await email_service.send_erp_docente_email(
+            to_email=body.to_email,
+            full_name=body.full_name,
+            username=body.username,
+            password=body.password,
+        )
+        return {"email": "sent", "to": body.to_email}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=_err(exc))
+
+
 @router.post("/resend-credentials", summary="Reenviar credenciales a un usuario ya existente")
 async def resend_credentials(body: ResendCredentialsIn) -> dict[str, Any]:
     """Recalcula las credenciales institucionales de un usuario ya creado
