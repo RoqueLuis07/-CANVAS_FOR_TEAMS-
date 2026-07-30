@@ -282,7 +282,8 @@ async def send_erp_docente_email(
         raise ValueError("Correo de envío inválido o vacío.")
 
     subject, html = _build_erp_docente_message(full_name=full_name, username=username, password=password)
-    cc = [*_BASE_CC, *(extra_cc or [])]
+    base_cc = [addr for addr in _BASE_CC if addr != "comercialcredenciales@usil.edu.py"]
+    cc = [*base_cc, *(extra_cc or [])]
 
     try:
         await graph.send_mail(
