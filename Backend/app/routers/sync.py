@@ -110,22 +110,41 @@ async def resolve_user_identities(user_ref: str):
 
 async def _enroll_single(item: UnifiedEnrollment):
     errors = []
-    
-    # 1. Resolve IDs
+
+    canvas_ref = (item.canvas_course_id or "").strip()
+    teams_ref = (item.teams_team_id or "").strip()
+
+    if not canvas_ref and not teams_ref:
+        return {
+            "status": "error",
+            "message": "No se indicó curso de Canvas ni equipo de Teams.",
+            "item": item.dict(),
+        }
+
+    # 1. Resolve identities
     try:
         canvas_user_id, teams_upn = await resolve_user_identities(item.user_identifier)
     except Exception as e:
         return {"status": "error", "message": str(e), "item": item.dict()}
 
-    try:
-        course_id = await resolve_canvas_course(item.canvas_course_id)
-    except Exception as e:
-        return {"status": "error", "message": str(e), "item": item.dict()}
+    # 2. Resolve destinos — cada uno es opcional: si no se indicó, se omite esa
+    # plataforma en vez de fallar (antes, dejar el curso/equipo vacío hacía que
+    # resolve_canvas_course("")/resolve_teams_group("") reventara con "no se
+    # encontró", incluso cuando la intención era matricular solo en la otra
+    # plataforma).
+    course_id = None
+    if canvas_ref:
+        try:
+            course_id = await resolve_canvas_course(canvas_ref)
+        except Exception as e:
+            return {"status": "error", "message": str(e), "item": item.dict()}
 
-    try:
-        team_id = await resolve_teams_group(item.teams_team_id)
-    except Exception as e:
-        return {"status": "error", "message": str(e), "item": item.dict()}
+    team_id = None
+    if teams_ref:
+        try:
+            team_id = await resolve_teams_group(teams_ref)
+        except Exception as e:
+            return {"status": "error", "message": str(e), "item": item.dict()}
 
     canvas_roles = {
         "teacher": "TeacherEnrollment",
@@ -135,36 +154,36 @@ async def _enroll_single(item: UnifiedEnrollment):
         "student": "StudentEnrollment"
     }
     canvas_role = canvas_roles.get(item.role, "StudentEnrollment")
-    canvas_payload = {
-        "enrollment": {
-            "user_id": canvas_user_id,
-            "type": canvas_role,
-            "enrollment_state": "invited",
-            "notify": True
-        }
-    }
-    
-    try:
-        await canvas.post(f"/courses/{course_id}/enrollments", canvas_payload)
-    except Exception as e:
-        errors.append(f"Canvas Error: {e}")
 
-    # 3. Teams Enrollment
-    teams_role = ["owner"] if item.role == "teacher" else []
-    teams_payload = {
-        "@odata.type": "#microsoft.graph.aadUserConversationMember",
-        "roles": teams_role,
-        "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{teams_upn}')",
-    }
-    
-    try:
-        await graph.post(f"/teams/{team_id}/members", teams_payload)
-    except Exception as e:
-        errors.append(f"Teams Error: {e}")
+    if course_id:
+        canvas_payload = {
+            "enrollment": {
+                "user_id": canvas_user_id,
+                "type": canvas_role,
+                "enrollment_state": "invited",
+                "notify": True
+            }
+        }
+        try:
+            await canvas.post(f"/courses/{course_id}/enrollments", canvas_payload)
+        except Exception as e:
+            errors.append(f"Canvas Error: {e}")
+
+    if team_id:
+        teams_role = ["owner"] if item.role == "teacher" else []
+        teams_payload = {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "roles": teams_role,
+            "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{teams_upn}')",
+        }
+        try:
+            await graph.post(f"/teams/{team_id}/members", teams_payload)
+        except Exception as e:
+            errors.append(f"Teams Error: {e}")
 
     if errors:
         return {"status": "error", "message": " | ".join(errors), "item": item.dict()}
-    
+
     return {"status": "success", "item": item.dict()}
 
 
