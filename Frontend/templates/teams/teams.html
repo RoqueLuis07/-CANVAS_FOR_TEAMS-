@@ -10,6 +10,7 @@
     <a href="/excel/template/teams-members" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>Plantilla Excel</a>
     <button class="btn btn-outline-danger" onclick="openTeamsIdDeleteModal()"><i class="bi bi-list-ol me-1"></i>Eliminación Masiva</button>
     <button class="btn btn-outline-warning" onclick="openDeletedGroupsModal()"><i class="bi bi-recycle me-1"></i>Grupos Eliminados (Papelera)</button>
+    <button class="btn btn-outline-info" onclick="openGroupMembersModal()"><i class="bi bi-person-plus-fill me-1"></i>Agregar a Grupo por ID</button>
   </div>
 </div>
 
@@ -155,6 +156,36 @@
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
         <button type="button" class="btn btn-warning" id="btnRestoreAndCheck" onclick="executeRestoreAndCheck()" disabled>
           <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar y Verificar (<span id="selectedDeletedGroupsCount">0</span>)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Agregar miembros existentes a CUALQUIER grupo (Team, lista de distribución, etc.) por ID -->
+<div class="modal fade" id="groupMembersModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content border-info">
+      <div class="modal-header bg-info text-dark">
+        <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>Agregar Miembros Existentes a un Grupo por ID</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bg-light">
+        <div class="alert alert-info">
+          A diferencia de "Añadir miembros Excel" (que solo funciona con equipos de Teams reales),
+          esta herramienta agrega usuarios existentes como miembros de <b>cualquier grupo de Microsoft 365</b>
+          por su ID — incluyendo <b>listas de distribución</b> y grupos de seguridad que no tienen Teams activado.
+        </div>
+        <label class="form-label fw-bold">ID del grupo (Azure AD / Microsoft 365)</label>
+        <input type="text" class="form-control mb-3" id="groupMembersGroupId" placeholder="Ej: 976a5ad1-2559-4c58-acf9-047819473b3e">
+        <label class="form-label fw-bold">Correos de los usuarios a agregar</label>
+        <textarea class="form-control mb-3" id="groupMembersEmails" rows="6" placeholder="usuario1@usil.edu.py&#10;usuario2@usil.edu.py"></textarea>
+        <div id="groupMembersResultsWrap" style="display:none;" class="mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-info text-dark" id="btnExecuteGroupMembers" onclick="executeGroupMembersAdd()">
+          <i class="bi bi-person-plus-fill me-1"></i>Agregar Miembros
         </button>
       </div>
     </div>
@@ -809,6 +840,66 @@ async function saveBulkEmails(teamName) {
     } finally {
         setLoading(btn, false);
         // We don't automatically close the modal so they can see the errors
+    }
+}
+
+// ==========================================
+// AGREGAR MIEMBROS A CUALQUIER GRUPO POR ID
+// (Teams, listas de distribución, grupos de seguridad, etc.)
+// ==========================================
+
+let groupMembersModal = null;
+
+function openGroupMembersModal() {
+    if (!groupMembersModal) {
+        groupMembersModal = new bootstrap.Modal(document.getElementById('groupMembersModal'));
+    }
+    document.getElementById('groupMembersResultsWrap').style.display = 'none';
+    groupMembersModal.show();
+}
+
+async function executeGroupMembersAdd() {
+    const groupId = document.getElementById('groupMembersGroupId').value.trim();
+    const emails = document.getElementById('groupMembersEmails').value
+        .split(/[\n;,]+/).map(s => s.trim()).filter(Boolean);
+
+    if (!groupId) { toast('Ingresá el ID del grupo.', 'warning'); return; }
+    if (emails.length === 0) { toast('Ingresá al menos un correo.', 'warning'); return; }
+
+    const btn = document.getElementById('btnExecuteGroupMembers');
+    setLoading(btn, true);
+    const resultWrap = document.getElementById('groupMembersResultsWrap');
+    resultWrap.style.display = 'none';
+
+    try {
+        const res = await api.post(`/teams/teams/${groupId}/members/bulk-add-to-group`, { emails });
+        const successCount = res.succeeded.length;
+        const failedCount = res.failed.length;
+
+        let html = `<div class="alert ${failedCount > 0 ? 'alert-warning' : 'alert-success'} mb-0">
+            Agregados: ${successCount} | Fallidos: ${failedCount}
+        </div>`;
+        if (failedCount > 0) {
+            html += `<div class="mt-2">
+                <p class="mb-1 fw-bold text-danger">Errores:</p>
+                <ul class="list-group list-group-sm" style="max-height: 150px; overflow-y: auto;">
+                    ${res.failed.map(f => `<li class="list-group-item py-1 px-2 text-danger small"><b>${f.input}</b>: ${f.error}</li>`).join('')}
+                </ul>
+            </div>`;
+        }
+        resultWrap.innerHTML = html;
+        resultWrap.style.display = 'block';
+        toast(`Se procesaron los correos. ${successCount} añadidos.`, successCount > 0 ? 'success' : 'warning');
+
+        if (successCount > 0 && failedCount === 0) {
+            document.getElementById('groupMembersEmails').value = '';
+        }
+    } catch (e) {
+        toast('Error agregando miembros: ' + (e.detail || e.message || e), 'danger');
+        resultWrap.innerHTML = `<div class="alert alert-danger">Error: ${e.detail || e.message || e}</div>`;
+        resultWrap.style.display = 'block';
+    } finally {
+        setLoading(btn, false);
     }
 }
 </script>

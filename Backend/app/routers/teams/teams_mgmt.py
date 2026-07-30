@@ -35,21 +35,26 @@ async def list_teams(
     search_term: Annotated[str | None, Query(description="Buscar por displayName")] = None,
     top: Annotated[int, Query(ge=1, le=999)] = 50,
 ):
-    # Base filter for Teams
-    filter_query = "resourceProvisioningOptions/Any(x:x eq 'Team')"
-    
-    if search_term:
-        # Avoid injection by removing quotes
-        clean_term = search_term.replace("'", "")
-        # Note: startswith is supported by Microsoft Graph for displayName
-        filter_query = f"{filter_query} and startswith(displayName, '{clean_term}')"
-
     params = {
         "$top": top,
         "$select": "id,displayName,description,visibility,createdDateTime",
-        "$filter": filter_query,
+        "$filter": "resourceProvisioningOptions/Any(x:x eq 'Team')",
     }
-    return await graph.paginate("/groups", params)
+
+    if not search_term:
+        return await graph.paginate("/groups", params)
+
+    # $search hace un match de subcadena, case-insensitive, sobre displayName.
+    # startswith(displayName, ...) (lo que se usaba antes) es sensible a
+    # mayúsculas y solo encuentra coincidencias desde el inicio exacto del
+    # nombre — buscar una palabra intermedia (ej. "Americano") o en minúscula
+    # no encontraba equipos que sí existían. $search requiere el header
+    # ConsistencyLevel: eventual.
+    clean_term = search_term.replace('"', "")
+    params["$search"] = f'"displayName:{clean_term}"'
+    return await graph.paginate_limited(
+        "/groups", params, max_records=top, extra_headers={"ConsistencyLevel": "eventual"}
+    )
 
 
 class TeamsTeamCreateSimple(BaseModel):
@@ -320,6 +325,54 @@ async def bulk_add_members_by_email(team_id: str, body: BulkTeamsEmailAdd) -> Bu
             for u in user_ids[i : i + BATCH_SIZE]:
                 result.failed.append({"input": u["email"], "error": str(exc)})
 
+    return result
+
+
+class BulkGroupMemberAddByEmail(BaseModel):
+    emails: list[str]
+
+
+@router.post("/{group_id}/members/bulk-add-to-group", summary="Agregar usuarios existentes como miembros de un grupo (Team, lista de distribución o cualquier grupo de Microsoft 365)")
+async def bulk_add_members_to_any_group(group_id: str, body: BulkGroupMemberAddByEmail) -> BulkResult:
+    """A diferencia de bulk-add/bulk-add-emails (que usan la API de miembros de
+    conversación de Teams, /teams/{id}/members/add, y solo funcionan si el grupo
+    tiene Teams provisionado), esto usa la API genérica de miembros de grupo
+    (/groups/{id}/members) — funciona para cualquier grupo de Microsoft 365,
+    incluyendo listas de distribución y grupos de seguridad que no son Teams."""
+    result = BulkResult()
+
+    async def add_one(raw_email: str):
+        email = raw_email.strip()
+        if not email:
+            return
+        try:
+            search_res = await graph.get(
+                "/users",
+                params={"$filter": f"mail eq '{email}' or userPrincipalName eq '{email}'", "$select": "id"},
+            )
+            users = search_res.get("value", [])
+            if not users:
+                result.failed.append({"input": email, "error": "Usuario no encontrado en Azure AD"})
+                return
+            user_id = users[0]["id"]
+        except Exception as e:
+            result.failed.append({"input": email, "error": f"Error buscando usuario: {e}"})
+            return
+
+        try:
+            await graph.post(
+                f"/groups/{group_id}/members/",
+                {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{user_id}"},
+            )
+            result.succeeded.append({"input": email})
+        except Exception as e:
+            msg = str(e)
+            if "already exist" in msg.lower():
+                result.succeeded.append({"input": email, "note": "ya era miembro"})
+            else:
+                result.failed.append({"input": email, "error": msg})
+
+    await asyncio.gather(*(add_one(e) for e in body.emails))
     return result
 
 
