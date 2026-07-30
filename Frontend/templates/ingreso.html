@@ -447,6 +447,13 @@
         <input type="text" id="erp_password" class="form-control" placeholder="Ej: 8351403-At">
       </div>
     </div>
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <label class="form-label fw-semibold">CC (opcional)</label>
+        <input type="text" id="erp_cc" class="form-control" placeholder="correo1@usil.edu.py, correo2@usil.edu.py">
+        <div class="form-text">Separá varios correos con coma o punto y coma. Se suman al CC fijo del área.</div>
+      </div>
+    </div>
     <div class="d-flex justify-content-end">
       <button type="button" class="btn btn-primary px-4" id="btnSendErpDocente" onclick="sendErpDocenteEmail()">
         <i class="bi bi-envelope-check me-2"></i>Enviar Acceso
@@ -1069,6 +1076,7 @@ async function sendErpDocenteEmail() {
     const to_email = document.getElementById('erp_to_email').value.trim();
     const username = document.getElementById('erp_username').value.trim();
     const password = document.getElementById('erp_password').value.trim();
+    const cc = document.getElementById('erp_cc').value.trim();
 
     if (!full_name || !to_email || !username || !password) {
         toast('Completá todos los campos.', 'warning');
@@ -1081,7 +1089,7 @@ async function sendErpDocenteEmail() {
     resultDiv.style.display = 'none';
 
     try {
-        await api.post('/ingreso/send-erp-docente-credentials', { full_name, to_email, username, password });
+        await api.post('/ingreso/send-erp-docente-credentials', { full_name, to_email, username, password, cc });
         resultDiv.className = 'alert alert-success mt-3 mb-0';
         resultDiv.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>Correo enviado a ${to_email}.`;
         resultDiv.style.display = 'block';
@@ -1090,6 +1098,7 @@ async function sendErpDocenteEmail() {
         document.getElementById('erp_to_email').value = '';
         document.getElementById('erp_username').value = '';
         document.getElementById('erp_password').value = '';
+        document.getElementById('erp_cc').value = '';
     } catch (e) {
         resultDiv.className = 'alert alert-danger mt-3 mb-0';
         resultDiv.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i>Error: ${e.detail || e.message || e}`;

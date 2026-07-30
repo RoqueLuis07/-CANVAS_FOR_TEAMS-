@@ -491,6 +491,7 @@ class ErpDocenteCredentialsIn(BaseModel):
     to_email: str
     username: str
     password: str
+    cc: str | None = None
 
     @field_validator("full_name", "username", "password")
     @classmethod
@@ -508,6 +509,12 @@ class ErpDocenteCredentialsIn(BaseModel):
             raise ValueError("Correo de envío inválido")
         return v
 
+    def cc_list(self) -> list[str]:
+        if not self.cc:
+            return []
+        addrs = [a.strip() for a in self.cc.replace(";", ",").split(",")]
+        return [a for a in addrs if a]
+
 
 @router.post("/send-erp-docente-credentials", summary="Enviar acceso al Sistema Académico Docente (ERP externo)")
 async def send_erp_docente_credentials(body: ErpDocenteCredentialsIn) -> dict[str, Any]:
@@ -521,6 +528,7 @@ async def send_erp_docente_credentials(body: ErpDocenteCredentialsIn) -> dict[st
             full_name=body.full_name,
             username=body.username,
             password=body.password,
+            extra_cc=body.cc_list(),
         )
         return {"email": "sent", "to": body.to_email}
     except Exception as exc:

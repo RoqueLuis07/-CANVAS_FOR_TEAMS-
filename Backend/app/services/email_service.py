@@ -196,7 +196,7 @@ def _build_erp_docente_message(
 
 
 async def send_erp_docente_email(
-    *, to_email: str, full_name: str, username: str, password: str,
+    *, to_email: str, full_name: str, username: str, password: str, extra_cc: list[str] | None = None,
 ) -> None:
     """Envía el correo de bienvenida/acceso al Sistema Académico Docente
     (ERP externo). El usuario/contraseña de ese sistema se ingresan
@@ -207,11 +207,12 @@ async def send_erp_docente_email(
         raise ValueError("Correo de envío inválido o vacío.")
 
     subject, html = _build_erp_docente_message(full_name=full_name, username=username, password=password)
+    cc = [*_BASE_CC, *(extra_cc or [])]
 
     try:
         await graph.send_mail(
             mailbox=settings.smtp_from, subject=subject, html_body=html,
-            to_email=to_email, cc=_BASE_CC, attachments=[],
+            to_email=to_email, cc=cc, attachments=[],
         )
     except HTTPException as exc:
         if exc.status_code == 403:
