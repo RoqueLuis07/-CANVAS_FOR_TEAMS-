@@ -673,7 +673,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
             }
 
             if platform in ("canvas", "both"):
-                if status == "existing_cedula":
+                if status in ("existing_cedula", "existing_name"):
                     entry["canvas"] = {"status": "ok", "msg": "Ya existía en Canvas"}
                 else:
                     try:
