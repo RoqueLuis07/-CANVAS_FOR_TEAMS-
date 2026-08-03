@@ -1,4 +1,5 @@
 import logging
+import unicodedata
 from typing import Any
 
 from app.core.config import settings
@@ -7,6 +8,13 @@ from app.services import teams_client as graph
 from app.services.credential_generator import generate_credentials, parse_name
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_name(name: str) -> str:
+    """Normaliza un nombre para comparar sin importar tildes, mayúsculas
+    o espacios extra (ej. 'María Pérez' == 'MARIA  PEREZ')."""
+    ascii_name = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
+    return " ".join(ascii_name.lower().split())
 
 async def _canvas_user_exists(cedula: str, login_id: str) -> tuple[bool, dict]:
     """Verifica si un usuario existe en Canvas por SIS ID (cédula) o login_id.
@@ -147,6 +155,13 @@ async def generate_unique_credentials(full_name: str, cedula: str, platform: str
                     colliding_name = info.get("name")
             except Exception as exc:
                 logger.warning(f"Error checking Canvas for {email}: {exc}")
+
+        if email_taken and colliding_name and _normalize_name(colliding_name) == _normalize_name(full_name):
+            # Es exactamente la misma persona (mismo nombre, no un
+            # parecido) — ya tiene cuenta con este correo, no hace falta
+            # crear una más con otro sufijo. Se retorna tal cual para que
+            # el caller la reutilice en vez de generar una nueva.
+            return creds, "existing_name"
 
         if email_taken and collision_with is None and colliding_name:
             # Guardamos el nombre de la primera colisión encontrada (con el
