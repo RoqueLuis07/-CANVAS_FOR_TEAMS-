@@ -2869,9 +2869,11 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
             students_already_processed += 1
         else:
             students_to_process += 1
-            if len(student_details) < 3:
-                student_details.append({"nombre": nombre or cedula or correo, "correo": correo or cedula})
-                sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
+            # Sin límite de muestra: esta acción da de baja/elimina cuentas de
+            # forma permanente, así que conviene poder revisar la lista
+            # completa antes de confirmar, no solo los primeros 3.
+            student_details.append({"nombre": nombre or cedula or correo, "correo": correo or cedula})
+            sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
 
     return PreviewResponse(
         sheet_name=req.sheet_name,
