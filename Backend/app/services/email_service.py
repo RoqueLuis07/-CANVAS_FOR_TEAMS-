@@ -165,6 +165,12 @@ _ERP_DOCENTE_FEATURES = [
     "Revisar el cronograma académico",
 ]
 
+_ERP_DOCENTE_CONTACTS = [
+    ("Luciano Florentín", "lflorentin@usil.edu.py"),
+    ("Giovanni Lezcano", "glezcano@usil.edu.py"),
+    ("Roque Esteche", "resteche@usil.edu.py"),
+]
+
 
 def _build_erp_docente_message(
     *, full_name: str, username: str, password: str,
@@ -186,6 +192,16 @@ def _build_erp_docente_message(
         </tr>
         """
         for feature in _ERP_DOCENTE_FEATURES
+    )
+
+    contact_rows = "".join(
+        f"""
+        <tr>
+          <td style="padding:3px 0; color:#111111; font-weight:bold; white-space:nowrap; width:150px;">{name}</td>
+          <td style="padding:3px 0;"><a href="mailto:{addr}" style="color:#4b53bc; text-decoration:none;">{addr}</a></td>
+        </tr>
+        """
+        for name, addr in _ERP_DOCENTE_CONTACTS
     )
 
     html = f"""
@@ -252,9 +268,23 @@ def _build_erp_docente_message(
               </td>
             </tr>
             <tr>
-              <td style="padding:20px 32px 28px 32px; font-size:14px; color:#222222; line-height:1.55;">
-                <p style="margin:0 0 8px;">Ante cualquier duda o inconveniente, estamos para ayudarte.</p>
+              <td style="padding:20px 32px 4px 32px; font-size:14px; color:#222222; line-height:1.55;">
                 <p style="margin:0;">¡Mucho éxito en este semestre!</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 32px 24px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                       style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px;">
+                  <tr>
+                    <td style="padding:14px 18px;">
+                      <p style="margin:0 0 10px; font-size:13.5px; color:#222222;">Ante cualquier duda o inconveniente sobre el acceso, podés contactar al Área de Tecnologías de la Información:</p>
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:13.5px;">
+                        {contact_rows}
+                      </table>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
             <tr>
@@ -282,8 +312,7 @@ async def send_erp_docente_email(
         raise ValueError("Correo de envío inválido o vacío.")
 
     subject, html = _build_erp_docente_message(full_name=full_name, username=username, password=password)
-    base_cc = [addr for addr in _BASE_CC if addr != "comercialcredenciales@usil.edu.py"]
-    cc = [*base_cc, *(extra_cc or [])]
+    cc = list(extra_cc or [])
 
     try:
         await graph.send_mail(
