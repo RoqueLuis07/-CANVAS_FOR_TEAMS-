@@ -2836,7 +2836,11 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
 
     col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
+    col_cedula = get_col_idx("cedula", "cédula", "ci", "documento", "dni")
     col_enviado = get_col_idx("estado", "enviado")
+
+    if not col_cedula and not col_correo:
+        raise HTTPException(status_code=400, detail="Falta la columna de Cédula o Correo para identificar a los usuarios.")
 
     students_to_process = 0
     students_already_processed = 0
@@ -2844,23 +2848,24 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
         row_vals = [str(ws.cell(row=row_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
-        
+
         if not any(row_vals):
             continue
-            
+
         nombre = row_vals[col_nombre - 1] if col_nombre else ""
         correo = row_vals[col_correo - 1] if col_correo else ""
+        cedula = _clean_cedula(row_vals[col_cedula - 1]) if col_cedula else ""
         enviado = (row_vals[col_enviado - 1] if col_enviado else "").lower()
-        
-        if not nombre or not correo:
+
+        if not cedula and not correo:
             continue
-            
+
         if "ok" in enviado or "eliminado" in enviado or "baja" in enviado or "enviado" in enviado:
             students_already_processed += 1
         else:
             students_to_process += 1
             if len(student_details) < 3:
-                student_details.append({"nombre": nombre, "correo": correo})
+                student_details.append({"nombre": nombre or cedula or correo, "correo": correo or cedula})
                 sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
 
     return PreviewResponse(
@@ -2939,8 +2944,8 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
                         sheet_cc_list.append(email)
     col_usuario = get_col_idx("usuario")
 
-    if not col_nombre or not col_correo:
-        raise HTTPException(status_code=400, detail="Falta columna de correo o nombre.")
+    if not col_cedula and not col_correo:
+        raise HTTPException(status_code=400, detail="Falta la columna de Cédula o Correo para identificar a los usuarios.")
 
     if not col_enviado:
         from openpyxl.styles import Font
@@ -2949,14 +2954,15 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
 
     users_to_process = []
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
-        nombre = str(ws.cell(row=row_idx, column=col_nombre).value or "").strip()
-        correo = str(ws.cell(row=row_idx, column=col_correo).value or "").strip()
+        nombre = str(ws.cell(row=row_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        correo = str(ws.cell(row=row_idx, column=col_correo).value or "").strip() if col_correo else ""
+        cedula = _clean_cedula(str(ws.cell(row=row_idx, column=col_cedula).value or "").strip()) if col_cedula else ""
         enviado = str(ws.cell(row=row_idx, column=col_enviado).value or "").strip().lower()
         usuario_val = str(ws.cell(row=row_idx, column=col_usuario).value or "").strip() if col_usuario else ""
-        
-        if not nombre or not correo:
+
+        if not cedula and not correo:
             continue
-            
+
         if "ok" in enviado or "eliminado" in enviado or "baja" in enviado or "enviado" in enviado:
             continue
 
@@ -2964,8 +2970,8 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
             "r_idx": row_idx,
             "correo": correo,
             "usuario": usuario_val,
-            "nombre": nombre,
-            "cedula": str(ws.cell(row=row_idx, column=col_cedula).value or "").strip() if col_cedula else ""
+            "nombre": nombre or cedula or correo,
+            "cedula": cedula,
         })
 
     if len(users_to_process) > 50:
@@ -2981,25 +2987,41 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     for user_data in users_to_process:
         correo = user_data["correo"]
         usuario_upn = user_data["usuario"]
+        cedula = user_data["cedula"]
+        nombre = user_data["nombre"]
         r_idx = user_data["r_idx"]
-        
-        search_term = usuario_upn if usuario_upn and "@" in usuario_upn else correo
+
+        canvas_email = ""
         error = ""
-        
-        # 1. Canvas Delete
+
+        # 1. Canvas Delete — por cédula (SIS ID) primero, igual que el egreso
+        # individual: es más confiable que buscar por nombre/correo, que
+        # puede no coincidir exactamente con lo cargado en Canvas.
         try:
-            users_canvas = await canvas.get(f"/accounts/{settings.canvas_account_id}/users", params={"search_term": search_term})
-            if users_canvas:
-                await canvas.delete(f"/accounts/{settings.canvas_account_id}/users/{users_canvas[0]['id']}")
+            if cedula:
+                c_user = await canvas.get(f"/accounts/{settings.canvas_account_id}/users/sis_user_id:{cedula}")
+                canvas_email = c_user.get("email") or ""
+                await canvas.delete(f"/accounts/{settings.canvas_account_id}/users/{c_user['id']}")
             else:
-                error = "Usuario no encontrado en Canvas"
+                raise ValueError("sin_cedula")
         except Exception as e:
-            if "404" in str(e):
-                error = "Usuario no encontrado en Canvas"
-            else:
+            if cedula and ("404" not in str(e)):
                 error = f"Error Canvas: {str(e)}"
-        
+            else:
+                # Sin cédula, o no encontrado por SIS ID: fallback por búsqueda de texto.
+                search_term = usuario_upn if (usuario_upn and "@" in usuario_upn) else (correo or nombre)
+                try:
+                    users_canvas = await canvas.get(f"/accounts/{settings.canvas_account_id}/users", params={"search_term": search_term})
+                    if users_canvas:
+                        canvas_email = users_canvas[0].get("email") or ""
+                        await canvas.delete(f"/accounts/{settings.canvas_account_id}/users/{users_canvas[0]['id']}")
+                    else:
+                        error = "Usuario no encontrado en Canvas"
+                except Exception as e2:
+                    error = "Usuario no encontrado en Canvas" if "404" in str(e2) else f"Error Canvas: {str(e2)}"
+
         # 2. Azure AD Disable or Delete
+        search_term = usuario_upn if (usuario_upn and "@" in usuario_upn) else (correo or canvas_email or nombre)
         try:
             ms_users = await graph.search_users(search_term)
             if ms_users:
