@@ -2837,7 +2837,12 @@ async def preview_egreso_onedrive(req: DiplomadosUrlRequest) -> PreviewResponse:
     col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
     col_cedula = get_col_idx("cedula", "cédula", "ci", "documento", "dni")
-    col_enviado = get_col_idx("estado", "enviado")
+    # Solo "desvinculado"/"baja" — NO genérico "estado"/"enviado": si la misma
+    # hoja se usó antes para CREAR a estos usuarios, ya trae su propia columna
+    # "Enviado/Estado" (de la creación, con "✅ OK"). Buscar genéricamente
+    # "estado"/"enviado" la confundiría con el estado de egreso y marcaría a
+    # todos como ya dados de baja sin haberlo hecho nunca.
+    col_enviado = get_col_idx("desvinculado", "dado de baja")
 
     if not col_cedula and not col_correo:
         raise HTTPException(status_code=400, detail="Falta la columna de Cédula o Correo para identificar a los usuarios.")
@@ -2930,8 +2935,11 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     col_nombre = get_col_idx("nombre", "alumno", "estudiante")
     col_correo = get_col_idx("correo", "email")
     col_cedula = get_col_idx("cedula", "cédula", "ci", "documento", "dni")
-    col_enviado = get_col_idx("estado", "enviado")
-    
+    # Solo "desvinculado"/"baja" — ver comentario equivalente en el preview:
+    # evita reutilizar la columna "Enviado/Estado" que la misma hoja pudo
+    # traer de un proceso de creación anterior.
+    col_enviado = get_col_idx("desvinculado", "dado de baja")
+
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
     if col_cc:
@@ -2950,7 +2958,7 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
     if not col_enviado:
         from openpyxl.styles import Font
         col_enviado = ws.max_column + 1
-        ws.cell(row=header_row_idx, column=col_enviado, value="Enviado/Estado").font = Font(bold=True)
+        ws.cell(row=header_row_idx, column=col_enviado, value="Desvinculado").font = Font(bold=True)
 
     users_to_process = []
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
