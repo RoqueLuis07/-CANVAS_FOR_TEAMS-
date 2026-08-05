@@ -58,6 +58,24 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
 
 
+def _collision_note(creds: dict) -> str:
+    """Arma el aviso de colisión de nombre para la columna de Estado, según
+    si se pudo cruzar por cédula (SIS ID / postalCode) o no:
+    - "different": la cédula también difiere → confirmado que es otra persona.
+    - "unverified": el campo de cédula está vacío en Microsoft/Canvas → no se
+      pudo verificar, hay que revisarlo a mano.
+    - sin cédula para comparar (colisión solo por nombre, caso general)."""
+    collision_name = creds.get("name_collision_with")
+    if not collision_name:
+        return ""
+    cedula_status = creds.get("name_collision_cedula_status")
+    if cedula_status == "different":
+        return f" ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona, cédula distinta confirmada)"
+    if cedula_status == "unverified":
+        return f" ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (no se pudo verificar por cédula, campo vacío en Microsoft/Canvas — revisar manualmente)"
+    return f" ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona)"
+
+
 def _safe_mail_nickname(name: str, suffix: str = "") -> str:
     """Genera un mailNickname válido para Microsoft Graph a partir de un nombre libre.
 
@@ -1391,8 +1409,7 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 ws.cell(row=r_idx, column=col_contra, value=pwd)
                 result.succeeded.append({"cedula": cedula, "nombre": creds["full_name"], "login_id": login_id})
 
-                collision_name = creds.get("name_collision_with")
-                collision_note = f" ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona)" if collision_name else ""
+                collision_note = _collision_note(creds)
 
                 if not error:
                     _set_estado(r_idx, f"✅ OK{collision_note}", "00B050" if not collision_note else "D97706")
@@ -3457,9 +3474,9 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         else:
             ws.cell(row=r_idx, column=col_usuario, value=login_id)
             ws.cell(row=r_idx, column=col_contra, value=pwd)
-            collision_name = creds.get("name_collision_with")
-            if collision_name:
-                ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona)")
+            collision_note = _collision_note(creds)
+            if collision_note:
+                ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK{collision_note}")
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
             else:
                 ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
@@ -4435,9 +4452,9 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
                 result.succeeded.append({"correo": login_id, "mensaje": "OK"})
             else:
-                collision_name = creds.get("name_collision_with")
-                if collision_name:
-                    ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK ⚠️ Verificar antes de compartir: nombre parecido a '{collision_name}' (otra persona)")
+                collision_note = _collision_note(creds)
+                if collision_note:
+                    ws.cell(row=r_idx, column=col_enviado, value=f"✅ OK{collision_note}")
                     ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
                 else:
                     ws.cell(row=r_idx, column=col_enviado, value="✅ OK")

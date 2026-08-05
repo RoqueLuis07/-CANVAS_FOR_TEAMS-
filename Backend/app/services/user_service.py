@@ -1,4 +1,5 @@
 import logging
+import re
 import unicodedata
 from typing import Any
 
@@ -15,6 +16,12 @@ def _normalize_name(name: str) -> str:
     o espacios extra (ej. 'María Pérez' == 'MARIA  PEREZ')."""
     ascii_name = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
     return " ".join(ascii_name.lower().split())
+
+
+def _normalize_cedula(value: str) -> str:
+    """Quita puntos/guiones/espacios de una cédula para poder comparar
+    '3.517.784' con '3517784' sin falsos negativos."""
+    return re.sub(r"[.\-\s]", "", value or "")
 
 async def _canvas_user_exists(cedula: str, login_id: str) -> tuple[bool, dict]:
     """Verifica si un usuario existe en Canvas por SIS ID (cédula) o login_id.
@@ -49,6 +56,10 @@ async def _canvas_user_exists(cedula: str, login_id: str) -> tuple[bool, dict]:
                         "name": u.get("name", ""),
                         "login_id": u.get("login_id", ""),
                         "email": u.get("email", ""),
+                        # Cédula real (SIS ID) de la cuenta encontrada, si el
+                        # search de Canvas la expone — permite la verificación
+                        # cruzada por cédula además de por nombre.
+                        "cedula": str(u.get("sis_user_id") or "").strip(),
                     }
     except Exception:
         pass
@@ -67,7 +78,7 @@ async def _teams_user_exists(upn: str) -> tuple[bool, dict]:
     """
     try:
         user = await graph.get(
-            f"/users/{upn}?$select=id,displayName,userPrincipalName,mail,accountEnabled,createdDateTime"
+            f"/users/{upn}?$select=id,displayName,userPrincipalName,mail,accountEnabled,createdDateTime,postalCode"
         )
         return True, {
             "found_by": "upn",
@@ -77,6 +88,11 @@ async def _teams_user_exists(upn: str) -> tuple[bool, dict]:
             "mail": user.get("mail", ""),
             "account_enabled": user.get("accountEnabled"),
             "created": user.get("createdDateTime", ""),
+            # Azure AD no tiene un campo nativo de cédula/documento de
+            # identidad — el proceso de alta la guarda en "postalCode"
+            # (código postal, reutilizado como campo libre) para poder
+            # cruzarla más adelante, igual que el SIS ID en Canvas.
+            "cedula": str(user.get("postalCode") or "").strip(),
         }
     except Exception as exc:
         err = str(exc)
@@ -129,12 +145,15 @@ async def generate_unique_credentials(full_name: str, cedula: str, platform: str
                 suffixes.append(cand)
 
     collision_with: str | None = None
+    collision_cedula_status: str | None = None
+    target_cedula = _normalize_cedula(cedula)
 
     for suffix in suffixes:
         creds = generate_credentials(full_name, cedula, domain, collision_suffix=suffix)
         email = creds["email"]
         email_taken = False
         colliding_name = None
+        colliding_cedula = None
 
         # 2. Verificar colisión en Teams
         if platform in ("teams", "both"):
@@ -143,6 +162,7 @@ async def generate_unique_credentials(full_name: str, cedula: str, platform: str
                 if exists_teams:
                     email_taken = True
                     colliding_name = info.get("name")
+                    colliding_cedula = info.get("cedula")
             except Exception as exc:
                 logger.warning(f"Error checking Teams for {email}: {exc}")
 
@@ -153,17 +173,36 @@ async def generate_unique_credentials(full_name: str, cedula: str, platform: str
                 if exists_canvas and info.get("found_by") == "login_id":
                     email_taken = True
                     colliding_name = info.get("name")
+                    colliding_cedula = info.get("cedula")
             except Exception as exc:
                 logger.warning(f"Error checking Canvas for {email}: {exc}")
 
-        if email_taken and colliding_name and _normalize_name(colliding_name) == _normalize_name(full_name):
-            # Es exactamente la misma persona (mismo nombre, no un
-            # parecido) — ya tiene cuenta con este correo, no hace falta
-            # crear una más con otro sufijo. Se retorna tal cual para que
-            # el caller la reutilice en vez de generar una nueva.
-            return creds, "existing_name"
+        same_name = email_taken and colliding_name and _normalize_name(colliding_name) == _normalize_name(full_name)
 
-        if email_taken and collision_with is None and colliding_name:
+        if same_name:
+            colliding_cedula_norm = _normalize_cedula(colliding_cedula or "")
+            if colliding_cedula_norm and target_cedula and colliding_cedula_norm == target_cedula:
+                # Nombre Y cédula (SIS ID en Canvas / postalCode en Azure AD)
+                # coinciden exactamente: es la misma persona sin ninguna duda
+                # — se reutiliza directamente esa cuenta, no se crea otra.
+                creds["reused_reason"] = "Nombre y cédula coinciden exactamente con una cuenta existente"
+                return creds, "existing_name"
+            if colliding_cedula_norm and target_cedula and colliding_cedula_norm != target_cedula:
+                # Mismo nombre pero cédula distinta: son confirmadamente dos
+                # personas distintas (no un alias de la misma). Se avisa y se
+                # sigue buscando/creando un correo nuevo con otro sufijo.
+                if collision_with is None:
+                    collision_with = colliding_name
+                    collision_cedula_status = "different"
+            else:
+                # Nombre coincide pero no se pudo verificar por cédula (el
+                # campo está vacío en Microsoft/Canvas) — no hay certeza
+                # suficiente para reutilizar la cuenta automáticamente, se
+                # avisa para que se revise manualmente.
+                if collision_with is None:
+                    collision_with = colliding_name
+                    collision_cedula_status = "unverified"
+        elif email_taken and collision_with is None and colliding_name:
             # Guardamos el nombre de la primera colisión encontrada (con el
             # intento sin sufijo) — indica que ya existe OTRA persona con un
             # nombre lo bastante parecido como para generar el mismo correo
@@ -175,10 +214,14 @@ async def generate_unique_credentials(full_name: str, cedula: str, platform: str
         if not email_taken:
             if collision_with:
                 creds["name_collision_with"] = collision_with
+                if collision_cedula_status:
+                    creds["name_collision_cedula_status"] = collision_cedula_status
             return creds, "new"
 
     # Fallback (extremadamente raro que se agoten los 100 sufijos)
     fallback_creds = generate_credentials(full_name, cedula, domain, collision_suffix="x")
     if collision_with:
         fallback_creds["name_collision_with"] = collision_with
+        if collision_cedula_status:
+            fallback_creds["name_collision_cedula_status"] = collision_cedula_status
     return fallback_creds, "fallback"
