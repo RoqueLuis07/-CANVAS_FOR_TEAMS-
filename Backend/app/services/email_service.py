@@ -156,6 +156,11 @@ def _build_diplomado_message(
 
 
 _ERP_DOCENTE_LINK = "https://erp-py.usil.digital/login"
+_ERP_DOCENTE_TEAMS_LINK = "https://teams.cloud.microsoft/"
+
+
+def _erp_docente_canvas_link() -> str:
+    return settings.canvas_base_url
 
 
 _ERP_DOCENTE_FEATURES = [
@@ -178,8 +183,40 @@ def _build_erp_docente_message(
     """Correo de bienvenida con acceso al Sistema Académico Docente (ERP
     externo, erp-py.usil.digital, no gestionado por esta app). Basado en
     tablas (compatible con Outlook), con encabezado de marca, tarjeta de
-    credenciales tipo "ticket" y lista de funcionalidades con íconos."""
-    subject = "Bienvenido a la USIL — Acceso al Sistema Académico Docente"
+    credenciales tipo "ticket", las 3 plataformas a las que accede con esas
+    mismas credenciales (Teams, Canvas y el Sistema Académico Docente) y
+    lista de funcionalidades del ERP con íconos."""
+    subject = "Bienvenido a la USIL — Acceso a Teams, Canvas y al Sistema Académico Docente"
+
+    platforms = [
+        ("Microsoft Teams", "Clases virtuales, materiales y comunicación con tus alumnos.", _ERP_DOCENTE_TEAMS_LINK),
+        ("Canvas LMS", "Gestión de tus cursos y contenidos académicos.", _erp_docente_canvas_link()),
+        ("Sistema Académico Docente", "Calificaciones, asistencias, listas y cronograma.", _ERP_DOCENTE_LINK),
+    ]
+    platform_rows = "".join(
+        f"""
+        <tr>
+          <td style="padding:10px 0; border-top:1px solid #d7e3f5;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="vertical-align:middle;">
+                  <p style="margin:0; font-size:14px; color:#111111; font-weight:bold;">{p_name}</p>
+                  <p style="margin:2px 0 0; font-size:12.5px; color:#5b6472;">{p_desc}</p>
+                </td>
+                <td style="vertical-align:middle; text-align:right; width:110px;">
+                  <a href="{p_link}"
+                     style="display:inline-block; background:#4b53bc; color:#ffffff; text-decoration:none;
+                            font-weight:bold; font-size:12.5px; padding:8px 16px; border-radius:6px; white-space:nowrap;">
+                    Acceder
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        """
+        for p_name, p_desc, p_link in platforms
+    )
 
     features_rows = "".join(
         f"""
@@ -214,14 +251,14 @@ def _build_erp_docente_message(
             <tr>
               <td style="background:#1f2a5c; padding:22px 32px;">
                 <span style="color:#ffffff; font-size:18px; font-weight:bold; letter-spacing:0.3px;">Universidad San Ignacio de Loyola</span><br>
-                <span style="color:#c7cdf0; font-size:13px;">Sistema Académico Docente</span>
+                <span style="color:#c7cdf0; font-size:13px;">Acceso institucional para docentes</span>
               </td>
             </tr>
             <tr>
               <td style="padding:28px 32px 8px 32px; font-size:14px; color:#222222; line-height:1.55;">
                 <p style="margin:0 0 12px;">Hola <strong>{full_name}</strong>,</p>
                 <p style="margin:0 0 12px;">¡Bienvenido a la USIL! Te deseamos un excelente inicio de semestre, lleno de aprendizajes, logros y nuevas experiencias en esta nueva etapa con nosotros.</p>
-                <p style="margin:0 0 4px;">A continuación, te compartimos tus credenciales de acceso al <strong>Sistema Académico Docente</strong>:</p>
+                <p style="margin:0 0 4px;">A continuación, te compartimos tus credenciales institucionales — son las <strong>mismas para las tres plataformas</strong> que vas a usar:</p>
               </td>
             </tr>
             <tr>
@@ -251,17 +288,25 @@ def _build_erp_docente_message(
                        style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px;">
                   <tr>
                     <td style="padding:16px 18px;">
-                      <p style="margin:0 0 10px; font-size:14px; color:#222222;">Desde esta plataforma podrás:</p>
+                      <p style="margin:0; font-size:14px; color:#222222;">Con ese usuario y contraseña podés ingresar a:</p>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                        {platform_rows}
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px 4px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                       style="border:1px solid #a9c9ec; background:#eaf2fb; border-radius:8px;">
+                  <tr>
+                    <td style="padding:16px 18px;">
+                      <p style="margin:0 0 10px; font-size:14px; color:#222222;">En particular, desde el <strong>Sistema Académico Docente</strong> vas a poder:</p>
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:13.5px;">
                         {features_rows}
                       </table>
-                      <div style="text-align:center; margin-top:16px;">
-                        <a href="{_ERP_DOCENTE_LINK}"
-                           style="display:inline-block; background:#4b53bc; color:#ffffff; text-decoration:none;
-                                  font-weight:bold; font-size:14px; padding:11px 28px; border-radius:6px;">
-                          Acceder al Sistema Académico Docente
-                        </a>
-                      </div>
                     </td>
                   </tr>
                 </table>
