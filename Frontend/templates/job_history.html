@@ -62,7 +62,7 @@
         </thead>
         <tbody id="jobsTableBody">
           <tr>
-            <td colspan="8" style="text-align: center; padding: 40px;">Cargando...</td>
+            <td colspan="8" style="text-align: center; padding: 40px;"><span class="spinner-border spinner-border-sm me-2"></span>Cargando...</td>
           </tr>
         </tbody>
       </table>
@@ -113,7 +113,7 @@ async function loadPage() {
     if (!data.jobs || data.jobs.length === 0) {
       document.getElementById('jobsTableBody').innerHTML = `
         <tr>
-          <td colspan="8" style="text-align: center; padding: 40px;">No hay registros</td>
+          <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-muted);"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No hay trabajos para los filtros aplicados</td>
         </tr>
       `;
       document.getElementById('resultCount').textContent = 'Total: 0 registros';
