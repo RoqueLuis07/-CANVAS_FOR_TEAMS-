@@ -193,7 +193,18 @@ document.addEventListener('change', (e) => {
 async function freeSelectedLicenses() {
     const ids = Array.from(document.querySelectorAll('.chk-license:checked')).map(c => c.value);
     if (!ids.length) return;
-    if (!confirm(`¿Liberar las licencias de ${ids.length} cuenta(s)?`)) return;
+    const selected = (orphanedUsers || []).filter(u => ids.includes(u.id));
+    const preview = selected.slice(0, 10).map(u => `• ${u.displayName || u.userPrincipalName}`).join('\n')
+        + (selected.length > 10 ? `\n… y ${selected.length - 10} más` : '');
+    confirmAction(
+        `Se liberarán las licencias de ${ids.length} cuenta(s):\n\n${preview}`,
+        () => _freeSelectedLicensesConfirmed(ids),
+        '¿Liberar licencias?',
+        true
+    );
+}
+
+async function _freeSelectedLicensesConfirmed(ids) {
     try {
         const res = await api.post('/reports/orphaned-licenses/free', { user_ids: ids });
         toast(`Licencias liberadas: ${res.succeeded.length} ok, ${res.failed.length} errores`, res.failed.length ? 'warning' : 'success');
@@ -349,8 +360,17 @@ async function deleteSelectedUnused() {
     const canvasIds = selected.filter(a => a.canvas).map(a => String(a.canvas.id));
     const azureIds = selected.filter(a => a.azure).map(a => a.azure.id);
 
-    if (!confirm(`¿ELIMINAR ${selected.length} cuenta(s) sin uso? Se borrará el usuario en Canvas y/o Azure AD según corresponda. Esta acción no se puede deshacer.`)) return;
+    const preview = selected.slice(0, 10).map(a => `• ${(a.canvas && a.canvas.name) || (a.azure && a.azure.name) || '-'}`).join('\n')
+        + (selected.length > 10 ? `\n… y ${selected.length - 10} más` : '');
+    confirmAction(
+        `Se ELIMINARÁN ${selected.length} cuenta(s) sin uso (Canvas y/o Azure AD según corresponda). Esta acción no se puede deshacer.\n\n${preview}`,
+        () => _deleteSelectedUnusedConfirmed(canvasIds, azureIds),
+        '¿Eliminar cuentas sin uso?',
+        true
+    );
+}
 
+async function _deleteSelectedUnusedConfirmed(canvasIds, azureIds) {
     const btn = document.getElementById('btnDeleteUnused');
     setLoading(btn, true);
     try {

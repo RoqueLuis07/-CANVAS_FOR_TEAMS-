@@ -228,7 +228,10 @@ function confirmAction(msg, cb, title = '¿Confirmar acción?', danger = false) 
   const iconEl  = document.getElementById('confirmIcon');
 
   if (titleEl) titleEl.textContent = title;
-  if (msgEl)   msgEl.textContent   = msg;
+  if (msgEl) {
+    msgEl.textContent = msg;
+    msgEl.style.textAlign = msg.includes('\n') ? 'left' : '';
+  }
   if (iconEl)  iconEl.innerHTML    = danger
     ? '<i class="bi bi-exclamation-triangle-fill" style="color:#e74a3b"></i>'
     : '<i class="bi bi-question-circle-fill" style="color:#4e73df"></i>';
