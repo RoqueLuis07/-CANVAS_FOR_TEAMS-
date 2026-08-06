@@ -3950,14 +3950,14 @@ async def _process_matriculaciones_json_bg(job_id: int, data: list[dict]):
             enroll_res = await _enroll_single(enroll_item)
             if enroll_res.get("status") == "success":
                 success_count += 1
-                results.append({"usuario": user_val, "status": "✅ OK"})
+                results.append({"usuario": user_val, "curso": canvas_val, "equipo": teams_val, "status": "✅ OK"})
             else:
                 error_count += 1
                 msg = enroll_res.get("message", "Error desconocido")
-                results.append({"usuario": user_val, "status": f"❌ {msg}"})
+                results.append({"usuario": user_val, "curso": canvas_val, "equipo": teams_val, "status": f"❌ {msg}"})
         except Exception as e:
             error_count += 1
-            results.append({"usuario": user_val, "status": f"❌ Error: {e}"})
+            results.append({"usuario": user_val, "curso": canvas_val, "equipo": teams_val, "status": f"❌ Error: {e}"})
 
     batch_size = 5
     for i in range(0, len(data), batch_size):

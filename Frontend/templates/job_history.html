@@ -57,11 +57,12 @@
             <th>Estado</th>
             <th>Resultados</th>
             <th>Errores</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody id="jobsTableBody">
           <tr>
-            <td colspan="7" style="text-align: center; padding: 40px;">Cargando...</td>
+            <td colspan="8" style="text-align: center; padding: 40px;">Cargando...</td>
           </tr>
         </tbody>
       </table>
@@ -112,7 +113,7 @@ async function loadPage() {
     if (!data.jobs || data.jobs.length === 0) {
       document.getElementById('jobsTableBody').innerHTML = `
         <tr>
-          <td colspan="7" style="text-align: center; padding: 40px;">No hay registros</td>
+          <td colspan="8" style="text-align: center; padding: 40px;">No hay registros</td>
         </tr>
       `;
       document.getElementById('resultCount').textContent = 'Total: 0 registros';
@@ -125,6 +126,7 @@ async function loadPage() {
       const createdDate = new Date(job.created_at).toLocaleString('es-ES');
       const statusBadge = getStatusBadge(job.status);
       const jobTypeLabel = getJobTypeLabel(job.job_type);
+      const actionCell = buildJobActions(job);
 
       return `
         <tr>
@@ -138,6 +140,7 @@ async function loadPage() {
             ${job.error_count || 0}
             ${job.error_message ? ` <i class="bi bi-exclamation-circle" title="${job.error_message}"></i>` : ''}
           </td>
+          <td>${actionCell}</td>
         </tr>
       `;
     }).join('');
@@ -166,7 +169,7 @@ async function loadPage() {
     console.error('Error cargando trabajos:', error);
     document.getElementById('jobsTableBody').innerHTML = `
       <tr>
-        <td colspan="7" style="text-align: center; color: red; padding: 40px;">Error cargando datos</td>
+        <td colspan="8" style="text-align: center; color: red; padding: 40px;">Error cargando datos</td>
       </tr>
     `;
   }
@@ -216,6 +219,63 @@ function getStatusBadge(status) {
     'failed': '<span style="padding: 2px 8px; border-radius: 4px; background: #e74a3b; color: white; font-size: 0.8rem;">✗ Fallido</span>'
   };
   return badges[status] || `<span>${status}</span>`;
+}
+
+// Solo la matriculación masiva vía Excel (matriculacion_masiva_json) guarda
+// por fila el curso/equipo necesarios para poder revertir la matrícula
+// directamente desde el historial. La variante OneDrive se revierte desde
+// la propia pantalla de Rollback pegando el enlace del archivo de nuevo.
+function buildJobActions(job) {
+  if (job.job_type !== 'matriculacion_masiva_json') return '-';
+  if (job.status !== 'completed' && job.status !== 'completed_with_errors') return '-';
+  if (!job.result_count) return '-';
+  const encoded = encodeURIComponent(job.data_json || '');
+  return `<button class="btn btn-sm btn-outline-danger" onclick="rollbackJob(${job.id}, '${encoded}', this)">
+    <i class="bi bi-arrow-counterclockwise"></i> Revertir
+  </button>`;
+}
+
+async function rollbackJob(jobId, encodedDataJson, btn) {
+  let rows = [];
+  try {
+    const parsed = JSON.parse(decodeURIComponent(encodedDataJson));
+    rows = (parsed.results || []).filter(r => (r.status || '').includes('✅') && r.usuario);
+  } catch (e) {
+    return toast('No se pudo leer el detalle de este trabajo.', 'danger');
+  }
+
+  if (rows.length === 0) {
+    return toast('No hay matrículas exitosas para revertir en este trabajo.', 'warning');
+  }
+
+  if (!confirm(`¿Revertir la matrícula de ${rows.length} usuario(s) (job #${jobId})? Se los va a desmatricular del curso/equipo correspondiente.`)) {
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Revirtiendo...';
+
+  try {
+    const res = await fetch('/excel/rollback/json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: rows })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      toast(`Reversión iniciada (job #${data.job_id}). Se actualizará en el historial.`, 'success');
+      loadPage();
+    } else {
+      const err = await res.json();
+      toast(err.detail || 'Error al iniciar la reversión.', 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Revertir';
+    }
+  } catch (e) {
+    toast('Error de conexión al revertir.', 'danger');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Revertir';
+  }
 }
 
 function getJobTypeLabel(type) {

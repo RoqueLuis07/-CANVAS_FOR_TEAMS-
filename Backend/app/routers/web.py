@@ -48,12 +48,6 @@ async def canvas_attendance(request: Request):
 
 
 
-@router.get("/ui/diagnostico", response_class=HTMLResponse)
-async def diagnostico(request: Request):
-    return _r(request, "diagnostico_matriculas.html")
-
-
-
 @router.get("/ui/teams", response_class=HTMLResponse)
 async def teams_root(request: Request):
     return RedirectResponse(url="/ui/teams/teams", status_code=302)

@@ -3,6 +3,8 @@
 {% block title %}Reportes{% endblock %}
 {% block breadcrumb %}Administración › Reportes{% endblock %}
 {% block nav_rp %}active{% endblock %}
+{% block nav_rp_expanded %}true{% endblock %}
+{% block nav_rp_show %}show{% endblock %}
 
 {% block content %}
 <div class="page-body">
@@ -10,7 +12,7 @@
   <p class="page-subtitle">Licencias ocupadas por cuentas abandonadas, actividad de Teams y verificación de envíos.</p>
 
   <!-- Licencias Huérfanas -->
-  <div class="table-card mb-4">
+  <div id="licencias-huerfanas" class="table-card mb-4" style="scroll-margin-top: calc(var(--topbar-h) + 16px);">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
       <h5 class="mb-0"><i class="bi bi-key-fill me-2"></i>Licencias Huérfanas</h5>
       <div class="d-flex gap-2">
@@ -35,7 +37,7 @@
   </div>
 
   <!-- Cuentas de Teams inactivas -->
-  <div class="table-card mb-4">
+  <div id="teams-inactivas" class="table-card mb-4" style="scroll-margin-top: calc(var(--topbar-h) + 16px);">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
       <h5 class="mb-0"><i class="bi bi-person-x-fill me-2"></i>Cuentas de Teams Inactivas</h5>
       <div class="d-flex gap-2 align-items-center">
@@ -56,7 +58,7 @@
   </div>
 
   <!-- Actividad de Teams -->
-  <div class="table-card mb-4">
+  <div id="actividad-teams" class="table-card mb-4" style="scroll-margin-top: calc(var(--topbar-h) + 16px);">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
       <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Actividad de Teams por Usuario</h5>
       <div class="d-flex gap-2 align-items-center">
@@ -83,7 +85,7 @@
   </div>
 
   <!-- Verificación de envío -->
-  <div class="table-card mb-4">
+  <div id="verificar-envio" class="table-card mb-4" style="scroll-margin-top: calc(var(--topbar-h) + 16px);">
     <div class="card-header">
       <h5 class="mb-0"><i class="bi bi-envelope-check me-2"></i>Verificar Envío Real (Outlook)</h5>
     </div>
@@ -109,7 +111,7 @@
   </div>
 
   <!-- Cuentas sin uso (ni en Canvas ni en Teams) -->
-  <div class="table-card mb-4">
+  <div id="cuentas-sin-uso" class="table-card mb-4" style="scroll-margin-top: calc(var(--topbar-h) + 16px);">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
       <h5 class="mb-0"><i class="bi bi-person-slash me-2"></i>Cuentas sin Uso</h5>
       <div class="d-flex gap-2">
