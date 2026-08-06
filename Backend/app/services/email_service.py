@@ -13,6 +13,7 @@ para Canvas/Teams, sin depender de MFA ni de una contraseña de buzón.
 Requiere el permiso de aplicación 'Mail.Send' con consentimiento de
 administrador en Azure Portal.
 """
+import html
 import logging
 import mimetypes
 from pathlib import Path
@@ -431,3 +432,38 @@ async def send_credentials_email(
     except Exception as exc:
         logger.error("Error enviando correo de credenciales a %s: %s", to_email, exc)
         raise
+
+
+_JOB_FAILURE_ALERT_RECIPIENTS = ["lflorentin@usil.edu.py", "glezcano@usil.edu.py", "resteche@usil.edu.py"]
+
+
+async def send_job_failure_alert(*, job_id: int, job_type: str, username: str, error_message: str) -> None:
+    """Avisa al Área de TI cuando un job masivo falla del todo (status
+    'failed'). Los jobs que terminan 'completed_with_errors' (algunas filas
+    OK, otras no) ya se ven fila por fila en el Historial de Trabajos y no
+    generan esta alerta — es solo para la falla total del proceso."""
+    if not settings.smtp_from:
+        return
+    subject = f"⚠️ Job fallido #{job_id} — {job_type}"
+    escaped_error = html.escape(error_message)
+    body_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">
+      <p>Un trabajo masivo falló por completo y quedó marcado como <strong>failed</strong> en el Historial de Trabajos:</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:14px; margin:12px 0;">
+        <tr><td style="padding:2px 12px 2px 0; color:#5b6472;">Job</td><td><strong>#{job_id}</strong></td></tr>
+        <tr><td style="padding:2px 12px 2px 0; color:#5b6472;">Tipo</td><td><strong>{job_type}</strong></td></tr>
+        <tr><td style="padding:2px 12px 2px 0; color:#5b6472;">Usuario</td><td><strong>{username}</strong></td></tr>
+      </table>
+      <div style="border:1px solid #f3c6c6; background:#fdecec; border-radius:8px; padding:12px 16px; margin:16px 0;">
+        <p style="margin:0; font-family: monospace; font-size:13px; white-space:pre-wrap;">{escaped_error}</p>
+      </div>
+      <p>Revisá el detalle en el Historial de Trabajos de la app.</p>
+    </div>
+    """
+    try:
+        await graph.send_mail(
+            mailbox=settings.smtp_from, subject=subject, html_body=body_html,
+            to_email=_JOB_FAILURE_ALERT_RECIPIENTS[0], cc=_JOB_FAILURE_ALERT_RECIPIENTS[1:], attachments=[],
+        )
+    except Exception as exc:
+        logger.warning("No se pudo enviar la alerta de job fallido #%s: %s", job_id, exc)
