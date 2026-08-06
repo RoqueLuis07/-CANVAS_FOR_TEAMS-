@@ -176,9 +176,27 @@ async def fail_job(job_id: int, error_message: str):
 
         await _run(_fail)
         logger.warning(f"Job {job_id} failed: {error_message}")
+        await _notify_job_failure(job_id, error_message)
 
     except Exception as e:
         logger.error(f"Error failing job: {e}")
+
+
+async def _notify_job_failure(job_id: int, error_message: str):
+    """Avisa por correo al Área de TI cuando un job masivo falla del todo
+    (status='failed', no 'completed_with_errors' — esos ya se ven en el
+    Historial de Trabajos fila por fila). Nunca debe romper el flujo que
+    llama a fail_job: cualquier problema acá solo se loguea."""
+    try:
+        from app.services import email_service
+        job = await get_job(job_id)
+        job_type = job.get("job_type", "desconocido") if job else "desconocido"
+        username = job.get("username", "-") if job else "-"
+        await email_service.send_job_failure_alert(
+            job_id=job_id, job_type=job_type, username=username, error_message=error_message,
+        )
+    except Exception as exc:
+        logger.warning(f"No se pudo enviar la alerta de job fallido #{job_id}: {exc}")
 
 
 async def get_jobs(
