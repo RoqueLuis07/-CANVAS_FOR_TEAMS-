@@ -27,6 +27,7 @@
         <option value="rollback_masivo_onedrive">Rollback Masivo (OneDrive)</option>
         <option value="creacion_cursos_onedrive">Creación de Cursos (OneDrive)</option>
         <option value="materias_masivo">Matriculación por Materias</option>
+        <option value="reenvio_credenciales_onedrive">Reenvío de Credenciales</option>
       </select>
       <input type="text" id="usernameFilter" placeholder="Filtrar por usuario..." class="form-control" style="max-width: 200px;">
       <button class="btn btn-primary" onclick="loadJobs()">
@@ -287,7 +288,8 @@ function getJobTypeLabel(type) {
     'rollback_masivo_json': 'Rollback Masivo (Excel)',
     'rollback_masivo_onedrive': 'Rollback Masivo (OneDrive)',
     'creacion_cursos_onedrive': 'Creación de Cursos (OneDrive)',
-    'materias_masivo': 'Matriculación por Materias'
+    'materias_masivo': 'Matriculación por Materias',
+    'reenvio_credenciales_onedrive': 'Reenvío de Credenciales'
   };
   return labels[type] || type;
 }
