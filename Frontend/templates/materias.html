@@ -46,28 +46,17 @@
 
   <div id="materiasWarnings" class="mb-3"></div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Materias a matricular</h5>
-      <button class="btn btn-success" id="btnConfirmarMaterias" onclick="confirmarMatriculacion()">
-        <i class="bi bi-check-circle me-1"></i>Confirmar y Matricular
-      </button>
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="d-flex gap-2 align-items-center">
+      <button class="btn btn-sm btn-outline-secondary" onclick="expandAllAlumnos(true)"><i class="bi bi-arrows-expand me-1"></i>Expandir todos</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="expandAllAlumnos(false)"><i class="bi bi-arrows-collapse me-1"></i>Colapsar todos</button>
     </div>
-    <div class="table-scroll">
-      <table class="table table-sm table-striped mb-0" id="materiasTable">
-        <thead class="table-light">
-          <tr>
-            <th style="width:40px;"><input type="checkbox" id="chkAllMaterias" onchange="toggleAllMaterias(this)"></th>
-            <th>Alumno</th>
-            <th>Materia (planilla)</th>
-            <th>Match sugerido</th>
-            <th>Confianza</th>
-          </tr>
-        </thead>
-        <tbody id="materiasTableBody"></tbody>
-      </table>
-    </div>
+    <button class="btn btn-success" id="btnConfirmarMaterias" onclick="confirmarMatriculacion()">
+      <i class="bi bi-check-circle me-1"></i>Confirmar y Matricular
+    </button>
   </div>
+
+  <div class="accordion" id="materiasAccordion"></div>
 </div>
 
 <script>
@@ -128,20 +117,25 @@ function renderMateriasPreview(data) {
   }
   document.getElementById('materiasWarnings').innerHTML = warningsHtml;
 
-  const tbody = document.getElementById('materiasTableBody');
-  let rows = '';
+  const accordion = document.getElementById('materiasAccordion');
+  let cards = '';
   data.alumnos.forEach((al, ai) => {
-    al.materias.forEach((mat, mi) => {
+    const collapseId = `collapseAlumno${ai}`;
+    const autoN = al.materias.filter(m => m.status === 'auto').length;
+    const revisarN = al.materias.filter(m => m.status === 'revisar').length;
+    const sinMatchN = al.materias.filter(m => m.status === 'sin_match').length;
+    const needsAttention = revisarN > 0 || sinMatchN > 0;
+
+    const rows = al.materias.map((mat, mi) => {
       const rowId = `${ai}-${mi}`;
       const optionsHtml = (mat.candidates || []).map(c => `
-        <option value="${c.course_id}" data-name="${c.course_name.replace(/"/g, '&quot;')}" ${c.course_id === mat.course_id ? 'selected' : ''}>
+        <option value="${c.course_id}" ${c.course_id === mat.course_id ? 'selected' : ''}>
           ${c.course_name} (${Math.round(c.score * 100)}%)
         </option>
       `).join('');
-      rows += `
+      return `
         <tr data-row-id="${rowId}" data-alumno="${al.alumno.replace(/"/g, '&quot;')}" data-cedula="${al.cedula}" data-materia-original="${mat.materia_original.replace(/"/g, '&quot;')}">
-          <td><input type="checkbox" class="chk-materia" ${mat.status === 'sin_match' ? '' : 'checked'} data-row-id="${rowId}"></td>
-          <td>${al.alumno}<div class="small text-muted">${al.cedula}</div></td>
+          <td><input type="checkbox" class="chk-materia" data-alumno-idx="${ai}" ${mat.status === 'sin_match' ? '' : 'checked'} data-row-id="${rowId}"></td>
           <td>${mat.materia_original}</td>
           <td>
             <select class="form-select form-select-sm materia-match-select" data-row-id="${rowId}" style="min-width:260px;">
@@ -152,9 +146,46 @@ function renderMateriasPreview(data) {
           <td id="score-${rowId}">${badgeForStatus(mat.status, mat.score)}</td>
         </tr>
       `;
-    });
+    }).join('');
+
+    cards += `
+      <div class="accordion-item ${needsAttention ? 'border-warning' : 'border-success'} shadow-sm mb-2">
+        <h2 class="accordion-header">
+          <button class="accordion-button ${needsAttention ? '' : 'collapsed'} fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+            <span class="me-2">${al.alumno}</span>
+            <span class="small text-muted me-3">${al.cedula}</span>
+            <span class="badge bg-success me-1">${autoN} auto</span>
+            ${revisarN ? `<span class="badge bg-warning text-dark me-1">${revisarN} revisar</span>` : ''}
+            ${sinMatchN ? `<span class="badge bg-danger me-1">${sinMatchN} sin match</span>` : ''}
+          </button>
+        </h2>
+        <div id="${collapseId}" class="accordion-collapse collapse ${needsAttention ? 'show' : ''}" data-bs-parent="#materiasAccordion">
+          <div class="accordion-body p-0">
+            <div class="d-flex justify-content-end p-2 border-bottom">
+              <label class="small text-muted d-flex align-items-center gap-1">
+                <input type="checkbox" class="chk-alumno-all" data-alumno-idx="${ai}" checked onchange="toggleAlumnoAll(${ai}, this.checked)">
+                Seleccionar todas las materias de este alumno
+              </label>
+            </div>
+            <div class="table-scroll">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:40px;"></th>
+                    <th>Materia (planilla)</th>
+                    <th>Match sugerido</th>
+                    <th>Confianza</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   });
-  tbody.innerHTML = rows || '<tr><td colspan="5" class="text-center text-muted p-4">No se encontraron materias para matricular.</td></tr>';
+  accordion.innerHTML = cards || '<p class="text-center text-muted p-4">No se encontraron alumnos con materias para matricular.</p>';
 
   document.querySelectorAll('.materia-match-select').forEach(sel => {
     sel.addEventListener('change', () => {
@@ -171,13 +202,19 @@ function renderMateriasPreview(data) {
   });
 }
 
-function toggleAllMaterias(master) {
-  document.querySelectorAll('.chk-materia').forEach(c => c.checked = master.checked);
+function toggleAlumnoAll(alumnoIdx, checked) {
+  document.querySelectorAll(`.chk-materia[data-alumno-idx="${alumnoIdx}"]`).forEach(c => c.checked = checked);
+}
+
+function expandAllAlumnos(expand) {
+  document.querySelectorAll('#materiasAccordion .accordion-collapse').forEach(el => {
+    bootstrap.Collapse.getOrCreateInstance(el, { toggle: false })[expand ? 'show' : 'hide']();
+  });
 }
 
 function confirmarMatriculacion() {
   const items = [];
-  document.querySelectorAll('#materiasTableBody tr[data-row-id]').forEach(tr => {
+  document.querySelectorAll('#materiasAccordion tr[data-row-id]').forEach(tr => {
     const rowId = tr.dataset.rowId;
     const chk = tr.querySelector('.chk-materia');
     if (!chk.checked) return;
