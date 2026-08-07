@@ -139,6 +139,11 @@ async def unified_enrollments_page(request: Request):
     return _r(request, "unified_enrollments.html")
 
 
+@router.get("/ui/materias", response_class=HTMLResponse)
+async def materias_page(request: Request):
+    return _r(request, "materias.html")
+
+
 @router.get("/diagnostics", tags=["Health"])
 async def diagnostics():
     """Test Canvas and Azure credentials and return status for each."""
