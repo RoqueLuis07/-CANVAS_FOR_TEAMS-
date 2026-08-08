@@ -28,6 +28,7 @@ from app.services import user_service
 from app.services import email_service
 from app.services.teams_client import create_team_via_group
 from app.core import jobs
+from app.core import database
 
 def _err(exc: Exception) -> str:
     return getattr(exc, "detail", str(exc))
@@ -4964,6 +4965,36 @@ def _envio_credenciales_cols(headers_dict: dict):
     }
 
 
+_ENVIO_CREDENCIALES_CC_KEY = "envio_credenciales_cc"
+
+
+class CcSettingsResponse(BaseModel):
+    cc: list[str] = []
+
+
+class CcSettingsRequest(BaseModel):
+    cc: list[str] = []
+
+
+@router.get("/excel/envio-credenciales/cc-settings", response_model=CcSettingsResponse,
+            summary="Obtener la lista de copia (CC) configurada para Envío de Credenciales")
+async def get_envio_credenciales_cc() -> CcSettingsResponse:
+    raw = await database.get_setting(_ENVIO_CREDENCIALES_CC_KEY)
+    cc = [e.strip() for e in (raw or "").split(",") if e.strip()]
+    return CcSettingsResponse(cc=cc)
+
+
+@router.post("/excel/envio-credenciales/cc-settings", response_model=CcSettingsResponse,
+             summary="Configurar la lista de copia (CC) para Envío de Credenciales")
+async def set_envio_credenciales_cc(req: CcSettingsRequest) -> CcSettingsResponse:
+    cc_clean = list(dict.fromkeys(e.strip() for e in req.cc if e.strip()))
+    invalid = [e for e in cc_clean if "@" not in e]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Correo(s) inválido(s): {', '.join(invalid)}")
+    await database.set_setting(_ENVIO_CREDENCIALES_CC_KEY, ",".join(cc_clean))
+    return CcSettingsResponse(cc=cc_clean)
+
+
 class EnvioCredencialesPreviewResponse(BaseModel):
     sheet_name: str
     to_process: int
@@ -5119,6 +5150,12 @@ async def _process_envio_credenciales_bg(
     await jobs.start_job(job_id)
     ws = wb[sheet_name]
 
+    # CC configurado desde la web (/ui/envio-credenciales) — vacío por
+    # defecto hasta que se cargue explícitamente ahí, nunca el CC fijo
+    # genérico de otros programas.
+    cc_raw = await database.get_setting(_ENVIO_CREDENCIALES_CC_KEY)
+    cc_list = [e.strip() for e in (cc_raw or "").split(",") if e.strip()]
+
     success_count = 0
     error_count = 0
     results: list[dict] = []
@@ -5132,7 +5169,7 @@ async def _process_envio_credenciales_bg(
                 login_id=row["usuario"],
                 password=row["contra"],
                 program_type="diplomado" if is_diplomado else "grado",
-                cc_override=[],
+                cc_override=cc_list,
             )
             ws.cell(row=row["r_idx"], column=col_correo_estado, value="✅ Enviado")
             success_count += 1
