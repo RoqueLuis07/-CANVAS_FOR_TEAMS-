@@ -392,12 +392,18 @@ async def send_credentials_email(
     program_type: str | None = None,
     program_name: str = "",
     extra_cc: list[str] | None = None,
+    cc_override: list[str] | None = None,
 ) -> None:
     """Envía el correo de credenciales vía Microsoft Graph.
 
     Lanza RuntimeError si el remitente no está configurado, o la excepción
     real de Graph si el envío falla — el caller decide cómo reportarlo
     (nunca debe abortar la creación de la cuenta, que ya ocurrió con éxito).
+
+    `cc_override`, si se pasa (incluso como lista vacía), REEMPLAZA por
+    completo el CC por defecto del programa — para flujos que todavía no
+    tienen definida a quién copiar y no deben usar el CC fijo genérico
+    mientras tanto.
     """
     if not settings.smtp_from:
         raise RuntimeError("El envío de correo no está configurado (falta SMTP_FROM, el buzón remitente).")
@@ -408,7 +414,10 @@ async def send_credentials_email(
     builder = _build_diplomado_message if is_diplomado else _build_credentials_message
     subject, html = builder(full_name=full_name, login_id=login_id, password=password, program_name=program_name)
 
-    cc = list(dict.fromkeys([*default_cc_for_program(program_type), *(extra_cc or [])]))
+    if cc_override is not None:
+        cc = cc_override
+    else:
+        cc = list(dict.fromkeys([*default_cc_for_program(program_type), *(extra_cc or [])]))
     attachments = _read_attachments(attachments_for_program(program_type))
 
     try:

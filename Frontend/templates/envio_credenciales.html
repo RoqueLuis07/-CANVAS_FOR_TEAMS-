@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Envío de Credenciales (Altas){% endblock %}
+{% block breadcrumb %}Directorio & Ingresos › Envío de Credenciales (Altas){% endblock %}
+{% block nav_ec %}active{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col-auto">
+    <h1 class="h3 mb-0"><i class="bi bi-envelope-check-fill me-2"></i>Envío de Credenciales (Altas Nuevas)</h1>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <h5 class="mb-0"><i class="bi bi-cloud-arrow-down-fill me-2"></i>Planilla desde OneDrive</h5>
+  </div>
+  <div class="card-body">
+    <div class="alert alert-info border-info">
+      <i class="bi bi-info-circle-fill me-2"></i>
+      <strong>¿Cómo funciona?</strong>
+      <ol class="mb-0 mt-2">
+        <li>Para la planilla de <strong>Usuarios (Nuevos)</strong> — la que ya usás para crear cuentas en Canvas + Teams (columnas Nombre, Cédula, Correo, Usuario Institucional (Autogenerado), Contraseña (Autogenerado), Estado).</li>
+        <li>Solo envía a filas donde la cuenta ya se creó bien (Estado = OK) y que todavía no tengan el correo enviado.</li>
+        <li>Usa el usuario y la contraseña que ya están escritos en la planilla — no los vuelve a calcular.</li>
+        <li>Si no existe una columna de estado de envío, se crea automáticamente ("Correo (Estado)") para no reenviar dos veces.</li>
+        <li><strong>Por ahora no se pone a nadie en copia (CC)</strong> — se agregará cuando se defina la lista.</li>
+      </ol>
+    </div>
+    <div class="row g-2">
+      <div class="col-md-8">
+        <label class="form-label fw-bold">Enlace del Excel en OneDrive</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+          <input type="url" class="form-control" id="urlEnvio" placeholder="https://usilparaguay-my.sharepoint.com/:x:/g/personal/...">
+          <button class="btn btn-outline-secondary" type="button" id="btnLoadSheetsEnvio" onclick="fetchSheetsEnvio()">Cargar Pestañas</button>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Pestaña</label>
+        <select class="form-select" id="sheetEnvio">
+          <option value="">Primero cargá las pestañas...</option>
+        </select>
+      </div>
+    </div>
+    <div class="d-flex justify-content-end mt-3">
+      <button class="btn btn-primary" id="btnAnalizarEnvio" onclick="analizarEnvio()">
+        <i class="bi bi-search me-1"></i>Analizar
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="envioResultWrap" style="display:none;">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <span class="badge bg-success fs-6 me-2" id="envioToProcess">0 a procesar</span>
+      <span class="badge bg-secondary fs-6 me-2" id="envioAlreadyProcessed">0 ya enviados</span>
+      <span class="badge bg-warning text-dark fs-6" id="envioNotCreated">0 sin crear todavía</span>
+    </div>
+    <button class="btn btn-success" id="btnConfirmarEnvio" onclick="confirmarEnvio()">
+      <i class="bi bi-envelope-check me-1"></i>Confirmar y Enviar
+    </button>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Muestra de pendientes</h5>
+    </div>
+    <div class="table-scroll">
+      <table class="table table-sm table-striped mb-0" id="envioPreviewTable">
+        <thead class="table-light"><tr id="envioPreviewHeaders"></tr></thead>
+        <tbody id="envioPreviewBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let envioUrl = '';
+let envioSheet = '';
+
+async function fetchSheetsEnvio() {
+  const url = document.getElementById('urlEnvio').value.trim();
+  if (!url) return toast('Pegá el enlace de OneDrive primero.', 'warning');
+
+  const btn = document.getElementById('btnLoadSheetsEnvio');
+  setLoading(btn, true);
+  try {
+    const sheets = await api.post('/excel/envio-credenciales/sheets', { url });
+    const select = document.getElementById('sheetEnvio');
+    select.innerHTML = sheets.map(s => `<option value="${s}">${s}</option>`).join('');
+    toast('Pestañas cargadas.', 'success');
+  } catch (e) {
+    toast('Error: ' + (e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function analizarEnvio() {
+  const url = document.getElementById('urlEnvio').value.trim();
+  const sheet = document.getElementById('sheetEnvio').value;
+  if (!url || !sheet) return toast('Completá el enlace y elegí una pestaña.', 'warning');
+
+  envioUrl = url;
+  envioSheet = sheet;
+
+  const btn = document.getElementById('btnAnalizarEnvio');
+  setLoading(btn, true);
+  document.getElementById('envioResultWrap').style.display = 'none';
+
+  try {
+    const data = await api.post('/excel/envio-credenciales/preview', { url, sheet_name: sheet });
+    document.getElementById('envioToProcess').textContent = `${data.to_process} a procesar`;
+    document.getElementById('envioAlreadyProcessed').textContent = `${data.already_processed} ya enviados`;
+    document.getElementById('envioNotCreated').textContent = `${data.not_created_yet} sin crear todavía`;
+
+    const thead = document.getElementById('envioPreviewHeaders');
+    thead.innerHTML = data.headers.map(h => `<th>${h}</th>`).join('');
+
+    const tbody = document.getElementById('envioPreviewBody');
+    tbody.innerHTML = data.sample_rows.map(r => {
+      return '<tr>' + data.headers.map(h => `<td>${r[h] || ''}</td>`).join('') + '</tr>';
+    }).join('') || `<tr><td colspan="${data.headers.length || 1}" class="text-center text-muted p-3">No hay pendientes.</td></tr>`;
+
+    document.getElementById('envioResultWrap').style.display = 'block';
+  } catch (e) {
+    toast('Error: ' + (e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function confirmarEnvio() {
+  confirmAction(
+    `Se va a enviar el correo de credenciales a los pendientes de la pestaña "${envioSheet}" (sin copia a nadie por ahora).`,
+    _confirmarEnvioConfirmed,
+    '¿Confirmar envío?',
+    false
+  );
+}
+
+async function _confirmarEnvioConfirmed() {
+  const btn = document.getElementById('btnConfirmarEnvio');
+  setLoading(btn, true);
+  try {
+    const res = await api.post('/excel/envio-credenciales', { url: envioUrl, sheet_name: envioSheet });
+    toast(`Envío iniciado (job #${res.job_id}, ${res.to_process} pendiente(s)). Podés seguir el progreso en Historial de Trabajos.`, 'success');
+  } catch (e) {
+    toast('Error: ' + (e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+</script>
+{% endblock %}
