@@ -4433,9 +4433,9 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
         error_msg = " | ".join(final_error)
 
-        # El correo de credenciales NO se envía aquí: es una acción separada,
-        # disparada manualmente con el botón "Enviar Credenciales"
-        # (POST /excel/masivo/send-credentials).
+        # El correo de credenciales NO se envía aquí: es un paso aparte y
+        # posterior (primero se crea, después se matricula, recién al final
+        # se envían las credenciales) — ver /excel/envio-credenciales.
         if not error_msg and (not correo or correo == "None"):
             error_msg = "Creado OK (Sin correo personal)"
 
@@ -4446,11 +4446,11 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
             if error_msg and "Ya existía" in error_msg:
                 ws.cell(row=r_idx, column=col_enviado, value=f"⚠️ {error_msg}")
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="D97706", bold=True)
-                result.succeeded.append({"correo": login_id, "mensaje": "Ya existía"})
+                result.succeeded.append({"nombre": nombre, "correo": login_id, "mensaje": "Ya existía"})
             elif error_msg and "Sin correo personal" in error_msg:
                 ws.cell(row=r_idx, column=col_enviado, value="✅ OK (Sin correo)")
                 ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
-                result.succeeded.append({"correo": login_id, "mensaje": "OK"})
+                result.succeeded.append({"nombre": nombre, "correo": login_id, "mensaje": "OK"})
             else:
                 collision_note = _collision_note(creds)
                 if collision_note:
@@ -4459,11 +4459,11 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 else:
                     ws.cell(row=r_idx, column=col_enviado, value="✅ OK")
                     ws.cell(row=r_idx, column=col_enviado).font = Font(color="00B050", bold=True)
-                result.succeeded.append({"correo": login_id, "mensaje": "OK"})
+                result.succeeded.append({"nombre": nombre, "correo": login_id, "mensaje": "OK"})
         else:
             ws.cell(row=r_idx, column=col_enviado, value=f"❌ Error: {error_msg}")
             ws.cell(row=r_idx, column=col_enviado).font = Font(color="FF0000", bold=True)
-            result.failed.append({"correo": login_id, "error": error_msg})
+            result.failed.append({"nombre": nombre, "correo": login_id, "error": error_msg})
 
     tasks = []
     for r_idx in range(header_row_idx + 1, ws.max_row + 1):
@@ -4481,221 +4481,6 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo en OneDrive: {e}")
-
-    return result
-
-
-@router.post("/excel/masivo/send-credentials/preview", summary="Vista previa: quién falta enviar credenciales (Carga Masiva)")
-async def preview_send_masivo_credentials(req: DiplomadosUrlRequest) -> SendCredentialsPreviewResponse:
-    """Muestra quién está pendiente de recibir el correo de credenciales, sin
-    enviar nada — misma lógica de filtrado exacta que /send-credentials."""
-    if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL inválida.")
-
-    encoded_url = _encode_share_url(req.url)
-    try:
-        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
-
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
-
-    if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
-
-    ws = wb[req.sheet_name]
-    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
-    if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
-
-    def get_col_idx(*keys):
-        for k in keys:
-            for h, idx in headers.items():
-                if _norm(k) in h:
-                    return idx
-        return None
-
-    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
-    col_correo = get_col_idx("correo", "email")
-    col_usuario = get_col_idx("usuario")
-    col_contra = get_col_idx("contrasena", "contraseña", "clave")
-
-    if not col_usuario or not col_contra:
-        raise HTTPException(
-            status_code=400,
-            detail="No se encontraron las columnas de Usuario/Contraseña. Primero procesa la planilla con 'Carga Masiva'.",
-        )
-    if not col_correo:
-        raise HTTPException(status_code=400, detail="No se encontró una columna de Correo para enviar las credenciales.")
-
-    col_correo_enviado = get_col_idx("correo enviado", "credenciales enviadas")
-    col_enviado_legacy = headers.get("enviado")
-
-    def _looks_sent(raw: str) -> bool:
-        v = raw.strip().lower()
-        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
-
-    pending, already_sent, no_account, no_email = [], 0, 0, 0
-    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        nombre_val = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
-        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
-        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
-        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
-        if not nombre_val and not usuario_val and not correo_val:
-            continue
-
-        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "") if col_correo_enviado else ""
-        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
-
-        if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
-            no_account += 1
-            continue
-        if not correo_val or "@" not in correo_val:
-            no_email += 1
-            continue
-        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
-            already_sent += 1
-            continue
-
-        pending.append({"nombre": nombre_val, "correo": correo_val, "usuario": usuario_val})
-
-    wb.close()
-    return SendCredentialsPreviewResponse(
-        pending=pending, already_sent_count=already_sent,
-        no_account_count=no_account, no_email_count=no_email,
-    )
-
-
-@router.post("/excel/masivo/send-credentials", summary="Enviar correo de credenciales a usuarios ya creados (Carga Masiva)")
-async def send_masivo_credentials(req: DiplomadosUrlRequest) -> BulkResult:
-    """Envía el correo de credenciales a los usuarios de una Carga Masiva que ya
-    tienen cuenta creada (Usuario + Contraseña ya generados) y que todavía no la
-    recibieron. Acción separada de la creación de cuentas (misma lógica que
-    Diplomados/Docentes)."""
-    if not req.url or "http" not in req.url:
-        raise HTTPException(status_code=400, detail="URL inválida.")
-
-    encoded_url = _encode_share_url(req.url)
-    try:
-        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
-
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
-
-    result = BulkResult()
-    if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
-
-    ws = wb[req.sheet_name]
-    header_row_idx, headers, _ = _find_header_row_and_headers(ws)
-    if not header_row_idx:
-        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
-
-    def get_col_idx(*keys):
-        for k in keys:
-            for h, idx in headers.items():
-                if _norm(k) in h:
-                    return idx
-        return None
-
-    col_nombre = get_col_idx("nombre", "alumno", "estudiante")
-    col_correo = get_col_idx("correo", "email")
-    col_usuario = get_col_idx("usuario")
-    col_contra = get_col_idx("contrasena", "contraseña", "clave")
-
-    if not col_usuario or not col_contra:
-        raise HTTPException(
-            status_code=400,
-            detail="No se encontraron las columnas de Usuario/Contraseña. Primero procesa la planilla con 'Carga Masiva'.",
-        )
-    if not col_correo:
-        raise HTTPException(status_code=400, detail="No se encontró una columna de Correo para enviar las credenciales.")
-
-    col_correo_enviado = get_col_idx("correo enviado", "credenciales enviadas")
-    if not col_correo_enviado:
-        col_correo_enviado = ws.max_column + 1
-        _safe_set_cell(ws, header_row_idx, col_correo_enviado, "Correo Enviado").font = Font(bold=True)
-
-    # Respeta una columna "Enviado" preexistente (marcada a mano o por un
-    # proceso externo, antes de este sistema) además de nuestra "Correo
-    # Enviado", para no reenviar algo que ya salió por otra vía.
-    col_enviado_legacy = headers.get("enviado")
-
-    def _looks_sent(raw: str) -> bool:
-        v = raw.strip().lower()
-        return bool(v) and ("✅" in raw or v in ("si", "yes", "true", "enviado"))
-
-    rows_to_send = []
-    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
-        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
-        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
-        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
-        ya_enviado = str(ws.cell(row=r_idx, column=col_correo_enviado).value or "")
-        ya_enviado_legacy = str(ws.cell(row=r_idx, column=col_enviado_legacy).value or "") if col_enviado_legacy else ""
-
-        if not usuario_val or usuario_val == "None" or not contra_val or contra_val == "None":
-            continue  # cuenta no creada todavía
-        if not correo_val or "@" not in correo_val:
-            continue  # sin correo personal para enviar
-        if _looks_sent(ya_enviado) or _looks_sent(ya_enviado_legacy):
-            continue  # ya se le envió (por este sistema o por el proceso anterior)
-
-        rows_to_send.append(r_idx)
-
-    if len(rows_to_send) > 50:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Límite de seguridad excedido: intentas enviar {len(rows_to_send)} correos a la vez (máximo 50 permitidos).",
-        )
-
-    async def send_row(r_idx):
-        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
-        usuario_val = str(ws.cell(row=r_idx, column=col_usuario).value or "").strip()
-        contra_val = str(ws.cell(row=r_idx, column=col_contra).value or "").strip()
-        correo_val = str(ws.cell(row=r_idx, column=col_correo).value or "").strip()
-
-        try:
-            await email_service.send_credentials_email(
-                to_email=correo_val,
-                full_name=nombre or usuario_val,
-                login_id=usuario_val,
-                password=contra_val,
-            )
-            ws.cell(row=r_idx, column=col_correo_enviado, value="✅ Enviado")
-            ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="00B050", bold=True)
-            if col_enviado_legacy:
-                ws.cell(row=r_idx, column=col_enviado_legacy, value="✅ Enviado")
-                ws.cell(row=r_idx, column=col_enviado_legacy).font = Font(color="00B050", bold=True)
-            result.succeeded.append({"correo": correo_val, "usuario": usuario_val})
-        except Exception as exc:
-            ws.cell(row=r_idx, column=col_correo_enviado, value=f"❌ Error: {exc}")
-            ws.cell(row=r_idx, column=col_correo_enviado).font = Font(color="FF0000")
-            result.failed.append({"correo": correo_val, "error": str(exc)})
-
-    batch_size = 5
-    for i in range(0, len(rows_to_send), batch_size):
-        await asyncio.gather(*(send_row(r) for r in rows_to_send[i:i + batch_size]))
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    try:
-        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
-
-    if not result.succeeded and not result.failed:
-        raise HTTPException(
-            status_code=400,
-            detail="No hay usuarios pendientes de envío: o no tienen cuenta creada todavía, o ya se les envió el correo, o no tienen correo personal cargado.",
-        )
 
     return result
 
