@@ -4892,7 +4892,10 @@ async def _process_reenvio_credenciales_bg(
             error_count += 1
             results.append({"nombre": row["nombre"], "correo": row["correo"], "status": f"❌ {msg}"})
 
-    batch_size = 5
+    # Concurrencia baja a propósito: cada correo de "grado" lleva un ZIP de
+    # ~7MB adjunto, y con varios en simultáneo la app pisa el límite de
+    # bytes entrantes de Graph ("ApplicationThrottled").
+    batch_size = 2
     for i in range(0, len(rows_to_process), batch_size):
         chunk = rows_to_process[i:i + batch_size]
         await asyncio.gather(*(process_row(r) for r in chunk))
@@ -5180,7 +5183,10 @@ async def _process_envio_credenciales_bg(
             error_count += 1
             results.append({"nombre": row["nombre"], "correo": row["correo"], "status": f"❌ {msg}"})
 
-    batch_size = 5
+    # Concurrencia baja a propósito: cada correo de "grado" lleva un ZIP de
+    # ~7MB adjunto, y con varios en simultáneo la app pisa el límite de
+    # bytes entrantes de Graph ("ApplicationThrottled").
+    batch_size = 2
     for i in range(0, len(rows_to_process), batch_size):
         chunk = rows_to_process[i:i + batch_size]
         await asyncio.gather(*(process_row(r) for r in chunk))
