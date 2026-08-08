@@ -51,15 +51,29 @@ _DIPLOMADO_ATTACHMENTS = [
 ]
 
 # Instructivos para alumnos de grado (Envío/Reenvío de Credenciales): acceso
-# a Office 365, a Teams, cómo descargar una grabación, y 7 guías de Canvas
-# (bandeja de entrada, tareas, calificaciones, foros, archivos, evaluaciones,
-# vista de cursos), agrupados en un único ZIP con carpetas por plataforma
-# ("1. Office 365", "2. Microsoft Teams", "3. Canvas") en vez de 10 adjuntos
-# sueltos. Como ZIP pesa ~7.3MB — por encima del límite de adjunto "simple"
-# de Graph (~3MB, ver `send_mail`) — se envía con `send_mail_with_large_attachment`,
-# que usa el flujo de upload session de Graph para adjuntos grandes.
+# a Office 365, a Teams, y cómo descargar una grabación (~750KB en total,
+# bien por debajo del límite de adjunto "simple" de Graph de ~3MB — ver
+# `send_mail`, que solo requiere el permiso 'Mail.Send' ya concedido).
+#
+# El ZIP con las 7 guías de Canvas ("Manuales e Instructivos de las
+# Plataformas.zip", ~7.3MB) queda en el repo pero NO se adjunta por ahora:
+# `send_mail_with_large_attachment` (el flujo de upload session para
+# adjuntos grandes) necesita crear el correo como borrador primero
+# (POST /users/{mailbox}/messages), lo que requiere el permiso de
+# aplicación 'Mail.ReadWrite' — nunca solicitado ni concedido en este
+# tenant (solo se pidió 'Mail.Send'). Sin ese permiso, cada envío fallaba
+# de inmediato con 403 antes de mandar nada (job #20, "Todos los envíos
+# fallaron"). Para reactivar el ZIP completo hay que conceder
+# 'Mail.ReadWrite' (permiso de aplicación, con admin consent) en Azure
+# Portal → App registrations → API permissions, y volver a apuntar
+# `_GRADO_ATTACHMENTS` a `_GRADO_ATTACHMENT_ZIP`.
 _GRADO_ATTACHMENTS_DIR = _BACKEND_DIR / "Archivos para los correos" / "Alumnos (Grado)"
 _GRADO_ATTACHMENT_ZIP = _GRADO_ATTACHMENTS_DIR / "Manuales e Instructivos de las Plataformas.zip"
+_GRADO_ATTACHMENTS = [
+    _GRADO_ATTACHMENTS_DIR / "1° Acceso al Portal Office 365 - Instructivo.pdf",
+    _GRADO_ATTACHMENTS_DIR / "2° Acceso a la Plataforma Teams - Instructivo.pdf",
+    _GRADO_ATTACHMENTS_DIR / "3° Descargar grabacion en TEAMS - Instructivo.pdf",
+]
 
 # Datos de contacto de TI UBS, tal como aparecen en el correo real que el
 # equipo venía enviando a mano (mismo texto, mismo WhatsApp).
@@ -80,7 +94,7 @@ def attachments_for_program(program_type: str | None) -> list[Path]:
     if program_type_norm == "diplomado":
         return [p for p in _DIPLOMADO_ATTACHMENTS if p.is_file()]
     if program_type_norm == "grado":
-        return [_GRADO_ATTACHMENT_ZIP] if _GRADO_ATTACHMENT_ZIP.is_file() else []
+        return [p for p in _GRADO_ATTACHMENTS if p.is_file()]
     return []
 
 
