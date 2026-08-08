@@ -551,20 +551,30 @@ async def send_mail(
 _UPLOAD_CHUNK_SIZE = 4 * 320 * 1024  # 1.25 MB
 
 
-def _is_transient_item_not_found(e: Exception) -> bool:
-    """`ErrorItemNotFound` justo después de crear el borrador es consistencia
-    eventual de Graph (el borrador todavía no está disponible en el backend
-    que atiende la siguiente llamada), no un error real — se ve sobre todo
-    al procesar varias filas en paralelo. Reintentar de cero (con un
-    borrador nuevo) casi siempre lo resuelve. No se reintentan otros 404
-    (ej. buzón inexistente), solo este código puntual."""
-    return isinstance(e, HTTPException) and e.status_code == 404 and "ItemNotFound" in str(e.detail)
+def _is_transient_upload_error(e: Exception) -> bool:
+    """Dos condiciones puntuales de Graph que ameritan reintentar todo el
+    envío desde cero (con un borrador nuevo):
+
+    - `ErrorItemNotFound` justo después de crear el borrador: consistencia
+      eventual (el borrador todavía no está disponible en el backend que
+      atiende la siguiente llamada), no un error real.
+    - `ApplicationThrottled` ("Application is over its IncomingBytes
+      limit"): la app superó el límite de bytes entrantes que Graph permite
+      en un lapso corto — se ve al enviar varios adjuntos grandes (~7MB
+      c/u) seguidos. Baja solo esperando.
+
+    No se reintentan otros 404/429 (ej. buzón inexistente, límite de
+    envíos por día) — solo estos dos códigos puntuales."""
+    if not isinstance(e, HTTPException):
+        return False
+    detail = str(e.detail)
+    return (e.status_code == 404 and "ItemNotFound" in detail) or "ApplicationThrottled" in detail
 
 
 _upload_retry = retry(
-    retry=retry_if_exception(_is_transient_item_not_found),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(min=1, max=6),
+    retry=retry_if_exception(_is_transient_upload_error),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(min=2, max=30),
     reraise=True,
 )
 
