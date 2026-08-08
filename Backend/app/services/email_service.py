@@ -25,6 +25,12 @@ from app.services import teams_client as graph
 
 logger = logging.getLogger(__name__)
 
+# Límite documentado por Microsoft Graph para adjuntos "simples" (enviados
+# inline en base64 dentro del cuerpo de sendMail, ver `graph.send_mail`).
+# Por encima de esto hay que usar el flujo de upload session para adjuntos
+# grandes (ver `graph.send_mail_with_large_attachment`).
+_SMALL_ATTACHMENT_LIMIT = 3 * 1024 * 1024
+
 # CC fijo compartido por todos los envíos de credenciales.
 _BASE_CC = ["lflorentin@usil.edu.py", "comercialcredenciales@usil.edu.py", "resteche@usil.edu.py"]
 
@@ -48,24 +54,13 @@ _DIPLOMADO_ATTACHMENTS = [
 # Instructivos para alumnos de grado (Envío/Reenvío de Credenciales): acceso
 # a Office 365, a Teams, cómo descargar una grabación, y 7 guías de Canvas
 # (bandeja de entrada, tareas, calificaciones, foros, archivos, evaluaciones,
-# vista de cursos). Los PDF de Canvas se reexportaron a menor resolución
-# (72dpi) porque las capturas de pantalla originales pesaban ~14MB en total
-# entre los 7 — muy por encima del límite de adjunto individual de Microsoft
-# Graph (3MB) y de lo razonable para un envío masivo; comprimidos, cada uno
-# queda holgado bajo ese límite y el total de los 10 adjuntos baja a ~7.4MB.
+# vista de cursos), agrupados en un único ZIP con carpetas por plataforma
+# ("1. Office 365", "2. Microsoft Teams", "3. Canvas") en vez de 10 adjuntos
+# sueltos. Como ZIP pesa ~7.3MB — por encima del límite de adjunto "simple"
+# de Graph (~3MB, ver `send_mail`) — se envía con `send_mail_with_large_attachment`,
+# que usa el flujo de upload session de Graph para adjuntos grandes.
 _GRADO_ATTACHMENTS_DIR = _BACKEND_DIR / "Archivos para los correos" / "Alumnos (Grado)"
-_GRADO_ATTACHMENTS = [
-    _GRADO_ATTACHMENTS_DIR / "1° Acceso al Portal Office 365 - Instructivo.pdf",
-    _GRADO_ATTACHMENTS_DIR / "2° Acceso a la Plataforma Teams - Instructivo.pdf",
-    _GRADO_ATTACHMENTS_DIR / "3° Descargar grabacion en TEAMS - Instructivo.pdf",
-    _GRADO_ATTACHMENTS_DIR / "4° Canvas - Bandeja de entrada.pdf",
-    _GRADO_ATTACHMENTS_DIR / "5° Canvas - Cambiar vista de cursos.pdf",
-    _GRADO_ATTACHMENTS_DIR / "6° Canvas - Rendir evaluaciones.pdf",
-    _GRADO_ATTACHMENTS_DIR / "7° Canvas - Ver calificacion y retroalimentacion.pdf",
-    _GRADO_ATTACHMENTS_DIR / "8° Canvas - Ver y descargar archivos.pdf",
-    _GRADO_ATTACHMENTS_DIR / "9° Canvas - Ver y participar foros de discusion.pdf",
-    _GRADO_ATTACHMENTS_DIR / "10° Canvas - Ver y subir tareas.pdf",
-]
+_GRADO_ATTACHMENT_ZIP = _GRADO_ATTACHMENTS_DIR / "Manuales e Instructivos de las Plataformas.zip"
 
 # Datos de contacto de TI UBS, tal como aparecen en el correo real que el
 # equipo venía enviando a mano (mismo texto, mismo WhatsApp).
@@ -86,7 +81,7 @@ def attachments_for_program(program_type: str | None) -> list[Path]:
     if program_type_norm == "diplomado":
         return [p for p in _DIPLOMADO_ATTACHMENTS if p.is_file()]
     if program_type_norm == "grado":
-        return [p for p in _GRADO_ATTACHMENTS if p.is_file()]
+        return [_GRADO_ATTACHMENT_ZIP] if _GRADO_ATTACHMENT_ZIP.is_file() else []
     return []
 
 
@@ -606,12 +601,21 @@ async def send_credentials_email(
     else:
         cc = list(dict.fromkeys([*default_cc_for_program(program_type), *(extra_cc or [])]))
     attachments = _read_attachments(attachments_for_program(program_type))
+    total_attachment_size = sum(len(content) for _, content, _ in attachments)
 
     try:
-        await graph.send_mail(
-            mailbox=settings.smtp_from, subject=subject, html_body=html,
-            to_email=to_email, cc=cc, attachments=attachments,
-        )
+        if len(attachments) == 1 and total_attachment_size > _SMALL_ATTACHMENT_LIMIT:
+            name, content, content_type = attachments[0]
+            await graph.send_mail_with_large_attachment(
+                mailbox=settings.smtp_from, subject=subject, html_body=html,
+                to_email=to_email, attachment_name=name, attachment_bytes=content,
+                attachment_content_type=content_type, cc=cc,
+            )
+        else:
+            await graph.send_mail(
+                mailbox=settings.smtp_from, subject=subject, html_body=html,
+                to_email=to_email, cc=cc, attachments=attachments,
+            )
     except HTTPException as exc:
         if exc.status_code == 403:
             logger.error("Error enviando correo de credenciales a %s: %s", to_email, exc.detail)

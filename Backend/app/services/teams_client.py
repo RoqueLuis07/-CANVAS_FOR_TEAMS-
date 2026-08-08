@@ -546,6 +546,78 @@ async def send_mail(
     await post(f"/users/{mailbox}/sendMail", {"message": message, "saveToSentItems": True})
 
 
+# Tamaño de trozo recomendado por la documentación de Graph para
+# uploadSession: debe ser múltiplo de 320 KiB.
+_UPLOAD_CHUNK_SIZE = 4 * 320 * 1024  # 1.25 MB
+
+
+async def send_mail_with_large_attachment(
+    mailbox: str, subject: str, html_body: str, to_email: str,
+    attachment_name: str, attachment_bytes: bytes, attachment_content_type: str,
+    cc: list[str] | None = None,
+) -> None:
+    """Envía un correo con UN adjunto grande vía Microsoft Graph.
+
+    `sendMail` (ver `send_mail`) solo admite adjuntos "simples" de hasta
+    ~3MB porque van codificados en base64 dentro del mismo cuerpo JSON. Para
+    adjuntos más grandes, Graph exige un flujo de 3 pasos: crear el mensaje
+    como borrador, subirle el adjunto en trozos vía una "upload session", y
+    recién ahí enviarlo (POST .../send). Si algún paso falla después de
+    crear el borrador, se intenta borrarlo para no dejar basura en Borradores.
+    """
+    message: dict = {
+        "subject": subject,
+        "body": {"contentType": "HTML", "content": html_body},
+        "toRecipients": [{"emailAddress": {"address": to_email}}],
+    }
+    if cc:
+        message["ccRecipients"] = [{"emailAddress": {"address": addr}} for addr in cc]
+
+    draft = await post(f"/users/{mailbox}/messages", message)
+    message_id = draft["id"]
+
+    try:
+        session = await post(
+            f"/users/{mailbox}/messages/{message_id}/attachments/createUploadSession",
+            {
+                "AttachmentItem": {
+                    "attachmentType": "file",
+                    "name": attachment_name,
+                    "size": len(attachment_bytes),
+                }
+            },
+        )
+        upload_url = session["uploadUrl"]
+
+        total = len(attachment_bytes)
+        client = _client(timeout=httpx.Timeout(120.0))
+        start = 0
+        while start < total:
+            end = min(start + _UPLOAD_CHUNK_SIZE, total)
+            chunk = attachment_bytes[start:end]
+            # La uploadUrl ya trae su propia autenticación embebida — Graph
+            # documenta explícitamente NO mandar el header Authorization acá.
+            r = await client.put(
+                upload_url,
+                content=chunk,
+                headers={
+                    "Content-Length": str(len(chunk)),
+                    "Content-Range": f"bytes {start}-{end - 1}/{total}",
+                },
+            )
+            if r.is_error:
+                raise HTTPException(status_code=r.status_code, detail=f"Error subiendo adjunto grande: {r.text[:300]}")
+            start = end
+
+        await post(f"/users/{mailbox}/messages/{message_id}/send", {})
+    except Exception:
+        try:
+            await delete(f"/users/{mailbox}/messages/{message_id}")
+        except Exception:
+            pass
+        raise
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Reportes: licencias huérfanas, cuentas inactivas, actividad de Teams,
 # verificación de envío de correo contra el buzón real de Outlook.
