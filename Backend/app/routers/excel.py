@@ -5124,3 +5124,255 @@ async def _process_reenvio_credenciales_bg(
             await jobs.complete_job(job_id, success_count, error_count, "Reenvío y guardado en OneDrive completados.")
     except Exception as e:
         await jobs.complete_job(job_id, success_count, error_count, f"Procesado, pero no se pudo guardar en OneDrive: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Envío de Credenciales para Altas Nuevas (planilla "Usuarios (Nuevos)": Fecha,
+# Nombre, Cédula, Correo (personal), Usuario Institucional (Autogenerado),
+# Contraseña (Autogenerado), Estado (de creación), Correo (Estado) — última
+# columna, la de envío). A diferencia del reenvío masivo, acá se usan el
+# usuario/contraseña YA escritos en la planilla por el proceso de alta (no se
+# recalculan), y solo se procesan filas cuya creación ya salió bien.
+#
+# Sin CC por defecto todavía (a pedido explícito): se pasa cc_override=[] para
+# no aplicar el CC fijo genérico hasta que se defina a quién copiar.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/excel/envio-credenciales/sheets", response_model=list[str])
+async def get_envio_credenciales_sheets(req: UrlOnlyRequest) -> list[str]:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        sheets = wb.sheetnames
+        wb.close()
+        return sheets
+    except Exception:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+
+def _envio_credenciales_cols(headers_dict: dict):
+    def get_col_idx(*keys):
+        for k in keys:
+            for h, idx in headers_dict.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    return {
+        "nombre": get_col_idx("nombre"),
+        "cedula": get_col_idx("cedula", "cédula", "ci"),
+        "correo": get_col_idx("correo"),
+        "usuario": get_col_idx("usuario institucional", "usuario"),
+        "contra": get_col_idx("contrasena autogenerado", "contraseña autogenerado", "contrasena", "contraseña", "clave"),
+        "estado_creacion": get_col_idx("estado"),
+        "correo_estado": get_col_idx("correo estado", "correo enviado", "email enviado"),
+    }
+
+
+class EnvioCredencialesPreviewResponse(BaseModel):
+    sheet_name: str
+    to_process: int
+    already_processed: int
+    not_created_yet: int
+    headers: list[str] = []
+    sample_rows: list[dict] = []
+
+
+@router.post("/excel/envio-credenciales/preview", summary="Pre-visualizar envío de credenciales de altas nuevas")
+async def preview_envio_credenciales(req: DiplomadosUrlRequest) -> EnvioCredencialesPreviewResponse:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    cols = _envio_credenciales_cols(headers_dict)
+    if not cols["nombre"] or not cols["correo"] or not cols["usuario"] or not cols["contra"]:
+        raise HTTPException(status_code=400, detail="Faltan columnas de Nombre, Correo, Usuario Institucional o Contraseña.")
+
+    to_process = 0
+    already_processed = 0
+    not_created_yet = 0
+    sample_rows = []
+
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        row_vals = [str(ws.cell(row=r_idx, column=c).value or "").strip() for c in range(1, len(headers_raw) + 1)]
+        if not any(row_vals):
+            continue
+        nombre = row_vals[cols["nombre"] - 1]
+        correo = row_vals[cols["correo"] - 1]
+        usuario = row_vals[cols["usuario"] - 1]
+        contra = row_vals[cols["contra"] - 1]
+        estado_creacion = row_vals[cols["estado_creacion"] - 1].lower() if cols["estado_creacion"] else ""
+        correo_estado = row_vals[cols["correo_estado"] - 1].lower() if cols["correo_estado"] else ""
+
+        if not nombre or not correo or not usuario or not contra:
+            continue
+
+        creado_ok = "✅" in row_vals[cols["estado_creacion"] - 1] or "ok" in estado_creacion if cols["estado_creacion"] else True
+        if not creado_ok:
+            not_created_yet += 1
+            continue
+
+        if "ok" in correo_estado or "enviado" in correo_estado or "✅" in correo_estado:
+            already_processed += 1
+        else:
+            to_process += 1
+            if len(sample_rows) < 10:
+                sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
+
+    return EnvioCredencialesPreviewResponse(
+        sheet_name=req.sheet_name,
+        to_process=to_process,
+        already_processed=already_processed,
+        not_created_yet=not_created_yet,
+        headers=[h for h in headers_raw if h][:min(8, len(headers_raw))],
+        sample_rows=sample_rows,
+    )
+
+
+@router.post("/excel/envio-credenciales", summary="Enviar credenciales masivamente a altas nuevas desde OneDrive")
+async def envio_credenciales_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks) -> dict:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    cols = _envio_credenciales_cols(headers_dict)
+    if not cols["nombre"] or not cols["correo"] or not cols["usuario"] or not cols["contra"]:
+        raise HTTPException(status_code=400, detail="Faltan columnas de Nombre, Correo, Usuario Institucional o Contraseña.")
+
+    col_correo_estado = cols["correo_estado"]
+    if not col_correo_estado:
+        col_correo_estado = ws.max_column + 1
+        ws.cell(row=header_row_idx, column=col_correo_estado, value="Correo (Estado)").font = Font(bold=True)
+
+    is_diplomado = "diplomado" in req.sheet_name.lower()
+
+    rows_to_process = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        nombre = str(ws.cell(row=r_idx, column=cols["nombre"]).value or "").strip()
+        correo = str(ws.cell(row=r_idx, column=cols["correo"]).value or "").strip()
+        usuario = str(ws.cell(row=r_idx, column=cols["usuario"]).value or "").strip()
+        contra = str(ws.cell(row=r_idx, column=cols["contra"]).value or "").strip()
+        estado_creacion_raw = str(ws.cell(row=r_idx, column=cols["estado_creacion"]).value or "").strip() if cols["estado_creacion"] else ""
+        correo_estado = str(ws.cell(row=r_idx, column=col_correo_estado).value or "").strip().lower()
+
+        if not nombre or not correo or not usuario or not contra:
+            continue
+
+        creado_ok = ("✅" in estado_creacion_raw or "ok" in estado_creacion_raw.lower()) if cols["estado_creacion"] else True
+        if not creado_ok:
+            continue
+        if "ok" in correo_estado or "enviado" in correo_estado or "✅" in correo_estado:
+            continue
+
+        rows_to_process.append({"r_idx": r_idx, "nombre": nombre, "correo": correo, "usuario": usuario, "contra": contra})
+
+    if len(rows_to_process) > 300:
+        raise HTTPException(status_code=400, detail=f"Demasiados registros pendientes ({len(rows_to_process)}). Máximo 300 por ejecución.")
+
+    if len(rows_to_process) > 0:
+        try:
+            await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"El archivo Excel está abierto o el enlace es de Solo Lectura. Detalle real: {e}")
+
+    job_id = await jobs.create_job(job_type="envio_credenciales_altas_onedrive", operation="import", username="admin")
+    bg_tasks.add_task(_process_envio_credenciales_bg, job_id, wb, ws.title, encoded_url, col_correo_estado, rows_to_process, is_diplomado)
+    return {"status": "success", "job_id": job_id, "message": "Envío de credenciales iniciado en segundo plano.", "to_process": len(rows_to_process)}
+
+
+async def _process_envio_credenciales_bg(
+    job_id: int, wb, sheet_name: str, encoded_url: str, col_correo_estado: int,
+    rows_to_process: list[dict], is_diplomado: bool,
+):
+    import json
+    await jobs.start_job(job_id)
+    ws = wb[sheet_name]
+
+    success_count = 0
+    error_count = 0
+    results: list[dict] = []
+
+    async def process_row(row: dict):
+        nonlocal success_count, error_count
+        try:
+            await email_service.send_credentials_email(
+                to_email=row["correo"],
+                full_name=row["nombre"],
+                login_id=row["usuario"],
+                password=row["contra"],
+                program_type="diplomado" if is_diplomado else "grado",
+                cc_override=[],
+            )
+            ws.cell(row=row["r_idx"], column=col_correo_estado, value="✅ Enviado")
+            success_count += 1
+            results.append({"nombre": row["nombre"], "correo": row["correo"], "status": "✅ Enviado"})
+        except Exception as e:
+            msg = str(getattr(e, "detail", e))
+            ws.cell(row=row["r_idx"], column=col_correo_estado, value=f"❌ Error: {msg}")
+            error_count += 1
+            results.append({"nombre": row["nombre"], "correo": row["correo"], "status": f"❌ {msg}"})
+
+    batch_size = 5
+    for i in range(0, len(rows_to_process), batch_size):
+        chunk = rows_to_process[i:i + batch_size]
+        await asyncio.gather(*(process_row(r) for r in chunk))
+        await jobs.update_job_progress(
+            job_id, success_count, error_count,
+            data_json=json.dumps({"total_to_process": len(rows_to_process), "processed": success_count + error_count, "results": results}),
+        )
+
+    out_io = io.BytesIO()
+    wb.save(out_io)
+    out_io.seek(0)
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+        if error_count and success_count == 0:
+            await jobs.fail_job(job_id, f"Todos los envíos fallaron ({error_count}).")
+        else:
+            await jobs.complete_job(job_id, success_count, error_count, "Envío y guardado en OneDrive completados.")
+    except Exception as e:
+        await jobs.complete_job(job_id, success_count, error_count, f"Procesado, pero no se pudo guardar en OneDrive: {e}")
