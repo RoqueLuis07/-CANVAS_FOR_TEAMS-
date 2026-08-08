@@ -23,9 +23,25 @@
         <li>Solo envía a filas donde la cuenta ya se creó bien (Estado = OK) y que todavía no tengan el correo enviado.</li>
         <li>Usa el usuario y la contraseña que ya están escritos en la planilla — no los vuelve a calcular.</li>
         <li>Si no existe una columna de estado de envío, se crea automáticamente ("Correo (Estado)") para no reenviar dos veces.</li>
-        <li><strong>Por ahora no se pone a nadie en copia (CC)</strong> — se agregará cuando se defina la lista.</li>
+        <li>El correo incluye botones directos de acceso a <strong>Canvas</strong> y <strong>Microsoft Teams</strong>, y trae adjuntos los 10 instructivos (acceso a Office 365, acceso a Teams, descargar grabaciones, y las 7 guías de Canvas).</li>
+        <li>La copia (CC) de estos envíos se configura abajo, no en la planilla.</li>
       </ol>
     </div>
+
+    <div class="card border-secondary-subtle mb-3">
+      <div class="card-body">
+        <label class="form-label fw-bold mb-1"><i class="bi bi-people-fill me-1"></i>Copia (CC) para estos envíos</label>
+        <p class="form-text mt-0 mb-2">Estos correos van en copia en <strong>todos</strong> los envíos de este módulo, de aquí en adelante — no se cargan en la planilla.</p>
+        <div class="input-group">
+          <input type="text" class="form-control" id="envioCcInput" placeholder="correo1@usil.edu.py, correo2@usil.edu.py">
+          <button class="btn btn-outline-primary" type="button" id="btnGuardarCc" onclick="guardarEnvioCc()">
+            <i class="bi bi-save me-1"></i>Guardar
+          </button>
+        </div>
+        <div class="form-text mt-1" id="envioCcStatus">Cargando configuración actual...</div>
+      </div>
+    </div>
+
     <div class="row g-2">
       <div class="col-md-8">
         <label class="form-label fw-bold">Enlace del Excel en OneDrive</label>
@@ -78,6 +94,43 @@
 <script>
 let envioUrl = '';
 let envioSheet = '';
+let envioCcList = [];
+
+async function cargarEnvioCc() {
+  const statusEl = document.getElementById('envioCcStatus');
+  try {
+    const data = await api.get('/excel/envio-credenciales/cc-settings');
+    envioCcList = data.cc || [];
+    document.getElementById('envioCcInput').value = envioCcList.join(', ');
+    statusEl.textContent = envioCcList.length
+      ? `Copia activa: ${envioCcList.join(', ')}`
+      : 'Sin copia configurada — los envíos no van a nadie en CC.';
+  } catch (e) {
+    statusEl.textContent = 'No se pudo cargar la configuración actual.';
+  }
+}
+
+async function guardarEnvioCc() {
+  const raw = document.getElementById('envioCcInput').value.trim();
+  const cc = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  const btn = document.getElementById('btnGuardarCc');
+  setLoading(btn, true);
+  try {
+    const data = await api.post('/excel/envio-credenciales/cc-settings', { cc });
+    envioCcList = data.cc || [];
+    document.getElementById('envioCcStatus').textContent = envioCcList.length
+      ? `Copia activa: ${envioCcList.join(', ')}`
+      : 'Sin copia configurada — los envíos no van a nadie en CC.';
+    toast('Copia (CC) guardada.', 'success');
+  } catch (e) {
+    toast('Error: ' + (e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', cargarEnvioCc);
 
 async function fetchSheetsEnvio() {
   const url = document.getElementById('urlEnvio').value.trim();

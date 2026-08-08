@@ -127,6 +127,17 @@ async def init_db():
             )
         """)
 
+        # Configuración simple clave/valor editable desde la web (ej. lista de
+        # CC para el Envío de Credenciales), sin necesitar variables de
+        # entorno ni un redeploy para cambiarla.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
         logger.info("Database initialized at Supabase PostgreSQL")
 
@@ -520,4 +531,38 @@ async def delete_enrollment(enrollment_id: str) -> bool:
         return True
     except Exception as e:
         logger.error(f"Error deleting enrollment {enrollment_id}: {e}")
+        return False
+
+
+async def get_setting(key: str) -> str | None:
+    """Read a value from app_settings. Returns None if not set."""
+    try:
+        def _get(conn):
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM app_settings WHERE key = %s", (key,))
+            row = cursor.fetchone()
+            return row[0] if row else None
+        return await _run(_get)
+    except Exception as e:
+        logger.error(f"Error getting setting '{key}': {e}")
+        return None
+
+
+async def set_setting(key: str, value: str) -> bool:
+    """Upsert a value into app_settings."""
+    try:
+        def _set(conn):
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (key) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    updated_at = EXCLUDED.updated_at
+            """, (key, value, datetime.utcnow()))
+            conn.commit()
+            return True
+        return await _run(_set)
+    except Exception as e:
+        logger.error(f"Error setting '{key}': {e}")
         return False
