@@ -551,6 +551,25 @@ async def send_mail(
 _UPLOAD_CHUNK_SIZE = 4 * 320 * 1024  # 1.25 MB
 
 
+def _is_transient_item_not_found(e: Exception) -> bool:
+    """`ErrorItemNotFound` justo después de crear el borrador es consistencia
+    eventual de Graph (el borrador todavía no está disponible en el backend
+    que atiende la siguiente llamada), no un error real — se ve sobre todo
+    al procesar varias filas en paralelo. Reintentar de cero (con un
+    borrador nuevo) casi siempre lo resuelve. No se reintentan otros 404
+    (ej. buzón inexistente), solo este código puntual."""
+    return isinstance(e, HTTPException) and e.status_code == 404 and "ItemNotFound" in str(e.detail)
+
+
+_upload_retry = retry(
+    retry=retry_if_exception(_is_transient_item_not_found),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(min=1, max=6),
+    reraise=True,
+)
+
+
+@_upload_retry
 async def send_mail_with_large_attachment(
     mailbox: str, subject: str, html_body: str, to_email: str,
     attachment_name: str, attachment_bytes: bytes, attachment_content_type: str,
@@ -563,7 +582,9 @@ async def send_mail_with_large_attachment(
     adjuntos más grandes, Graph exige un flujo de 3 pasos: crear el mensaje
     como borrador, subirle el adjunto en trozos vía una "upload session", y
     recién ahí enviarlo (POST .../send). Si algún paso falla después de
-    crear el borrador, se intenta borrarlo para no dejar basura en Borradores.
+    crear el borrador, se intenta borrarlo para no dejar basura en Borradores
+    — incluyendo entre reintentos, así cada intento parte de un borrador
+    nuevo en vez de acumular basura.
     """
     message: dict = {
         "subject": subject,
@@ -577,6 +598,11 @@ async def send_mail_with_large_attachment(
     message_id = draft["id"]
 
     try:
+        # Pequeño margen para la consistencia eventual de Graph: el borrador
+        # recién creado a veces todavía no está disponible para la próxima
+        # llamada, sobre todo con varias filas en paralelo.
+        await asyncio.sleep(0.3)
+
         session = await post(
             f"/users/{mailbox}/messages/{message_id}/attachments/createUploadSession",
             {
