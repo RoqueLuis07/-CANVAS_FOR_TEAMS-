@@ -145,13 +145,13 @@
 
         <div id="matPreviewWrap" style="display:none;" class="mb-3">
           <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-            <label class="form-label fw-semibold mb-0">Previsualización (Primeras filas)</label>
+            <label class="form-label fw-semibold mb-0">Previsualización (hasta 500 filas)</label>
             <div>
               <span class="badge bg-success me-2" id="matPreviewToProcess">0 a procesar</span>
               <span class="badge bg-warning text-dark" id="matPreviewSkipped">0 ya existentes</span>
             </div>
           </div>
-          <div class="table-responsive border rounded bg-white">
+          <div class="table-responsive border rounded bg-white" style="max-height: 400px; overflow-y: auto;">
             <table class="table table-sm table-striped mb-0 text-nowrap" id="matPreviewTable">
               <thead><tr id="matPreviewHead"></tr></thead>
               <tbody id="matPreviewBody"></tbody>

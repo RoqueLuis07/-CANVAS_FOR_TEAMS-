@@ -3585,9 +3585,9 @@ async def preview_matriculaciones_onedrive(req: DiplomadosUrlRequest) -> Preview
         else:
             students_to_process += 1
             
-        if len(sample_rows) < 10:
+        if len(sample_rows) < 500:
             sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
-            
+
     wb.close()
     return PreviewResponse(
         sheet_name=req.sheet_name,
@@ -3611,30 +3611,32 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
         return
 
     ws = wb[req.sheet_name]
-    
-    # Find header row
-    header_row_idx = 1
-    headers = {}
-    for row_idx in range(1, min(10, ws.max_row + 1)):
-        row_vals = [c.value for c in ws[row_idx]]
-        row_strs = [str(v).strip().lower() for v in row_vals if v is not None]
-        if any(keyword in r for r in row_strs for keyword in ["usuario", "correo", "email", "cedula", "sis", "alumno"]):
-            header_row_idx = row_idx
-            headers = {c.value: c.column for c in ws[row_idx] if c.value}
-            break
 
-    # Identify columns
+    # Find header row (mismo helper robusto que usa el preview, para que
+    # ambos detecten siempre la misma fila/columnas)
+    header_row_idx, headers_norm, _headers_raw = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        await jobs.fail_job(job_id, "No se encontraron encabezados.")
+        return
+    headers = {n: c for n, c in headers_norm.items()}
+
+    # Identify columns. Las columnas "(Autogenerado)" (ej. "Correo
+    # (Autogenerado)", que registra el envío de credenciales) NO deben
+    # confundirse con las columnas de identificación (usuario/correo real,
+    # curso, equipo): si se toman por error, la fila queda sin identificador
+    # y se salta en silencio, dando "no hay filas nuevas" aunque el preview
+    # sí muestre filas pendientes.
     user_col, canvas_col, teams_col, rol_col, env_col = None, None, None, None, None
     env_col_is_estado = False
-    for h, col_idx in headers.items():
-        n = _norm(h)
-        if "usuario" in n or "correo" in n or "email" in n or "cedula" in n or "sis" in n or "alumno" in n:
+    for n, col_idx in headers.items():
+        is_autogen = "autogenerado" in n
+        if not is_autogen and ("usuario" in n or "correo" in n or "email" in n or "cedula" in n or "sis" in n or "alumno" in n):
             user_col = col_idx
-        elif "curso" in n or "canvas" in n:
+        elif not is_autogen and ("curso" in n or "canvas" in n):
             canvas_col = col_idx
-        elif "equipo" in n or "teams" in n:
+        elif not is_autogen and ("equipo" in n or "teams" in n):
             teams_col = col_idx
-        elif "rol" in n:
+        elif not is_autogen and "rol" in n:
             rol_col = col_idx
         elif "estado" in n and not env_col_is_estado:
             env_col = col_idx
