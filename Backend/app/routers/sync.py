@@ -179,7 +179,14 @@ async def _enroll_single(item: UnifiedEnrollment):
         try:
             await graph.post(f"/teams/{team_id}/members", teams_payload)
         except Exception as e:
-            errors.append(f"Teams Error: {e}")
+            # Si ya era miembro del equipo (ej. reprocesando una fila que
+            # falló solo por el lado de Canvas, con Teams ya matriculado en
+            # un intento anterior), Graph responde "already exist" — no es
+            # un error real, y no matricula dos veces (la membresía es un
+            # conjunto, no una lista).
+            err_str = str(e).lower()
+            if "already exist" not in err_str and "request_badrequest" not in err_str:
+                errors.append(f"Teams Error: {e}")
 
     if errors:
         return {"status": "error", "message": " | ".join(errors), "item": item.dict()}
