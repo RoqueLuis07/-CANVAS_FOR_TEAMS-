@@ -332,13 +332,19 @@ class BulkGroupMemberAddByEmail(BaseModel):
     emails: list[str]
 
 
-@router.post("/{group_id}/members/bulk-add-to-group", summary="Agregar usuarios existentes como miembros de un grupo (Team, lista de distribución o cualquier grupo de Microsoft 365)")
+@router.post("/{group_id}/members/bulk-add-to-group", summary="Agregar usuarios existentes como miembros de un grupo (Team o grupo de seguridad/Microsoft 365 sin correo habilitado)")
 async def bulk_add_members_to_any_group(group_id: str, body: BulkGroupMemberAddByEmail) -> BulkResult:
     """A diferencia de bulk-add/bulk-add-emails (que usan la API de miembros de
     conversación de Teams, /teams/{id}/members/add, y solo funcionan si el grupo
     tiene Teams provisionado), esto usa la API genérica de miembros de grupo
-    (/groups/{id}/members) — funciona para cualquier grupo de Microsoft 365,
-    incluyendo listas de distribución y grupos de seguridad que no son Teams."""
+    (/groups/{id}/members/$ref) — funciona para Teams y para grupos de
+    Microsoft 365 o de seguridad sin correo habilitado.
+
+    NO funciona para grupos habilitados para correo (listas de distribución,
+    grupos de seguridad con correo): Graph API no permite gestionar su
+    membresía en absoluto — Microsoft exige Exchange Online PowerShell
+    (Add-DistributionGroupMember) para esos casos, algo fuera del alcance de
+    Graph y de esta app."""
     result = BulkResult()
 
     async def add_one(raw_email: str):
@@ -372,8 +378,20 @@ async def bulk_add_members_to_any_group(group_id: str, body: BulkGroupMemberAddB
             result.succeeded.append({"input": email})
         except Exception as e:
             msg = str(e)
-            if "already exist" in msg.lower():
+            msg_lower = msg.lower()
+            if "already exist" in msg_lower:
                 result.succeeded.append({"input": email, "note": "ya era miembro"})
+            elif "mail-enabled" in msg_lower or "distribution list" in msg_lower:
+                result.failed.append({
+                    "input": email,
+                    "error": (
+                        "Este grupo es una lista de distribución o un grupo de seguridad "
+                        "con correo habilitado — Microsoft Graph no permite gestionar su "
+                        "membresía en absoluto (es un límite de la API, no de esta app). "
+                        "Hay que agregarlo desde Exchange Online o el centro de "
+                        "administración de Microsoft 365."
+                    ),
+                })
             else:
                 result.failed.append({"input": email, "error": msg})
 
