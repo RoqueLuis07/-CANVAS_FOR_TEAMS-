@@ -173,8 +173,14 @@
       <div class="modal-body bg-light">
         <div class="alert alert-info">
           A diferencia de "Añadir miembros Excel" (que solo funciona con equipos de Teams reales),
-          esta herramienta agrega usuarios existentes como miembros de <b>cualquier grupo de Microsoft 365</b>
-          por su ID — incluyendo <b>listas de distribución</b> y grupos de seguridad que no tienen Teams activado.
+          esta herramienta agrega usuarios existentes como miembros por ID a <b>Teams reales y a
+          grupos de seguridad/Microsoft 365 sin correo habilitado</b>.
+        </div>
+        <div class="alert alert-warning">
+          <b>No funciona</b> con listas de distribución ni grupos de seguridad
+          <b>con correo habilitado</b> — Microsoft Graph no permite gestionar su membresía
+          en absoluto (hay que hacerlo desde Exchange Online o el centro de administración
+          de Microsoft 365).
         </div>
         <label class="form-label fw-bold">ID del grupo (Azure AD / Microsoft 365)</label>
         <input type="text" class="form-control mb-3" id="groupMembersGroupId" placeholder="Ej: 976a5ad1-2559-4c58-acf9-047819473b3e">
