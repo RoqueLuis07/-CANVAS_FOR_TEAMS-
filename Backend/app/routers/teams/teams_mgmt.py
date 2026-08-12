@@ -360,8 +360,13 @@ async def bulk_add_members_to_any_group(group_id: str, body: BulkGroupMemberAddB
             return
 
         try:
+            # Agregar una referencia a un miembro existente requiere el
+            # sufijo /$ref — sin él, Graph interpreta el POST como un
+            # intento de CREAR un recurso nuevo bajo la colección
+            # "members" y responde 400 "Unsupported resource type
+            # 'DirectoryObject' for operation 'Create'".
             await graph.post(
-                f"/groups/{group_id}/members/",
+                f"/groups/{group_id}/members/$ref",
                 {"@odata.id": f"https://graph.microsoft.com/v1.0/directoryObjects/{user_id}"},
             )
             result.succeeded.append({"input": email})
