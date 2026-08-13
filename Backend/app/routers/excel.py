@@ -1967,6 +1967,7 @@ class CoursesPreviewResponse(BaseModel):
     headers: list[str] = []
     sample_rows: list[dict] = []
     course_details: list[dict] = []
+    platform: str = "both"
 
 
 @router.post("/excel/courses/sheets", response_model=list[str])
@@ -2070,13 +2071,26 @@ async def preview_courses_onedrive(req: DiplomadosUrlRequest) -> CoursesPreviewR
             sample_rows.append({h: v for h, v in zip(headers_raw, row_vals) if h})
             
     wb.close()
+
+    # Misma detección de plataforma por nombre de pestaña que usa
+    # _process_courses_bg — se informa acá para que el preview no prometa
+    # matriculación en Teams cuando la planilla es de Canvas solamente (o
+    # viceversa).
+    sheet_lower = req.sheet_name.lower()
+    platform = "both"
+    if "canvas" in sheet_lower and "teams" not in sheet_lower:
+        platform = "canvas"
+    elif "teams" in sheet_lower and "canvas" not in sheet_lower:
+        platform = "teams"
+
     return CoursesPreviewResponse(
         sheet_name=req.sheet_name,
         courses_to_create=courses_to_create,
         courses_already_created=courses_already_created,
         headers=headers,
         sample_rows=sample_rows,
-        course_details=course_details
+        course_details=course_details,
+        platform=platform,
     )
 
 
