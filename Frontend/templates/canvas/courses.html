@@ -39,6 +39,11 @@
       <i class="bi bi-person-gear me-2"></i>Corregir Rol Coordinador
     </button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link fw-bold text-primary" id="fix-sis-id-tab" data-bs-toggle="tab" data-bs-target="#fix-sis-id" type="button" role="tab" aria-controls="fix-sis-id" aria-selected="false">
+      <i class="bi bi-pencil-square me-2"></i>Corregir SIS ID
+    </button>
+  </li>
 </ul>
 
 <div class="tab-content" id="coursesTabsContent">
@@ -457,6 +462,80 @@
       </div>
     </div>
   </div> <!-- End Tab Corregir Rol Coordinador -->
+
+  <!-- Tab: Corregir SIS ID -->
+  <div class="tab-pane fade" id="fix-sis-id" role="tabpanel" aria-labelledby="fix-sis-id-tab">
+    <div class="row">
+      <div class="col-md-8 offset-md-2 mb-4">
+        <div class="card shadow-sm border-primary h-100">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>Corregir SIS ID de cursos ya creados</h5>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info">
+              Para cursos que ya se crearon en Canvas con un SIS ID mal cargado. Lee la misma planilla
+              de cursos: usa <b>ID CANVAS (Autogenerado)</b> para identificar el curso ya existente, y
+              <b>Identificación del SIS (Canvas)</b> como el valor <b>correcto</b> al que debe quedar.
+              Corregí la columna del SIS en la planilla primero, después ejecutá esto — el valor
+              anterior se libera solo (un curso solo puede tener un SIS ID a la vez).
+            </div>
+
+            <div id="fixSisIdFormWrap">
+              <label class="form-label fw-bold">URL de OneDrive de la planilla de cursos</label>
+              <div class="input-group mb-2">
+                <input type="url" id="fixSisIdUrl" class="form-control" placeholder="https://usilpy-my.sharepoint.com/:x:/g/personal/...">
+                <button class="btn btn-outline-primary" id="btnLoadFixSisIdSheets" onclick="fetchFixSisIdSheets()">
+                  <i class="bi bi-arrow-repeat me-1"></i>Cargar pestañas
+                </button>
+              </div>
+              <label class="form-label fw-bold">Pestaña</label>
+              <select class="form-select mb-3" id="fixSisIdSheet">
+                <option value="">Selecciona una pestaña...</option>
+              </select>
+              <div class="d-flex justify-content-end">
+                <button class="btn btn-primary" id="btnPreviewFixSisId" onclick="previewFixSisId()">
+                  <i class="bi bi-search me-1"></i>Detectar Cursos a Corregir
+                </button>
+              </div>
+            </div>
+
+            <div id="fixSisIdPreviewWrap" style="display:none;">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold mb-0">Cursos a corregir (<span id="fixSisIdCount">0</span>)</h6>
+              </div>
+              <div class="table-responsive border rounded bg-white" style="max-height:300px; overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th>Curso</th>
+                      <th>ID Canvas</th>
+                      <th>SIS actual</th>
+                      <th>SIS nuevo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fixSisIdList"></tbody>
+                </table>
+              </div>
+              <div id="fixSisIdAlreadyOkWrap" style="display:none;" class="alert alert-success mt-3 mb-0 py-2 small">
+                <span id="fixSisIdAlreadyOk"></span> curso(s) ya tenían el SIS ID correcto — no requieren cambios.
+              </div>
+              <div id="fixSisIdNotFoundWrap" style="display:none;" class="alert alert-warning mt-3 mb-0 py-2 small">
+                <span id="fixSisIdNotFound"></span> fila(s) con ID Canvas que no se encontró en Canvas — revisalas antes de reintentar.
+              </div>
+              <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-outline-secondary me-2" onclick="cancelFixSisIdPreview()">
+                  <i class="bi bi-arrow-left me-1"></i>Volver
+                </button>
+                <button class="btn btn-primary" id="btnExecuteFixSisId" onclick="executeFixSisId()">
+                  <i class="bi bi-pencil-square me-1"></i>Corregir Todos
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div> <!-- End Tab Corregir SIS ID -->
 </div> <!-- End Tabs Content -->
 
 <!-- Modal: Eliminación por Período -->
@@ -2077,6 +2156,164 @@ async function executeFixCoordRole() {
     } finally {
         setLoading(btn, false);
     }
+}
+
+// ==========================================
+// CORREGIR SIS ID (POR PLANILLA)
+// ==========================================
+let _fixSisIdJobPollInterval = null;
+let _fixSisIdUrl = '';
+let _fixSisIdSheet = '';
+
+async function fetchFixSisIdSheets() {
+    const urlInput = document.getElementById('fixSisIdUrl').value.trim();
+    if (!urlInput) { toast('Por favor, ingresa la URL primero.', 'warning'); return; }
+
+    const btn = document.getElementById('btnLoadFixSisIdSheets');
+    const select = document.getElementById('fixSisIdSheet');
+    setLoading(btn, true);
+    select.innerHTML = '<option value="">Cargando pestañas...</option>';
+
+    try {
+        const sheets = await api.post('/excel/courses/sheets', { url: urlInput });
+        if (sheets && sheets.length > 0) {
+            select.innerHTML = '<option value="">Selecciona una pestaña...</option>';
+            sheets.forEach(sheet => {
+                const opt = document.createElement('option');
+                opt.value = sheet; opt.textContent = sheet;
+                select.appendChild(opt);
+            });
+            toast('Pestañas cargadas correctamente.', 'success');
+        } else {
+            select.innerHTML = '<option value="">No se encontraron pestañas.</option>';
+        }
+    } catch (e) {
+        toast('Error al cargar pestañas: ' + (e.detail || e.message || e), 'danger');
+        select.innerHTML = '<option value="">Error al cargar.</option>';
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+async function previewFixSisId() {
+    const urlInput = document.getElementById('fixSisIdUrl').value.trim();
+    const sheetInput = document.getElementById('fixSisIdSheet').value.trim();
+    if (!urlInput || !sheetInput) { toast('Completá la URL y elegí una pestaña.', 'warning'); return; }
+
+    _fixSisIdUrl = urlInput;
+    _fixSisIdSheet = sheetInput;
+
+    const btn = document.getElementById('btnPreviewFixSisId');
+    setLoading(btn, true);
+
+    try {
+        const res = await api.post('/excel/courses/fix-sis-id/preview', { url: urlInput, sheet_name: sheetInput });
+
+        document.getElementById('fixSisIdCount').innerText = res.to_fix;
+        document.getElementById('fixSisIdList').innerHTML = res.sample_rows.map(r => `
+            <tr>
+                <td>${r.nombre || '<span class="text-muted">—</span>'}</td>
+                <td>${r.canvas_id}</td>
+                <td><span class="badge bg-danger">${r.sis_actual}</span></td>
+                <td><span class="badge bg-success">${r.sis_nuevo}</span></td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" class="text-center text-muted p-3">No hay cursos pendientes de corrección.</td></tr>';
+
+        if (res.already_correct > 0) {
+            document.getElementById('fixSisIdAlreadyOkWrap').style.display = 'block';
+            document.getElementById('fixSisIdAlreadyOk').innerText = res.already_correct;
+        } else {
+            document.getElementById('fixSisIdAlreadyOkWrap').style.display = 'none';
+        }
+        if (res.no_course_found > 0) {
+            document.getElementById('fixSisIdNotFoundWrap').style.display = 'block';
+            document.getElementById('fixSisIdNotFound').innerText = res.no_course_found;
+        } else {
+            document.getElementById('fixSisIdNotFoundWrap').style.display = 'none';
+        }
+
+        document.getElementById('btnExecuteFixSisId').disabled = res.to_fix === 0;
+        document.getElementById('fixSisIdFormWrap').style.display = 'none';
+        document.getElementById('fixSisIdPreviewWrap').style.display = 'block';
+    } catch (e) {
+        toast('Error: ' + (e.detail || e.message || e), 'danger');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function cancelFixSisIdPreview() {
+    document.getElementById('fixSisIdFormWrap').style.display = 'block';
+    document.getElementById('fixSisIdPreviewWrap').style.display = 'none';
+    const progressWrap = document.getElementById('fixSisIdJobProgressWrap');
+    if (progressWrap) progressWrap.remove();
+}
+
+async function executeFixSisId() {
+    if (!confirm('¿Corregir el SIS ID de todos los cursos detectados? El valor anterior de cada uno se libera automáticamente al reemplazarlo.')) return;
+
+    const btn = document.getElementById('btnExecuteFixSisId');
+    setLoading(btn, true);
+
+    try {
+        const res = await api.post('/excel/courses/fix-sis-id', { url: _fixSisIdUrl, sheet_name: _fixSisIdSheet });
+        toast('Corrección de SIS ID iniciada en segundo plano.', 'info');
+        startFixSisIdJobPolling(res.job_id);
+    } catch (e) {
+        toast('Error: ' + (e.detail || e.message || e), 'danger');
+        setLoading(btn, false);
+    }
+}
+
+function startFixSisIdJobPolling(jobId) {
+    const btn = document.getElementById('btnExecuteFixSisId');
+    if (_fixSisIdJobPollInterval) clearInterval(_fixSisIdJobPollInterval);
+
+    let progressWrap = document.getElementById('fixSisIdJobProgressWrap');
+    if (progressWrap) progressWrap.remove();
+    document.getElementById('fixSisIdPreviewWrap').insertAdjacentHTML('beforeend', `
+        <div id="fixSisIdJobProgressWrap" class="alert alert-info mt-3">
+            <div class="mb-2"><b>Procesando en segundo plano...</b> (Trabajo #${jobId})</div>
+            <div class="progress" style="height: 20px;">
+                <div id="fixSisIdJobProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 5%;">5%</div>
+            </div>
+            <div id="fixSisIdJobProgressDetail" class="mt-2 small text-muted">Inicializando...</div>
+        </div>
+    `);
+
+    _fixSisIdJobPollInterval = setInterval(async () => {
+        try {
+            const job = await api.get(`/excel/jobs/${jobId}`);
+            if (!job) return;
+
+            const processed = (job.result_count || 0) + (job.error_count || 0);
+            const total = parseInt(document.getElementById('fixSisIdCount').innerText, 10) || 0;
+            const percent = total > 0 ? Math.round((processed / total) * 100) : (['completed', 'completed_with_errors', 'failed'].includes(job.status) ? 100 : 5);
+
+            const bar = document.getElementById('fixSisIdJobProgressBar');
+            if (bar) { bar.style.width = `${percent}%`; bar.innerText = `${percent}%`; }
+            const detail = document.getElementById('fixSisIdJobProgressDetail');
+            if (detail) detail.innerHTML = `Completados: ${job.result_count || 0} | Errores: ${job.error_count || 0}`;
+
+            if (['completed', 'completed_with_errors', 'failed'].includes(job.status)) {
+                clearInterval(_fixSisIdJobPollInterval);
+                setLoading(btn, false);
+
+                if (job.status === 'failed') {
+                    toast('❌ El proceso falló: ' + (job.error_message || ''), 'danger');
+                } else {
+                    const failCount = job.error_count || 0;
+                    toast(`✅ ${job.result_count || 0} curso(s) corregido(s).${failCount > 0 ? ` ⚠️ ${failCount} con errores.` : ''}`, failCount > 0 ? 'warning' : 'success');
+                }
+
+                cancelFixSisIdPreview();
+                document.getElementById('fixSisIdUrl').value = '';
+                document.getElementById('fixSisIdSheet').innerHTML = '<option value="">Selecciona una pestaña...</option>';
+            }
+        } catch (e) {
+            console.error('Error consultando estado del trabajo', e);
+        }
+    }, 4000);
 }
 
 // Activa la pestaña indicada por ?tab= (llegando desde el submenú del sidebar)
