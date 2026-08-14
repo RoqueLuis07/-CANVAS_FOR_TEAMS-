@@ -2346,6 +2346,227 @@ async def execute_fix_coordinador_role(req: FixCoordinadorRoleRequest):
     return result
 
 
+# ── Corregir SIS ID en masa ─────────────────────────────────────────────────
+#
+# Para cursos ya creados en Canvas con un SIS ID mal cargado (ej. copiado de
+# la fila equivocada). Reutiliza la misma planilla de creación de cursos:
+# lee "ID CANVAS (Autogenerado)" para identificar el curso ya existente y
+# "Identificación del SIS (Canvas)" como el valor CORRECTO al que debe
+# quedar. Al hacer PUT /courses/{id} con el sis_course_id nuevo, Canvas
+# libera automáticamente el valor viejo de ese curso (un curso solo puede
+# tener un SIS ID a la vez) — no hace falta un paso aparte para "liberarlo".
+
+class FixSisIdPreviewResponse(BaseModel):
+    sheet_name: str
+    to_fix: int
+    already_correct: int
+    no_course_found: int
+    sample_rows: list[dict] = []
+
+
+@router.post("/excel/courses/fix-sis-id/preview", summary="Detectar cursos ya creados con SIS ID incorrecto para corregirlo masivamente")
+async def preview_fix_sis_id(req: DiplomadosUrlRequest) -> FixSisIdPreviewResponse:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+    if req.sheet_name not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+    ws = wb[req.sheet_name]
+
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        raise HTTPException(status_code=400, detail="No se encontró la fila de encabezados.")
+
+    def get_col(*keys):
+        for k in keys:
+            for h, idx in headers_dict.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_nombre = get_col("nombre", "curso")
+    col_sis = get_col("sis", "sys")
+    col_canvas_id = get_col("canvas id", "id canvas")
+    if not col_canvas_id or not col_sis:
+        raise HTTPException(status_code=400, detail="Faltan columnas de ID Canvas (Autogenerado) o SIS ID en la planilla.")
+
+    rows = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        canvas_id = str(ws.cell(row=r_idx, column=col_canvas_id).value or "").strip()
+        new_sis = str(ws.cell(row=r_idx, column=col_sis).value or "").strip()
+        nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip() if col_nombre else ""
+        if canvas_id and canvas_id.isdigit() and new_sis and new_sis != "None":
+            rows.append({"canvas_id": canvas_id, "new_sis": new_sis, "nombre": nombre})
+    wb.close()
+
+    to_fix = 0
+    already_correct = 0
+    no_course_found = 0
+    sample_rows: list[dict] = []
+
+    async def check(row):
+        nonlocal to_fix, already_correct, no_course_found
+        try:
+            course = await canvas.get(f"/courses/{row['canvas_id']}")
+            current_sis = str(course.get("sis_course_id") or "").strip()
+        except Exception:
+            no_course_found += 1
+            return
+        if current_sis == row["new_sis"]:
+            already_correct += 1
+        else:
+            to_fix += 1
+            if len(sample_rows) < 15:
+                sample_rows.append({
+                    "nombre": row["nombre"],
+                    "canvas_id": row["canvas_id"],
+                    "sis_actual": current_sis or "(vacío)",
+                    "sis_nuevo": row["new_sis"],
+                })
+
+    await asyncio.gather(*(check(r) for r in rows))
+
+    return FixSisIdPreviewResponse(
+        sheet_name=req.sheet_name,
+        to_fix=to_fix,
+        already_correct=already_correct,
+        no_course_found=no_course_found,
+        sample_rows=sample_rows,
+    )
+
+
+@router.post("/excel/courses/fix-sis-id", summary="Corregir masivamente el SIS ID de cursos ya creados en Canvas")
+async def fix_sis_id_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks) -> dict:
+    if not req.url or "http" not in req.url:
+        raise HTTPException(status_code=400, detail="URL inválida.")
+
+    encoded_url = _encode_share_url(req.url)
+    try:
+        contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. {e}")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        if req.sheet_name not in wb.sheetnames:
+            raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe.")
+        wb.close()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="El archivo no es un Excel válido.")
+
+    job_id = await jobs.create_job(
+        job_type="fix_sis_id_onedrive",
+        operation="Corrección masiva de SIS ID",
+        username="admin",
+    )
+    bg_tasks.add_task(_process_fix_sis_id_bg, job_id, req, contents, encoded_url)
+
+    return {"status": "success", "job_id": job_id, "message": "Corrección de SIS ID iniciada en segundo plano."}
+
+
+async def _process_fix_sis_id_bg(job_id: int, req: DiplomadosUrlRequest, contents: bytes, encoded_url: str):
+    await jobs.start_job(job_id)
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+    except Exception as e:
+        await jobs.fail_job(job_id, f"El archivo no es un Excel válido: {e}")
+        return
+
+    if req.sheet_name not in wb.sheetnames:
+        await jobs.fail_job(job_id, f"La pestaña '{req.sheet_name}' no existe.")
+        return
+
+    ws = wb[req.sheet_name]
+    header_row_idx, headers_dict, headers_raw = _find_header_row_and_headers(ws)
+    if not header_row_idx:
+        await jobs.fail_job(job_id, "No se encontró la fila de encabezados.")
+        return
+
+    def get_col(*keys):
+        for k in keys:
+            for h, idx in headers_dict.items():
+                if _norm(k) in h:
+                    return idx
+        return None
+
+    col_canvas_id = get_col("canvas id", "id canvas")
+    col_sis = get_col("sis", "sys")
+    col_estado = get_col("estado")
+    if not col_canvas_id or not col_sis:
+        await jobs.fail_job(job_id, "Faltan columnas de ID Canvas (Autogenerado) o SIS ID en la planilla.")
+        return
+
+    if not col_estado:
+        col_estado = ws.max_column + 1
+        ws.cell(row=header_row_idx, column=col_estado, value="Estado (Autogenerado)").font = Font(bold=True)
+
+    rows = []
+    for r_idx in range(header_row_idx + 1, ws.max_row + 1):
+        canvas_id = str(ws.cell(row=r_idx, column=col_canvas_id).value or "").strip()
+        new_sis = str(ws.cell(row=r_idx, column=col_sis).value or "").strip()
+        if canvas_id and canvas_id.isdigit() and new_sis and new_sis != "None":
+            rows.append((r_idx, canvas_id, new_sis))
+
+    success_count = 0
+    error_count = 0
+
+    async def fix_one(r_idx: int, canvas_id: str, new_sis: str):
+        nonlocal success_count, error_count
+        try:
+            course = await canvas.get(f"/courses/{canvas_id}")
+            current_sis = str(course.get("sis_course_id") or "").strip()
+        except Exception as e:
+            ws.cell(row=r_idx, column=col_estado, value=f"❌ Error: curso {canvas_id} no encontrado ({e})").font = Font(color="FF0000", bold=True)
+            error_count += 1
+            return
+
+        if current_sis == new_sis:
+            ws.cell(row=r_idx, column=col_estado, value="✅ Ya estaba correcto").font = Font(color="00B050", bold=True)
+            success_count += 1
+            return
+
+        try:
+            await canvas.put(f"/courses/{canvas_id}", {"course": {"sis_course_id": new_sis}})
+            ws.cell(row=r_idx, column=col_estado, value="✅ SIS corregido").font = Font(color="00B050", bold=True)
+            success_count += 1
+        except Exception as e:
+            err = getattr(e, "detail", None) or str(e)
+            if "sis" in str(err).lower() and "already" in str(err).lower():
+                err = f"{err} — el SIS ID '{new_sis}' ya está en uso por otro curso; corregí primero ese curso para liberarlo."
+            ws.cell(row=r_idx, column=col_estado, value=f"❌ Error: {err}").font = Font(color="FF0000", bold=True)
+            error_count += 1
+
+    batch_size = 5
+    for i in range(0, len(rows), batch_size):
+        chunk = rows[i:i + batch_size]
+        await asyncio.gather(*(fix_one(*r) for r in chunk))
+        await jobs.update_job_progress(job_id, success_count, error_count)
+
+    out_io = io.BytesIO()
+    wb.save(out_io)
+    out_io.seek(0)
+
+    try:
+        await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", out_io.read())
+        await jobs.complete_job(job_id, success_count, error_count, "Guardado en OneDrive correctamente.")
+    except Exception as e:
+        await jobs.complete_job(job_id, success_count, error_count, f"Procesado, pero no se pudo guardar en OneDrive: {e}")
+
+
 async def append_report_onedrive(report_url: str, succeeded: list, failed: list):
     try:
         import datetime, io, base64, openpyxl
