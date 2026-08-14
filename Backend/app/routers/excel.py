@@ -2683,6 +2683,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
     col_nombre = get_col("nombre", "curso", "canvas")
     col_sis = get_col("sis", "sys")
     col_periodo = get_col("periodo")
+    col_subcuenta = get_col("sub-cuenta", "subcuenta", "sub_cuenta")
     col_canvas_id = get_col("canvas id", "id canvas")
     col_teams_id = get_col("teams id", "id teams")
     col_estado = get_col("estado")
@@ -2721,6 +2722,22 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
         terms_data = terms_res.get("enrollment_terms", [])
     except: pass
 
+    # Mapa nombre→id de TODAS las subcuentas bajo la cuenta raíz (recursivo,
+    # sin importar cuántos niveles de anidamiento tengan — ej. USIL > 2026-2
+    # > CPEL > Administración). Se arma una sola vez para todo el job en vez
+    # de una consulta por fila.
+    subaccount_map: dict[str, int] = {}
+    try:
+        subaccounts_data = await canvas.paginate(
+            f"/accounts/{_ACCOUNT_LOCAL}/sub_accounts", params={"recursive": "true", "per_page": 100}
+        )
+        for sa in subaccounts_data:
+            sa_name = str(sa.get("name") or "").strip().lower()
+            if sa_name:
+                subaccount_map[sa_name] = sa.get("id")
+    except Exception:
+        pass
+
     coordinador_role_id = await _get_coordinador_role_id()
 
     sheet_lower = req.sheet_name.lower()
@@ -2734,6 +2751,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
         nombre = str(ws.cell(row=r_idx, column=col_nombre).value or "").strip()
         sis_id = str(ws.cell(row=r_idx, column=col_sis).value or "").strip() if col_sis else ""
         periodo = str(ws.cell(row=r_idx, column=col_periodo).value or "").strip() if col_periodo else ""
+        subcuenta_raw = str(ws.cell(row=r_idx, column=col_subcuenta).value or "").strip() if col_subcuenta else ""
         docente_email = str(ws.cell(row=r_idx, column=col_docente).value or "").strip() if col_docente else ""
         if docente_email and "@" not in docente_email:
             docente_email = ""
@@ -2772,6 +2790,20 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
 
         # 1. Canvas Creation
         if default_plat in ("canvas", "both"):
+            # Si se indicó una subcuenta, el curso se crea DIRECTAMENTE ahí
+            # (ej. Administración/Marketing/Negocios) en vez de en la cuenta
+            # raíz + período — reemplaza al período, no se combinan. Si el
+            # nombre no matchea ninguna subcuenta real, se corta acá con un
+            # error claro en vez de crear el curso en el lugar equivocado.
+            target_account_id = _ACCOUNT_LOCAL
+            subcuenta_error = None
+            if subcuenta_raw:
+                sub_id = subaccount_map.get(subcuenta_raw.strip().lower())
+                if sub_id:
+                    target_account_id = sub_id
+                else:
+                    subcuenta_error = f"No se encontró la subcuenta '{subcuenta_raw}' en Canvas."
+
             # Si ya existe un curso con este SIS ID exacto (el SIS ID ya es
             # específico de nombre+período por diseño), lo reutilizamos en
             # vez de intentar crear uno duplicado.
@@ -2784,6 +2816,8 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                     pass
 
             try:
+                if subcuenta_error:
+                    raise ValueError(subcuenta_error)
                 if not canvas_id:
                     payload = {
                         "course": {
@@ -2793,7 +2827,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                     }
                     if sis_id and sis_id != "None":
                         payload["course"]["sis_course_id"] = sis_id
-                    if periodo:
+                    if periodo and not subcuenta_raw:
                         term_val = f"sis_term_id:{periodo}"
                         if periodo.isdigit():
                             term_val = periodo
@@ -2807,7 +2841,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
                                     break
                         payload["course"]["term_id"] = term_val
 
-                    data = await canvas.post(f"/accounts/{_ACCOUNT_LOCAL}/courses", payload)
+                    data = await canvas.post(f"/accounts/{target_account_id}/courses", payload)
                     canvas_id = data.get("id")
             except Exception as e:
                 err_text = getattr(e, "detail", None) or str(e)
