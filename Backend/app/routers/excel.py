@@ -2726,13 +2726,17 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
     # sin importar cuántos niveles de anidamiento tengan — ej. USIL > 2026-2
     # > CPEL > Administración). Se arma una sola vez para todo el job en vez
     # de una consulta por fila.
+    # Se indexa con _norm() (mismo helper que usa el resto de la detección de
+    # columnas/encabezados): saca tildes, mayúsculas y separadores, para que
+    # "Administración" en Canvas matchee con "administracion", "ADMINISTRACIÓN"
+    # o "Administración " (con espacio de más) en la planilla.
     subaccount_map: dict[str, int] = {}
     try:
         subaccounts_data = await canvas.paginate(
             f"/accounts/{_ACCOUNT_LOCAL}/sub_accounts", params={"recursive": "true", "per_page": 100}
         )
         for sa in subaccounts_data:
-            sa_name = str(sa.get("name") or "").strip().lower()
+            sa_name = _norm(str(sa.get("name") or ""))
             if sa_name:
                 subaccount_map[sa_name] = sa.get("id")
     except Exception:
@@ -2798,7 +2802,7 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
             target_account_id = _ACCOUNT_LOCAL
             subcuenta_error = None
             if subcuenta_raw:
-                sub_id = subaccount_map.get(subcuenta_raw.strip().lower())
+                sub_id = subaccount_map.get(_norm(subcuenta_raw))
                 if sub_id:
                     target_account_id = sub_id
                 else:
