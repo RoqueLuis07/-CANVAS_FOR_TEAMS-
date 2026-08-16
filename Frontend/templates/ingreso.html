@@ -815,41 +815,79 @@ async function previewDiplomados() {
     }
 }
 
+let _diplomadosJobPollInterval = null;
+
 async function importDiplomados() {
     const url = document.getElementById('diplomadoUrl').value;
     const sheet = document.getElementById('diplomadoSheet').value;
     if (!url || !sheet) return;
-    
+
     if (!confirm('¿Iniciar proceso para Diplomados?')) return;
-    
+
     const btn = document.getElementById('btnImportDiplomados');
     setLoading(btn, true);
-    
+
     try {
         const res = await api.post('/excel/diplomados', { url: url, sheet_name: sheet });
-        document.getElementById('diplomadoSuccessCount').innerText = res.succeeded.length;
-        document.getElementById('diplomadoErrorCount').innerText = res.failed.length;
-        
-        document.getElementById('diplomadoSuccessList').innerHTML = res.succeeded.map(r => 
-            `<li class="list-group-item py-1 small">
-                <strong>${r.nombre}</strong> (${r.login_id})
-            </li>`
-        ).join('');
-        
-        document.getElementById('diplomadoErrorList').innerHTML = res.failed.map(r => 
-            `<li class="list-group-item py-1 small text-danger">
-                ${JSON.stringify(r.input || r)}: ${r.error}
-            </li>`
-        ).join('');
-        
-        document.getElementById('diplomadoResultWrap').style.display = 'block';
-        toast('Proceso completado', 'success');
+        if (!res.job_id) throw new Error('No se recibió ID del trabajo.');
+        toast('Alta de Diplomados iniciada en segundo plano.', 'info');
+        startDiplomadosJobPolling(res.job_id);
     } catch (e) {
         toast(e.message, 'danger');
-    } finally {
         setLoading(btn, false);
         restoreAccordions();
     }
+}
+
+function startDiplomadosJobPolling(jobId) {
+    const btn = document.getElementById('btnImportDiplomados');
+    if (_diplomadosJobPollInterval) clearInterval(_diplomadosJobPollInterval);
+
+    document.getElementById('diplomadoResultWrap').style.display = 'block';
+    document.getElementById('diplomadoSuccessCount').innerText = '0';
+    document.getElementById('diplomadoErrorCount').innerText = '0';
+    document.getElementById('diplomadoSuccessList').innerHTML = '';
+    document.getElementById('diplomadoErrorList').innerHTML = `<li class="list-group-item py-1 small text-muted">Procesando en segundo plano (Trabajo #${jobId})...</li>`;
+
+    _diplomadosJobPollInterval = setInterval(async () => {
+        try {
+            const job = await api.get(`/excel/jobs/${jobId}`);
+            if (!job) return;
+
+            const results = job.data_json ? (JSON.parse(job.data_json).results || []) : [];
+            const succeeded = results.filter(r => !r.error);
+            const failed = results.filter(r => r.error);
+
+            document.getElementById('diplomadoSuccessCount').innerText = job.result_count || succeeded.length;
+            document.getElementById('diplomadoErrorCount').innerText = job.error_count || failed.length;
+
+            document.getElementById('diplomadoSuccessList').innerHTML = succeeded.map(r =>
+                `<li class="list-group-item py-1 small">
+                    <strong>${r.nombre}</strong> (${r.login_id})
+                </li>`
+            ).join('');
+
+            document.getElementById('diplomadoErrorList').innerHTML = failed.map(r =>
+                `<li class="list-group-item py-1 small text-danger">
+                    ${JSON.stringify(r.input || r)}: ${r.error}
+                </li>`
+            ).join('');
+
+            if (['completed', 'completed_with_errors', 'failed'].includes(job.status)) {
+                clearInterval(_diplomadosJobPollInterval);
+                setLoading(btn, false);
+                restoreAccordions();
+
+                if (job.status === 'failed') {
+                    toast('❌ El proceso falló: ' + (job.error_message || ''), 'danger');
+                } else {
+                    toast('Proceso completado', 'success');
+                }
+            }
+        } catch (e) {
+            console.error('Error consultando estado del trabajo', e);
+        }
+    }, 4000);
 }
 
 async function previewSendDiplomadosCredentials() {

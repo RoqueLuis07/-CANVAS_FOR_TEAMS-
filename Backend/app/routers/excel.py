@@ -1130,27 +1130,58 @@ async def preview_diplomados_onedrive(req: DiplomadosUrlRequest) -> PreviewRespo
 
 
 @router.post("/excel/diplomados", summary="Procesar planilla de Diplomados directo en OneDrive")
-async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
+async def import_diplomados_onedrive(req: DiplomadosUrlRequest, bg_tasks: BackgroundTasks) -> dict:
+    """Dispara la creación de Diplomados en segundo plano.
+
+    Antes era una request HTTP síncrona con un límite artificial de 50
+    cuentas nuevas por corrida — no por una regla de negocio, sino porque
+    crear usuarios en Azure AD + matricularlos en Teams uno por uno es
+    demasiado lento para completarse dentro del timeout de una request
+    síncrona a partir de cierto volumen (mismo motivo por el que Creación
+    de Cursos y Matriculaciones ya corren en segundo plano). Al mover esto
+    a un job, el límite deja de ser necesario por timeout y queda solo
+    como resguardo de seguridad contra cargas accidentalmente enormes."""
     if not req.url or "http" not in req.url:
         raise HTTPException(status_code=400, detail="URL inválida.")
-    
+
     encoded_url = _encode_share_url(req.url)
-    
+
     try:
         contents = await graph.get_raw(f"/shares/{encoded_url}/driveItem/content")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo descargar el archivo de OneDrive. Verifica la URL y los permisos. Detalle: {e}")
 
     try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        if req.sheet_name not in wb.sheetnames:
+            raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe en el archivo. Las disponibles son: {', '.join(wb.sheetnames)}")
+        wb.close()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+
+    job_id = await jobs.create_job(job_type="diplomados_onedrive", operation="Alta de Diplomados", username="admin")
+    bg_tasks.add_task(_process_diplomados_bg, job_id, req, contents, encoded_url)
+    return {"status": "success", "job_id": job_id, "message": "Alta de Diplomados iniciada en segundo plano."}
+
+
+async def _process_diplomados_bg(job_id: int, req: DiplomadosUrlRequest, contents: bytes, encoded_url: str):
+    import json
+    await jobs.start_job(job_id)
+
+    try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
     except Exception as e:
-        raise HTTPException(status_code=400, detail="El archivo descargado no es un Excel válido.")
+        await jobs.fail_job(job_id, f"El archivo no es un Excel válido: {e}")
+        return
 
     _ACCOUNT_LOCAL = settings.canvas_account_id
     result = BulkResult()
 
     if req.sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=400, detail=f"La pestaña '{req.sheet_name}' no existe en el archivo. Las disponibles son: {', '.join(wb.sheetnames)}")
+        await jobs.fail_job(job_id, f"La pestaña '{req.sheet_name}' no existe en el archivo. Las disponibles son: {', '.join(wb.sheetnames)}")
+        return
 
     # Buscar en la hoja especificada
     for sheet_name in [req.sheet_name]:
@@ -1194,7 +1225,8 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
         if not col_nombre or not col_cedula:
             detected = list(headers.keys()) if headers else ['Ninguna']
-            raise HTTPException(status_code=400, detail=f"No se encontraron las columnas requeridas ('Nombre' y 'Cédula') en la pestaña seleccionada. Columnas detectadas: {detected}")
+            await jobs.fail_job(job_id, f"No se encontraron las columnas requeridas ('Nombre' y 'Cédula') en la pestaña seleccionada. Columnas detectadas: {detected}")
+            return
 
         next_col = ws.max_column + 1
             
@@ -1451,35 +1483,53 @@ async def import_diplomados_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
 
             tasks.append(process_row(r_idx))
 
-        if pending_count > 50:
-            raise HTTPException(status_code=400, detail=f"Límite de seguridad excedido: intentás crear {pending_count} cuentas nuevas a la vez (máximo 50 permitidas). Revisa el archivo para evitar accidentes.")
-            
+        if pending_count > 300:
+            await jobs.fail_job(job_id, f"Límite de seguridad excedido: intentás crear {pending_count} cuentas nuevas a la vez (máximo 300 permitidas). Revisa el archivo para evitar accidentes.")
+            return
+
         if len(tasks) > 0:
             try:
                 # Verificar si el archivo está bloqueado antes de empezar a procesar alumnos
                 await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", contents)
             except Exception as e:
-                raise HTTPException(status_code=400, detail=f"El archivo Excel está abierto o el enlace es de Solo Lectura. Detalle real: {e}")
+                await jobs.fail_job(job_id, f"El archivo Excel está abierto o el enlace es de Solo Lectura. Detalle real: {e}")
+                return
 
         batch_size = 5
         for i in range(0, len(tasks), batch_size):
             await asyncio.gather(*tasks[i:i+batch_size])
-            
-        
+            await jobs.update_job_progress(
+                job_id, len(result.succeeded), len(result.failed),
+                data_json=json.dumps({
+                    "total_to_process": len(tasks),
+                    "processed": len(result.succeeded) + len(result.failed),
+                    "results": result.succeeded + result.failed,
+                }),
+            )
 
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
-    
+
     try:
         await graph.put_raw(f"/shares/{encoded_url}/driveItem/content", output.getvalue())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"No se pudo guardar el archivo actualizado en OneDrive. {e}")
+        await jobs.complete_job(job_id, len(result.succeeded), len(result.failed), f"Procesado, pero no se pudo guardar en OneDrive: {e}")
+        return
 
     if not result.succeeded and not result.failed:
-        raise HTTPException(status_code=400, detail="No se procesó ninguna fila. Todas las filas ya estaban marcadas como procesadas, tenían correo asignado, o la planilla estaba vacía.")
+        await jobs.complete_job(job_id, 0, 0, "No se procesó ninguna fila. Todas las filas ya estaban marcadas como procesadas, tenían correo asignado, o la planilla estaba vacía.")
+        return
 
-    return result
+    await jobs.update_job_progress(
+        job_id, len(result.succeeded), len(result.failed),
+        data_json=json.dumps({
+            "total_to_process": len(result.succeeded) + len(result.failed),
+            "processed": len(result.succeeded) + len(result.failed),
+            "results": result.succeeded + result.failed,
+        }),
+    )
+    await jobs.complete_job(job_id, len(result.succeeded), len(result.failed), "Guardado en OneDrive correctamente.")
 
 
 @router.post("/excel/diplomados/send-credentials/preview", summary="Vista previa: quién falta enviar credenciales (Diplomados)")
