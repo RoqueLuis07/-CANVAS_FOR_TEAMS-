@@ -77,35 +77,61 @@ async def resolve_user_identities(user_ref: str):
     Given a user_ref (email, SIS ID, or Canvas ID), returns (canvas_user_id, teams_upn).
     Queries Canvas to resolve SIS IDs into emails for Teams, and ensures Canvas IDs are robust.
     """
+    def _validated(canvas_ref: str, login_id: str) -> tuple[str, str]:
+        # El "login_id" (pseudonym/Unique ID) del usuario en Canvas debería
+        # ser su correo institucional, pero algunas cuentas provisionadas
+        # por SSO/LTI quedan con un identificador interno (ej. un GUID) en
+        # ese campo en vez de un correo real. Si se usa tal cual como UPN
+        # de Teams, Graph responde un 404 "User '<ese valor rarísimo>' does
+        # not exist" — un error críptico que no dice nada del problema real.
+        # Se detecta acá y se corta con un mensaje que sí lo explica.
+        if "@" not in login_id:
+            raise ValueError(
+                f"El usuario de Canvas para '{user_ref}' tiene un login_id inválido para Teams: "
+                f"'{login_id}' (no es un correo). Esto pasa cuando el 'Unique ID' del usuario en "
+                f"Canvas quedó mal cargado — revisalo desde Canvas Admin y corregilo a su correo "
+                f"institucional real."
+            )
+        return canvas_ref, login_id
+
     user_ref = str(user_ref).strip()
     if "@" in user_ref:
         return f"sis_login_id:{user_ref}", user_ref
-        
+
     # Try as sis_user_id first
     try:
         user = await canvas.get(f"/users/sis_user_id:{user_ref}/profile")
         if user and "login_id" in user:
-            return f"sis_user_id:{user_ref}", user["login_id"]
+            return _validated(f"sis_user_id:{user_ref}", user["login_id"])
+    except ValueError:
+        # login_id inválido detectado por _validated(): es un diagnóstico
+        # certero (el usuario SÍ se encontró), no debe perderse probando
+        # las otras estrategias de búsqueda.
+        raise
     except Exception:
         pass
-        
+
     # Try as internal Canvas ID
     try:
         user = await canvas.get(f"/users/{user_ref}/profile")
         if user and "login_id" in user:
-            return str(user["id"]), user["login_id"]
+            return _validated(str(user["id"]), user["login_id"])
+    except ValueError:
+        raise
     except Exception:
         pass
-        
+
     # Fallback to search
     account_id = settings.canvas_account_id
     try:
         users = await canvas.paginate_limited(f"/accounts/{account_id}/users", {"search_term": user_ref, "per_page": 5}, max_records=5)
         if users and len(users) > 0 and "login_id" in users[0]:
-            return str(users[0]["id"]), users[0]["login_id"]
+            return _validated(str(users[0]["id"]), users[0]["login_id"])
+    except ValueError:
+        raise
     except Exception as e:
         logger.error(f"Error resolving Canvas user {user_ref}: {e}")
-        
+
     raise ValueError(f"No se pudo resolver el correo del usuario a partir de su identificador: {user_ref}")
 
 async def _enroll_single(item: UnifiedEnrollment):
