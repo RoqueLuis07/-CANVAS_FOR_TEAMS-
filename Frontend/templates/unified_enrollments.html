@@ -563,7 +563,7 @@ function startMatriculacionPolling(jobId, oldBtnText) {
                 
                 const detail = document.getElementById('matProgressDetail');
                 if (detail) {
-                    detail.innerHTML = `Completados: ${job.result_count} | Errores: ${job.error_count} ${total > 0 ? '| Total: ' + total : ''}`;
+                    detail.innerHTML = `Completados: ${job.result_count || 0} | Errores: ${job.error_count || 0} ${total > 0 ? '| Total: ' + total : ''}`;
                 }
                 
                 if (job.status === 'completed' || job.status === 'failed') {
@@ -681,7 +681,7 @@ function startRollbackPolling(jobId, oldBtnText) {
                 
                 const detail = document.getElementById('rollbackProgressDetail');
                 if (detail) {
-                    detail.innerHTML = `Desmatriculados: ${job.result_count} | Errores: ${job.error_count} ${total > 0 ? '| Total a revertir: ' + total : ''}`;
+                    detail.innerHTML = `Desmatriculados: ${job.result_count || 0} | Errores: ${job.error_count || 0} ${total > 0 ? '| Total a revertir: ' + total : ''}`;
                 }
                 
                 if (job.status === 'completed' || job.status === 'failed') {
