@@ -1716,10 +1716,10 @@ async def send_diplomados_credentials(req: DiplomadosUrlRequest) -> BulkResult:
 
         rows_to_send.append(r_idx)
 
-    if len(rows_to_send) > 50:
+    if len(rows_to_send) > 300:
         raise HTTPException(
             status_code=400,
-            detail=f"Límite de seguridad excedido: intentas enviar {len(rows_to_send)} correos a la vez (máximo 50 permitidos).",
+            detail=f"Límite de seguridad excedido: intentas enviar {len(rows_to_send)} correos a la vez (máximo 300 permitidos).",
         )
 
     async def send_row(r_idx):
