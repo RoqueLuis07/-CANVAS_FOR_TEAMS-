@@ -3944,23 +3944,27 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
         return
     headers = {n: c for n, c in headers_norm.items()}
 
-    # Identify columns. Las columnas "(Autogenerado)" (ej. "Correo
-    # (Autogenerado)", que registra el envío de credenciales) NO deben
-    # confundirse con las columnas de identificación (usuario/correo real,
-    # curso, equipo): si se toman por error, la fila queda sin identificador
+    # Identify columns. La exclusión de columnas "(Autogenerado)" es SOLO
+    # para usuario/correo: ahí sí hay un decoy real conocido ("Correo
+    # (Autogenerado)", que registra el envío de credenciales, no un
+    # identificador) — si se toma por error, la fila queda sin identificador
     # y se salta en silencio, dando "no hay filas nuevas" aunque el preview
-    # sí muestre filas pendientes.
+    # sí muestre filas pendientes. "ID CANVAS (Autogenerado)"/"ID TEAMS
+    # (Autogenerado)" en cambio SON el identificador real en planillas que
+    # usan esa convención de nombres (ej. la misma que "Cursos y Equipos
+    # (Plataformas)") — excluirlas ahí dejaba la matriculación sin columna
+    # de Canvas/Teams detectada en absoluto.
     user_col, canvas_col, teams_col, rol_col, env_col = None, None, None, None, None
     env_col_is_estado = False
     for n, col_idx in headers.items():
         is_autogen = "autogenerado" in n
         if not is_autogen and ("usuario" in n or "correo" in n or "email" in n or "cedula" in n or "sis" in n or "alumno" in n):
             user_col = col_idx
-        elif not is_autogen and ("curso" in n or "canvas" in n):
+        elif "curso" in n or "canvas" in n:
             canvas_col = col_idx
-        elif not is_autogen and ("equipo" in n or "teams" in n):
+        elif "equipo" in n or "teams" in n:
             teams_col = col_idx
-        elif not is_autogen and "rol" in n:
+        elif "rol" in n:
             rol_col = col_idx
         elif "estado" in n and not env_col_is_estado:
             env_col = col_idx
@@ -3969,7 +3973,16 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
             env_col = col_idx
 
     if not user_col or not (canvas_col or teams_col):
-        await jobs.fail_job(job_id, "Falta columna de 'usuario' o 'curso/canvas' o 'equipo/teams'.")
+        detected = [h for h in _headers_raw if h] or ["(ninguna)"]
+        faltan = []
+        if not user_col:
+            faltan.append("usuario/correo/cédula/SIS")
+        if not (canvas_col or teams_col):
+            faltan.append("curso/canvas o equipo/teams")
+        await jobs.fail_job(
+            job_id,
+            f"Falta columna de {' y '.join(faltan)}. Columnas detectadas en la planilla: {', '.join(detected)}.",
+        )
         return
         
     if not env_col:
