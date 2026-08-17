@@ -3954,13 +3954,19 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
     # usan esa convención de nombres (ej. la misma que "Cursos y Equipos
     # (Plataformas)") — excluirlas ahí dejaba la matriculación sin columna
     # de Canvas/Teams detectada en absoluto.
+    # "canvas"/"curso"/"equipo"/"teams" se evalúan ANTES que los
+    # identificadores genéricos de usuario: un encabezado como "SIS ID
+    # (Canvas)" contiene tanto "sis" como "canvas" — si "sis" ganara primero
+    # (como pasaba antes, con un if/elif en ese orden), esa columna se
+    # tomaba como identificador de usuario y la de curso quedaba sin
+    # detectar. "canvas"/"curso"/"equipo"/"teams" son señales inequívocas de
+    # a qué se refiere la columna, mientras que "sis" por sí solo es
+    # ambiguo (puede ser el SIS ID del alumno o el SIS Course ID).
     user_col, canvas_col, teams_col, rol_col, env_col = None, None, None, None, None
     env_col_is_estado = False
     for n, col_idx in headers.items():
         is_autogen = "autogenerado" in n
-        if not is_autogen and ("usuario" in n or "correo" in n or "email" in n or "cedula" in n or "sis" in n or "alumno" in n):
-            user_col = col_idx
-        elif "curso" in n or "canvas" in n:
+        if "curso" in n or "canvas" in n:
             canvas_col = col_idx
         elif "equipo" in n or "teams" in n:
             teams_col = col_idx
@@ -3971,6 +3977,8 @@ async def _process_matriculaciones_bg(job_id: int, req: DiplomadosUrlRequest, co
             env_col_is_estado = True
         elif "enviado" in n and not env_col_is_estado:
             env_col = col_idx
+        elif not is_autogen and ("usuario" in n or "correo" in n or "email" in n or "cedula" in n or "sis" in n or "alumno" in n):
+            user_col = col_idx
 
     if not user_col or not (canvas_col or teams_col):
         detected = [h for h in _headers_raw if h] or ["(ninguna)"]
