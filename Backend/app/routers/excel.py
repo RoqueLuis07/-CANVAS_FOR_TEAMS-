@@ -560,7 +560,7 @@ async def import_teams_users(file: UploadFile = File(...)) -> BulkResult:
                 "usageLocation": country,
                 "accountEnabled": True,
                 "passwordProfile": {
-                    "forceChangePasswordNextSignIn": True,
+                    "forceChangePasswordNextSignIn": False,
                     "password": pwd,
                 },
             }
@@ -729,7 +729,7 @@ async def import_ingreso(file: UploadFile = File(...)) -> BulkResult:
                         "jobTitle": "Docente" if role == "teacher" else "Alumno",
                         "country": "Paraguay",
                         "passwordProfile": {
-                            "forceChangePasswordNextSignIn": True,
+                            "forceChangePasswordNextSignIn": False,
                             "password": creds["password"],
                         },
                     }
@@ -1373,7 +1373,7 @@ async def _process_diplomados_bg(job_id: int, req: DiplomadosUrlRequest, content
                         "department": "UBS",
                         "country": "Paraguay",
                         "passwordProfile": {
-                            "forceChangePasswordNextSignIn": True,
+                            "forceChangePasswordNextSignIn": False,
                             "password": pwd,
                         },
                     }
@@ -3635,7 +3635,7 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "jobTitle": "Docente",
                     "country": "Paraguay",
                     "passwordProfile": {
-                        "forceChangePasswordNextSignIn": True,
+                        "forceChangePasswordNextSignIn": False,
                         "password": pwd,
                     },
                 }
@@ -4456,7 +4456,7 @@ async def import_diplomados_json(req: JsonDataRequest):
                     "jobTitle": "Alumno",
                     "country": "Paraguay",
                     "passwordProfile": {
-                        "forceChangePasswordNextSignIn": True,
+                        "forceChangePasswordNextSignIn": False,
                         "password": pwd,
                     },
                 }
@@ -4744,7 +4744,7 @@ async def import_masivo_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                     "jobTitle": "Alumno",
                     "country": "Paraguay",
                     "passwordProfile": {
-                        "forceChangePasswordNextSignIn": True,
+                        "forceChangePasswordNextSignIn": False,
                         "password": pwd,
                     },
                 }

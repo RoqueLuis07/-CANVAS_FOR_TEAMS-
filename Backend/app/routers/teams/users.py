@@ -77,7 +77,7 @@ async def create_user(body: TeamsUserCreate):
         "usageLocation": body.usage_location,
         "accountEnabled": body.account_enabled,
         "passwordProfile": {
-            "forceChangePasswordNextSignIn": True,
+            "forceChangePasswordNextSignIn": False,
             "password": body.password,
         },
     }
@@ -106,7 +106,7 @@ async def create_users_bulk(body: BulkTeamsUserCreate, request: Request) -> Bulk
                 "mailNickname": user.mail_nickname,
                 "usageLocation": user.usage_location,
                 "accountEnabled": user.account_enabled,
-                "passwordProfile": {"forceChangePasswordNextSignIn": True, "password": user.password},
+                "passwordProfile": {"forceChangePasswordNextSignIn": False, "password": user.password},
             }
             if user.given_name:
                 payload["givenName"] = user.given_name
@@ -167,7 +167,7 @@ class ResetPasswordPayload(BaseModel):
 async def reset_password_admin(user_id: str, body: ResetPasswordPayload, request: Request):
     payload = {
         "passwordProfile": {
-            "forceChangePasswordNextSignIn": True,
+            "forceChangePasswordNextSignIn": False,
             "password": body.password,
         }
     }
