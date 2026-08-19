@@ -259,6 +259,22 @@ async def paginate_limited(path: str, params: dict | None = None,
 
 
 
+def _norm_group_name(s: str) -> str:
+    """Normaliza para comparar nombres de equipo sin importar tildes/mayúsculas
+    — evita que un nombre tipeado sin acentos falle contra el nombre real del
+    grupo en Teams y dispare la creación de un equipo duplicado."""
+    import unicodedata
+    ascii_s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return ascii_s.strip().lower()
+
+
+def _escape_odata(s: str) -> str:
+    """OData requiere escapar comillas simples duplicándolas — un nombre con
+    apóstrofe rompe el filtro si se interpola crudo, y el error resultante
+    se confunde con 'no encontrado' más abajo."""
+    return (s or "").replace("'", "''")
+
+
 async def search_group_by_name(name: str) -> str | None:
     """Search for a Microsoft 365 group by exactly matching the displayName. Returns the group ID if found."""
     try:
@@ -266,13 +282,14 @@ async def search_group_by_name(name: str) -> str | None:
         # then check exact match in Python to be safe (Graph API filtering can be finicky).
         # Note: $filter requires ConsistencyLevel: eventual for some properties, but startswith on displayName is usually supported.
         params = {
-            "$filter": f"startswith(displayName, '{name}')",
+            "$filter": f"startswith(displayName, '{_escape_odata(name)}')",
             "$select": "id,displayName"
         }
         res = await get("/groups", params=params)
         groups = res.get("value", [])
+        target = _norm_group_name(name)
         for g in groups:
-            if g.get("displayName", "").strip().lower() == name.strip().lower():
+            if _norm_group_name(g.get("displayName", "")) == target:
                 return g.get("id")
         return None
     except Exception as e:
@@ -291,13 +308,14 @@ async def search_group_by_name_and_nickname_prefix(name: str, nickname_prefix: s
         return None
     try:
         params = {
-            "$filter": f"startswith(displayName, '{name}')",
+            "$filter": f"startswith(displayName, '{_escape_odata(name)}')",
             "$select": "id,displayName,mailNickname"
         }
         res = await get("/groups", params=params)
         groups = res.get("value", [])
+        target = _norm_group_name(name)
         for g in groups:
-            if g.get("displayName", "").strip().lower() != name.strip().lower():
+            if _norm_group_name(g.get("displayName", "")) != target:
                 continue
             if (g.get("mailNickname") or "").lower().startswith(nickname_prefix.lower()):
                 return g.get("id")
@@ -305,6 +323,20 @@ async def search_group_by_name_and_nickname_prefix(name: str, nickname_prefix: s
     except Exception as e:
         print(f"Error searching group by name+nickname {name}: {e}")
         return None
+
+async def get_user_by_upn_exact(upn_or_id: str, select: str | None = None) -> dict | None:
+    """Busca un usuario por userPrincipalName (o ID) EXACTO — a diferencia de
+    search_users (que hace un $search difuso por displayName/UPN/mail y
+    puede devolver a otra persona con nombre/correo parecido en el primer
+    resultado), esto pega directo a /users/{upn} y sólo puede devolver ESE
+    usuario o nada. Usar siempre que se tenga un correo/UPN exacto conocido
+    y la intención sea recuperar esa cuenta puntual (ej. tras un "already
+    exists" al crearla), no buscar por texto."""
+    try:
+        return await get(f"/users/{upn_or_id}", params={"$select": select or "id,displayName,userPrincipalName,mail"})
+    except Exception:
+        return None
+
 
 async def search_users(query: str, select: str | None = None) -> list[Any]:
     """Search users using Graph $search (requires ConsistencyLevel: eventual)."""

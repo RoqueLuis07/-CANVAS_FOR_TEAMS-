@@ -1950,10 +1950,10 @@ async def send_docentes_credentials(req: DiplomadosUrlRequest) -> BulkResult:
 
         rows_to_send.append(r_idx)
 
-    if len(rows_to_send) > 50:
+    if len(rows_to_send) > 300:
         raise HTTPException(
             status_code=400,
-            detail=f"Límite de seguridad excedido: intentas enviar {len(rows_to_send)} correos a la vez (máximo 50 permitidos).",
+            detail=f"Límite de seguridad excedido: intentas enviar {len(rows_to_send)} correos a la vez (máximo 300 permitidos).",
         )
 
     async def send_row(r_idx):
@@ -2974,8 +2974,8 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
             docente_azure_id = None
             if docente_email:
                 try:
-                    found = await graph.search_users(docente_email)
-                    docente_azure_id = found[0]["id"] if found else None
+                    found = await graph.get_user_by_upn_exact(docente_email)
+                    docente_azure_id = found["id"] if found else None
                     if not docente_azure_id:
                         error_docente_teams = f"No se encontró el usuario '{docente_email}' en Microsoft 365"
                 except Exception as e:
@@ -2985,8 +2985,8 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
             if coordinador_emails:
                 async def _resolve_coordinador_teams(email: str):
                     try:
-                        found = await graph.search_users(email)
-                        azure_id = found[0]["id"] if found else None
+                        found = await graph.get_user_by_upn_exact(email)
+                        azure_id = found["id"] if found else None
                         if azure_id:
                             coordinador_azure_ids.append(azure_id)
                             coordinadores_teams_ok.append(email)
@@ -3359,13 +3359,21 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
             if cedula and ("404" not in str(e)):
                 error = f"Error Canvas: {str(e)}"
             else:
-                # Sin cédula, o no encontrado por SIS ID: fallback por búsqueda de texto.
+                # Sin cédula, o no encontrado por SIS ID: fallback por búsqueda
+                # de texto. Es una acción DESTRUCTIVA (borra la cuenta), así
+                # que nunca se toma "el primero que aparezca" a ciegas — sólo
+                # se borra si hay una coincidencia de nombre EXACTA (sin
+                # tildes/mayúsculas) entre los candidatos, para no eliminar
+                # la cuenta de otra persona con nombre/correo parecido.
                 search_term = usuario_upn if (usuario_upn and "@" in usuario_upn) else (correo or nombre)
                 try:
-                    users_canvas = await canvas.get(f"/accounts/{settings.canvas_account_id}/users", params={"search_term": search_term})
-                    if users_canvas:
-                        canvas_email = users_canvas[0].get("email") or ""
-                        await canvas.delete(f"/accounts/{settings.canvas_account_id}/users/{users_canvas[0]['id']}")
+                    candidatos = await canvas.get(f"/accounts/{settings.canvas_account_id}/users", params={"search_term": search_term})
+                    match = next((u for u in (candidatos or []) if _norm(u.get("name") or "") == _norm(nombre)), None) if nombre else None
+                    if match:
+                        canvas_email = match.get("email") or ""
+                        await canvas.delete(f"/accounts/{settings.canvas_account_id}/users/{match['id']}")
+                    elif candidatos:
+                        error = f"Usuario no encontrado en Canvas: hay {len(candidatos)} candidato(s) por búsqueda de texto pero ninguno coincide exacto con el nombre — revisar manualmente"
                     else:
                         error = "Usuario no encontrado en Canvas"
                 except Exception as e2:
@@ -3374,21 +3382,30 @@ async def _import_egreso_onedrive_inner(req: DiplomadosUrlRequest) -> BulkResult
         # 2. Azure AD Disable or Delete
         search_term = usuario_upn if (usuario_upn and "@" in usuario_upn) else (correo or canvas_email or nombre)
         try:
-            ms_users = await graph.search_users(search_term)
-            if ms_users:
+            if "@" in search_term:
+                found = await graph.get_user_by_upn_exact(search_term)
+                target_id = found["id"] if found else None
+            else:
+                # Mismo criterio que arriba: sin correo/UPN conocido, sólo se
+                # actúa sobre un candidato de búsqueda de texto si su
+                # displayName coincide EXACTO con el nombre esperado.
+                candidatos = await graph.search_users(search_term)
+                match = next((u for u in (candidatos or []) if _norm(u.get("displayName") or "") == _norm(nombre)), None) if nombre else None
+                target_id = match["id"] if match else None
+                if not target_id and candidatos:
+                    error = (error + " | " if error else "") + f"Azure AD: hay {len(candidatos)} candidato(s) por búsqueda de texto pero ninguno coincide exacto con el nombre — revisar manualmente"
+
+            if target_id:
                 if req.delete_account:
-                    await graph.delete(f"/users/{ms_users[0]['id']}")
+                    await graph.delete(f"/users/{target_id}")
                 else:
-                    await graph.patch(f"/users/{ms_users[0]['id']}", {"accountEnabled": False})
+                    await graph.patch(f"/users/{target_id}", {"accountEnabled": False})
                     try:
-                        await graph.remove_all_licenses(ms_users[0]["id"])
+                        await graph.remove_all_licenses(target_id)
                     except Exception:
                         pass
-            else:
-                if error:
-                    error += " | No en Azure AD"
-                else:
-                    error = "No encontrado en Azure AD"
+            elif not error:
+                error = "No encontrado en Azure AD"
         except Exception as e:
             error = error + f" | Error Azure: {str(e)}" if error else f"Error Azure: {str(e)}"
         
@@ -3647,14 +3664,14 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 entry["teams"] = "creado"
             except Exception as e:
                 if "already exists" in str(e).lower() or "Request_BadRequest" in str(e):
-                    # Try to fetch existing
-                    try:
-                        ex_users = await graph.search_users(login_id)
-                        if ex_users:
-                            azure_id = ex_users[0]["id"]
-                            entry["teams"] = "exista"
-                    except:
-                        pass
+                    # Recuperar la cuenta existente por UPN EXACTO (no
+                    # search_users, que es un $search difuso y puede traer a
+                    # otra persona con nombre/correo parecido en vez del
+                    # login_id que efectivamente ya existe).
+                    existing = await graph.get_user_by_upn_exact(login_id)
+                    if existing:
+                        azure_id = existing["id"]
+                        entry["teams"] = "exista"
                 else:
                     error += f"Teams: {str(e)} | "
 
@@ -4936,7 +4953,12 @@ async def import_delete_courses_onedrive(req: DiplomadosUrlRequest) -> BulkResul
                     return idx
         return None
 
-    col_sis = get_col_idx("sisid", "sis", "id")
+    # Sin fallback genérico "id": en un endpoint que ELIMINA cursos, si la
+    # planilla no trae una columna de SIS ID reconocible, es más seguro
+    # cortar con un error claro que adivinar con la primera columna que
+    # contenga "id" en el nombre (ej. "ID Equipo" de Teams, un GUID que no
+    # es un SIS ID de Canvas).
+    col_sis = get_col_idx("sis id", "sisid", "sis")
     col_nombre = get_col_idx("nombre", "curso")
     col_estado = get_col_idx("estado", "enviado", "eliminado", "baja")
 

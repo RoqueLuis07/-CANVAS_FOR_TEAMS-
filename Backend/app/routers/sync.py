@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import unicodedata
 import uuid
 from typing import List
 
@@ -25,6 +26,10 @@ class UnifiedEnrollment(BaseModel):
 class BulkUnifiedEnrollment(BaseModel):
     items: List[UnifiedEnrollment]
 
+def _normalize_course_name(s: str) -> str:
+    ascii_s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return ascii_s.strip().lower()
+
 async def resolve_canvas_course(course_ref: str) -> str:
     """Returns the course ID, searching by name if course_ref is not purely numeric."""
     if course_ref.isdigit():
@@ -38,16 +43,31 @@ async def resolve_canvas_course(course_ref: str) -> str:
     account_id = settings.canvas_account_id
     try:
         courses = await canvas.paginate_limited(f"/accounts/{account_id}/courses", params, max_records=10)
-        # Buscar coincidencia exacta por nombre o código
+        # Buscar coincidencia exacta por nombre o código (sin importar
+        # tildes/mayúsculas, igual que el resto del matching de nombres en el
+        # sistema)
+        target = _normalize_course_name(course_ref)
         for c in courses:
-            if c.get("name") == course_ref or c.get("course_code") == course_ref:
+            if _normalize_course_name(c.get("name") or "") == target or _normalize_course_name(c.get("course_code") or "") == target:
                 return str(c["id"])
-        # Si no hay exacta, usar el primero
+        # Sin coincidencia exacta: NO se usa el primer resultado fuzzy en
+        # silencio — Canvas puede devolver varios cursos parecidos (ej.
+        # "Cálculo I" y "Cálculo II" para el mismo search_term) y matricular
+        # en el primero sería matricular en el curso equivocado sin ningún
+        # aviso. Se corta con un error explícito que lista los candidatos
+        # para que se corrija el nombre en la planilla.
         if courses:
-            return str(courses[0]["id"])
+            candidates = ", ".join(c.get("name", "?") for c in courses[:5])
+            raise ValueError(
+                f"No se encontró una coincidencia exacta para el curso '{course_ref}' en Canvas. "
+                f"Candidatos parecidos encontrados: {candidates}. Corregí el nombre en la planilla "
+                f"para que coincida exactamente con uno de ellos."
+            )
+    except ValueError:
+        raise
     except Exception as e:
         logger.error(f"Error resolving Canvas course {course_ref}: {e}")
-    
+
     raise ValueError(f"No se encontró el curso en Canvas: {course_ref}")
 
 async def resolve_teams_group(team_ref: str) -> str:
@@ -58,10 +78,15 @@ async def resolve_teams_group(team_ref: str) -> str:
     except ValueError:
         pass # Not a UUID, proceed to search by name
     
+    # OData requiere escapar comillas simples duplicándolas: un nombre de
+    # equipo con apóstrofe (ej. "Alumno's") rompe el filtro si se interpola
+    # crudo, y Graph responde error — que el except de abajo confunde con
+    # "no se encontró", disparando la creación de un equipo duplicado.
+    safe_team_ref = team_ref.replace("'", "''")
     params = {
         "$top": 5,
         "$select": "id,displayName",
-        "$filter": f"resourceProvisioningOptions/Any(x:x eq 'Team') and displayName eq '{team_ref}'",
+        "$filter": f"resourceProvisioningOptions/Any(x:x eq 'Team') and displayName eq '{safe_team_ref}'",
     }
     try:
         teams = await graph.paginate("/groups", params)
@@ -186,7 +211,10 @@ async def _enroll_single(item: UnifiedEnrollment):
             "enrollment": {
                 "user_id": canvas_user_id,
                 "type": canvas_role,
-                "enrollment_state": "invited",
+                # "active" (no "invited") por consistencia con el resto de
+                # los flujos de matriculación del sistema — acceso inmediato
+                # sin requerir que el usuario acepte una invitación primero.
+                "enrollment_state": "active",
                 "notify": True
             }
         }
