@@ -349,7 +349,7 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
                     "jobTitle": "Docente" if student.role == "teacher" else "Alumno",
                     "country": "Paraguay",
                     "passwordProfile": {
-                        "forceChangePasswordNextSignIn": True,
+                        "forceChangePasswordNextSignIn": False,
                         "password": creds["password"],
                     },
                 }

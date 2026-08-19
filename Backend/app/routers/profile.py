@@ -325,7 +325,7 @@ async def reset_password(body: ResetPasswordPayload, current_user: dict = Depend
 
     payload = {
         "passwordProfile": {
-            "forceChangePasswordNextSignIn": True,
+            "forceChangePasswordNextSignIn": False,
             "password": body.password,
         }
     }

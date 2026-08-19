@@ -441,7 +441,7 @@ async def update_user_password(user_id_or_upn: str, new_password: str) -> None:
     """Resets the user's password in Azure AD. Requires User.ReadWrite.All permission."""
     payload = {
         "passwordProfile": {
-            "forceChangePasswordNextSignIn": True,
+            "forceChangePasswordNextSignIn": False,
             "password": new_password
         }
     }
