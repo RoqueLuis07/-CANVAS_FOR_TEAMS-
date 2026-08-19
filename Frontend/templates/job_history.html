@@ -85,6 +85,19 @@
   </div>
 </div>
 
+<!-- Modal de detalle de trabajo -->
+<div class="modal fade" id="jobDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="jobDetailModalTitle">Detalle del trabajo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="jobDetailModalBody"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 let currentPage = 0;
 const pageSize = 50;
@@ -226,18 +239,96 @@ function getStatusBadge(status) {
   return badges[status] || `<span>${status}</span>`;
 }
 
-// Solo la matriculación masiva vía Excel (matriculacion_masiva_json) guarda
-// por fila el curso/equipo necesarios para poder revertir la matrícula
-// directamente desde el historial. La variante OneDrive se revierte desde
-// la propia pantalla de Rollback pegando el enlace del archivo de nuevo.
 function buildJobActions(job) {
-  if (job.job_type !== 'matriculacion_masiva_json') return '-';
-  if (job.status !== 'completed' && job.status !== 'completed_with_errors') return '-';
-  if (!job.result_count) return '-';
-  const encoded = encodeURIComponent(job.data_json || '');
-  return `<button class="btn btn-sm btn-outline-danger" onclick="rollbackJob(${job.id}, '${encoded}', this)">
-    <i class="bi bi-arrow-counterclockwise"></i> Revertir
-  </button>`;
+  const buttons = [];
+
+  if (hasJobDetail(job)) {
+    const encoded = encodeURIComponent(job.data_json || '');
+    buttons.push(`<button class="btn btn-sm btn-outline-primary" onclick="viewJobDetail(${job.id}, '${encoded}')">
+      <i class="bi bi-list-ul"></i> Ver detalle
+    </button>`);
+  }
+
+  // Solo la matriculación masiva vía Excel (matriculacion_masiva_json) guarda
+  // por fila el curso/equipo necesarios para poder revertir la matrícula
+  // directamente desde el historial. La variante OneDrive se revierte desde
+  // la propia pantalla de Rollback pegando el enlace del archivo de nuevo.
+  if (job.job_type === 'matriculacion_masiva_json' &&
+      (job.status === 'completed' || job.status === 'completed_with_errors') &&
+      job.result_count) {
+    const encoded = encodeURIComponent(job.data_json || '');
+    buttons.push(`<button class="btn btn-sm btn-outline-danger" onclick="rollbackJob(${job.id}, '${encoded}', this)">
+      <i class="bi bi-arrow-counterclockwise"></i> Revertir
+    </button>`);
+  }
+
+  return buttons.length ? `<div class="d-flex gap-1 flex-wrap">${buttons.join('')}</div>` : '-';
+}
+
+function hasJobDetail(job) {
+  if (!job.data_json) return false;
+  try {
+    const parsed = JSON.parse(job.data_json);
+    return Array.isArray(parsed.results) && parsed.results.length > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Cada tipo de trabajo guarda sus filas con nombres de campo distintos
+// (usuario/alumno/correo, status/error, etc.) — en vez de mapear caso por
+// caso, se detecta éxito/error de forma genérica y se muestran todos los
+// campos disponibles de cada fila.
+function rowLooksLikeError(row) {
+  if (typeof row.status === 'string') {
+    if (row.status.includes('❌')) return true;
+    if (row.status.includes('✅')) return false;
+  }
+  if (row.error) return true;
+  return false;
+}
+
+function viewJobDetail(jobId, encodedDataJson) {
+  let parsed;
+  try {
+    parsed = JSON.parse(decodeURIComponent(encodedDataJson));
+  } catch (e) {
+    return toast('No se pudo leer el detalle de este trabajo.', 'danger');
+  }
+
+  const results = parsed.results || [];
+  const okRows = results.filter(r => !rowLooksLikeError(r));
+  const errRows = results.filter(r => rowLooksLikeError(r));
+
+  const renderRow = (row, isError) => {
+    const label = row.usuario || row.alumno || row.nombre || row.correo || row.materia || '(sin nombre)';
+    const detailParts = Object.entries(row)
+      .filter(([k]) => !['status', 'error'].includes(k))
+      .map(([k, v]) => `<strong>${k}:</strong> ${v}`)
+      .join(' &middot; ');
+    const message = row.error || row.status || '';
+    return `
+      <div style="border-left: 3px solid ${isError ? '#e74a3b' : '#1cc88a'}; padding: 6px 10px; margin-bottom: 6px; background: var(--table-hover-bg);">
+        <div style="font-weight: bold;">${label}</div>
+        ${detailParts ? `<div style="font-size: 0.82rem; color: var(--text-muted);">${detailParts}</div>` : ''}
+        ${message ? `<div style="font-size: 0.85rem; margin-top: 2px;">${message}</div>` : ''}
+      </div>
+    `;
+  };
+
+  const body = `
+    <div class="mb-3 d-flex gap-2">
+      <span class="badge bg-success">${okRows.length} exitoso(s)</span>
+      <span class="badge bg-danger">${errRows.length} con error</span>
+    </div>
+    ${errRows.length ? `<h6 class="text-danger">Errores</h6>${errRows.map(r => renderRow(r, true)).join('')}` : ''}
+    ${okRows.length ? `<h6 class="${errRows.length ? 'mt-3' : ''}">Exitosos</h6>${okRows.map(r => renderRow(r, false)).join('')}` : ''}
+    ${results.length === 0 ? '<p class="text-muted">Sin filas de detalle para este trabajo.</p>' : ''}
+  `;
+
+  document.getElementById('jobDetailModalTitle').textContent = `Detalle del trabajo #${jobId}`;
+  document.getElementById('jobDetailModalBody').innerHTML = body;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('jobDetailModal')).show();
 }
 
 async function rollbackJob(jobId, encodedDataJson, btn) {
