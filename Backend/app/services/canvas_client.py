@@ -1,5 +1,6 @@
 """HTTP client wrapper for the Canvas LMS REST API v1."""
 import asyncio
+import unicodedata
 from typing import Any
 
 import httpx
@@ -185,13 +186,23 @@ def _parse_next_link(link_header: str) -> str | None:
     return None
 
 
+def _norm_course_name(s: str) -> str:
+    """Normaliza para comparar sin importar tildes/mayúsculas — un nombre
+    tipeado sin acentos (ej. 'Administracion') debe matchear el curso real
+    ('Administración') en vez de fallar y disparar la creación de un curso
+    duplicado."""
+    ascii_s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return ascii_s.strip().lower()
+
+
 async def search_course_by_name(account_id: str, course_name: str) -> str | None:
     """Search for a Canvas course by name in the given account. Returns course ID if found."""
     try:
         results = await get(f"/accounts/{account_id}/courses", params={"search_term": course_name, "include[]": "total_students"})
         if results and isinstance(results, list):
+            target = _norm_course_name(course_name)
             for c in results:
-                if c.get("name") == course_name:
+                if _norm_course_name(c.get("name") or "") == target:
                     return str(c.get("id"))
     except Exception:
         pass

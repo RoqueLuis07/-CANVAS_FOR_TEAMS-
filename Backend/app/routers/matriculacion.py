@@ -130,9 +130,9 @@ async def matriculate_individual(req: IndividualEnrollmentRequest,):
                 if not team_group_id:
                     teams_status = "Error: No se encontró un equipo en Teams con ese nombre"
                 else:
-                    azure_user = await teams.search_users(req.email)
+                    azure_user = await teams.get_user_by_upn_exact(req.email)
                     if azure_user:
-                        uid = azure_user[0]["id"]
+                        uid = azure_user["id"]
                         await teams.add_member_to_group(team_group_id, uid)
                         teams_status = "OK"
                     else:
