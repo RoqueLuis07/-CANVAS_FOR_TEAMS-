@@ -154,6 +154,11 @@ async def materias_page(request: Request):
     return _r(request, "materias.html")
 
 
+@router.get("/ui/cpel", response_class=HTMLResponse)
+async def cpel_page(request: Request):
+    return _r(request, "cpel.html")
+
+
 @router.get("/diagnostics", tags=["Health"])
 async def diagnostics():
     """Test Canvas and Azure credentials and return status for each."""

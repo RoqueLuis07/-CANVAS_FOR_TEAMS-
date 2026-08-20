@@ -44,6 +44,7 @@ from app.routers import (
     egreso,
     reports,
     materias,
+    cpel,
 )
 from app.routers import matriculacion
 import asyncio
@@ -211,6 +212,7 @@ routers_to_load = [
     ("Sync", sync.router),
     ("Reports", reports.router),
     ("Materias", materias.router),
+    ("CPEL", cpel.router),
 ]
 
 for router_name, router_obj in routers_to_load:

@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Matriculación CPEL por Carrera{% endblock %}
+{% block breadcrumb %}Gestión Académica › Matriculación CPEL por Carrera{% endblock %}
+{% block nav_cpel %}active{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col-auto">
+    <h1 class="h3 mb-0"><i class="bi bi-diagram-3-fill me-2"></i>Matriculación CPEL por Carrera</h1>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <h5 class="mb-0"><i class="bi bi-mortarboard-fill me-2"></i>1. Carrera y materias</h5>
+  </div>
+  <div class="card-body">
+    <div class="alert alert-info border-info">
+      <i class="bi bi-info-circle-fill me-2"></i>
+      <strong>¿Para qué sirve esto?</strong> El programa CPEL dicta las mismas materias para 3 carreras, pero en Canvas
+      cada carrera tiene su propio curso por materia (ej. <em>"Administración I (CPEL ADM 2026-02)"</em>), mientras que
+      en Teams las 3 carreras comparten un solo equipo por materia (ej. <em>"Administración I (CPEL) 2026-02"</em>).
+      Acá elegís la carrera, el sistema busca automáticamente el curso de Canvas correcto de esa carrera para cada
+      materia, y matricula a tu lote de alumnos en Canvas (curso de su carrera) y Teams (equipo compartido) en un solo paso.
+    </div>
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Carrera</label>
+        <select class="form-select" id="cpelCarrera">
+          <option value="ADM">Administración</option>
+          <option value="MKT">Marketing</option>
+          <option value="NEG">Negocios Internacionales</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Período</label>
+        <input type="text" class="form-control" id="cpelPeriodo" placeholder="ej. 2026-02">
+      </div>
+      <div class="col-md-4">
+        <button class="btn btn-primary w-100" id="btnBuscarMaterias" onclick="buscarMateriasCpel()">
+          <i class="bi bi-search me-1"></i>Buscar materias
+        </button>
+      </div>
+    </div>
+
+    <div id="cpelMateriasWrap" style="display:none;" class="mt-4">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <label class="form-label fw-bold mb-0">Materias encontradas — tildá las que aplican</label>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllMaterias(true)">Marcar todas</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllMaterias(false)">Desmarcar todas</button>
+        </div>
+      </div>
+      <div id="cpelMateriasList" class="list-group"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>2. Alumnos</h5>
+  </div>
+  <div class="card-body">
+    <label class="form-label fw-bold">Pegá la lista de alumnos (una línea por alumno: Nombre y Apellido, Cédula)</label>
+    <textarea class="form-control" id="cpelAlumnosText" rows="8" placeholder="Juan Pérez, 4567890&#10;María González; 5678901&#10;..."></textarea>
+    <small class="text-muted">Aceptado: nombre y cédula separados por coma, punto y coma, o tabulador — uno por línea.</small>
+  </div>
+</div>
+
+<div class="d-flex justify-content-end mb-4">
+  <button class="btn btn-success btn-lg" id="btnPreviewCpel" onclick="previewCpel()">
+    <i class="bi bi-eye me-1"></i>Vista previa
+  </button>
+</div>
+
+<div id="cpelPreviewWrap" style="display:none;">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>3. Confirmar</h5>
+      <button class="btn btn-success" id="btnConfirmarCpel" onclick="confirmarCpel()">
+        <i class="bi bi-check-circle me-1"></i>Confirmar y Matricular
+      </button>
+    </div>
+    <div class="card-body">
+      <div id="cpelPreviewSummary" class="mb-3"></div>
+      <div class="table-scroll" style="max-height: 400px;">
+        <table class="table table-sm">
+          <thead class="table-light">
+            <tr><th>Alumno</th><th>Cédula</th></tr>
+          </thead>
+          <tbody id="cpelAlumnosPreviewBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let cpelMaterias = [];
+let cpelAlumnos = [];
+
+async function buscarMateriasCpel() {
+  const carrera = document.getElementById('cpelCarrera').value;
+  const periodo = document.getElementById('cpelPeriodo').value.trim();
+  if (!periodo) return toast('Ingresá el período (ej. 2026-02).', 'warning');
+
+  const btn = document.getElementById('btnBuscarMaterias');
+  setLoading(btn, true);
+  document.getElementById('cpelMateriasWrap').style.display = 'none';
+  document.getElementById('cpelPreviewWrap').style.display = 'none';
+
+  try {
+    const params = new URLSearchParams({ carrera, periodo });
+    const data = await api.get(`/cpel/materias?${params}`);
+    cpelMaterias = data.materias || [];
+    renderMateriasCpel();
+    document.getElementById('cpelMateriasWrap').style.display = 'block';
+    if (cpelMaterias.length === 0) {
+      toast(`No se encontraron cursos de Canvas con el patrón "(CPEL ${carrera} ${periodo})". Revisá el período o la carrera.`, 'warning');
+    }
+  } catch (e) {
+    toast('Error: ' + (e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function renderMateriasCpel() {
+  const list = document.getElementById('cpelMateriasList');
+  if (cpelMaterias.length === 0) {
+    list.innerHTML = '<p class="text-muted p-3 mb-0">No se encontraron materias.</p>';
+    return;
+  }
+  list.innerHTML = cpelMaterias.map((m, i) => `
+    <label class="list-group-item d-flex align-items-center gap-2">
+      <input type="checkbox" class="form-check-input chk-cpel-materia" data-idx="${i}" checked>
+      <span><strong>${m.materia_base}</strong> <span class="text-muted small">— ${m.course_name}</span></span>
+    </label>
+  `).join('');
+}
+
+function toggleAllMaterias(checked) {
+  document.querySelectorAll('.chk-cpel-materia').forEach(c => c.checked = checked);
+}
+
+function parseAlumnosText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const alumnos = [];
+  const errores = [];
+  lines.forEach((line, i) => {
+    const parts = line.split(/[,;\t]/).map(p => p.trim()).filter(Boolean);
+    if (parts.length < 2) {
+      errores.push(`Línea ${i + 1}: "${line}" — falta nombre o cédula.`);
+      return;
+    }
+    // La cédula es el token que parece numérico; el resto es el nombre.
+    const cedulaIdx = parts.findIndex(p => /^\d[\d.\-]*$/.test(p));
+    if (cedulaIdx === -1) {
+      errores.push(`Línea ${i + 1}: "${line}" — no se encontró una cédula numérica.`);
+      return;
+    }
+    const cedula = parts[cedulaIdx].replace(/[.\-\s]/g, '');
+    const nombre = parts.filter((_, idx) => idx !== cedulaIdx).join(' ').trim();
+    if (!nombre) {
+      errores.push(`Línea ${i + 1}: "${line}" — falta el nombre.`);
+      return;
+    }
+    alumnos.push({ nombre, cedula });
+  });
+  return { alumnos, errores };
+}
+
+function previewCpel() {
+  const materiasSeleccionadas = cpelMaterias.filter((_, i) =>
+    document.querySelector(`.chk-cpel-materia[data-idx="${i}"]`)?.checked
+  );
+  if (materiasSeleccionadas.length === 0) {
+    return toast('Buscá y tildá al menos una materia primero.', 'warning');
+  }
+
+  const text = document.getElementById('cpelAlumnosText').value;
+  const { alumnos, errores } = parseAlumnosText(text);
+  if (errores.length) {
+    return toast(`Hay ${errores.length} línea(s) con formato inválido:\n${errores.slice(0, 5).join('\n')}`, 'danger');
+  }
+  if (alumnos.length === 0) {
+    return toast('Pegá al menos un alumno (Nombre, Cédula).', 'warning');
+  }
+
+  cpelAlumnos = alumnos;
+  window._cpelMateriasSeleccionadas = materiasSeleccionadas;
+
+  const total = alumnos.length * materiasSeleccionadas.length;
+  document.getElementById('cpelPreviewSummary').innerHTML = `
+    <span class="badge bg-secondary fs-6 me-2">${alumnos.length} alumno(s)</span>
+    <span class="badge bg-secondary fs-6 me-2">${materiasSeleccionadas.length} materia(s)</span>
+    <span class="badge bg-primary fs-6">${total} matrícula(s) a procesar</span>
+  `;
+  document.getElementById('cpelAlumnosPreviewBody').innerHTML = alumnos.map(a => `
+    <tr><td>${a.nombre}</td><td>${a.cedula}</td></tr>
+  `).join('');
+  document.getElementById('cpelPreviewWrap').style.display = 'block';
+}
+
+async function confirmarCpel() {
+  const materiasSeleccionadas = window._cpelMateriasSeleccionadas || [];
+  if (materiasSeleccionadas.length === 0 || cpelAlumnos.length === 0) {
+    return toast('Generá la vista previa primero.', 'warning');
+  }
+
+  const total = cpelAlumnos.length * materiasSeleccionadas.length;
+  confirmAction(
+    `Se van a procesar ${total} matrícula(s): ${cpelAlumnos.length} alumno(s) × ${materiasSeleccionadas.length} materia(s).`,
+    () => _confirmarCpelConfirmed(materiasSeleccionadas),
+    '¿Confirmar matriculación CPEL?',
+    false
+  );
+}
+
+async function _confirmarCpelConfirmed(materiasSeleccionadas) {
+  const btn = document.getElementById('btnConfirmarCpel');
+  setLoading(btn, true);
+  try {
+    const res = await api.post('/cpel/enroll', {
+      carrera: document.getElementById('cpelCarrera').value,
+      periodo: document.getElementById('cpelPeriodo').value.trim(),
+      materias: materiasSeleccionadas,
+      alumnos: cpelAlumnos,
+    });
+    toast(`Matriculación CPEL iniciada (job #${res.job_id}). Podés seguir el progreso en Historial de Trabajos.`, 'success');
+  } catch (e) {
+    toast('Error: ' + (e.message || e), 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+</script>
+{% endblock %}
