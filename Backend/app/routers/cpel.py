@@ -235,7 +235,16 @@ async def _process_cpel_enroll_bg(job_id: int, req: CPELEnrollRequest):
             results.append({"alumno": alumno.nombre, "materia": materia.materia_base, "status": f"❌ {e}"})
             return
 
+        # Se valida "¿ya está matriculado/agregado?" a partir de la respuesta
+        # de Canvas/Teams (que ya lo informan como error de duplicado) en vez
+        # de una consulta previa aparte — evita una llamada extra a la API
+        # por alumno y es el mismo criterio ya usado en el resto del
+        # sistema. Es habitual que un alumno de CPEL ya haya sido
+        # matriculado a mano antes (avisos individuales) — acá NUNCA se
+        # duplica: si ya estaba, se lo marca como tal y se sigue de largo,
+        # tanto en Canvas como en Teams, de forma independiente.
         row_errors = []
+        canvas_status = None
         try:
             await canvas.post(f"/courses/{materia.course_id}/enrollments", {
                 "enrollment": {
@@ -245,12 +254,16 @@ async def _process_cpel_enroll_bg(job_id: int, req: CPELEnrollRequest):
                     "notify": False,
                 },
             })
+            canvas_status = "matriculado"
         except Exception as e:
             msg = str(e)
-            if "already" not in msg.lower() and "enrolled" not in msg.lower():
+            if "already" in msg.lower() or "enrolled" in msg.lower():
+                canvas_status = "ya estaba matriculado"
+            else:
                 row_errors.append(f"Canvas: {msg}")
 
         team_id, team_name = await get_team_id(materia)
+        teams_status = None
         if not team_id:
             row_errors.append(f"Teams: no se encontró el equipo '{team_name}' — revisar el nombre en Teams")
         else:
@@ -260,9 +273,12 @@ async def _process_cpel_enroll_bg(job_id: int, req: CPELEnrollRequest):
                     "roles": [],
                     "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{teams_upn}')",
                 })
+                teams_status = "agregado"
             except Exception as e:
                 err_str = str(e).lower()
-                if "already exist" not in err_str and "request_badrequest" not in err_str:
+                if "already exist" in err_str or "request_badrequest" in err_str:
+                    teams_status = "ya era miembro"
+                else:
                     row_errors.append(f"Teams: {e}")
 
         if row_errors:
@@ -270,7 +286,11 @@ async def _process_cpel_enroll_bg(job_id: int, req: CPELEnrollRequest):
             results.append({"alumno": alumno.nombre, "materia": materia.materia_base, "status": f"❌ {' | '.join(row_errors)}"})
         else:
             success_count += 1
-            results.append({"alumno": alumno.nombre, "materia": materia.materia_base, "status": "✅ OK"})
+            results.append({
+                "alumno": alumno.nombre,
+                "materia": materia.materia_base,
+                "status": f"✅ Canvas: {canvas_status} | Teams: {teams_status}",
+            })
 
     pairs = [(a, m) for a in req.alumnos for m in req.materias]
     batch_size = 5
