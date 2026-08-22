@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import re
+import unicodedata
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
@@ -39,6 +40,58 @@ _ACCOUNT = settings.canvas_account_id
 # Captura el período para poder derivar el nombre del equipo de Teams
 # compartido sin pedírselo al usuario por separado.
 _SUFFIX_RE = re.compile(r"\(\s*cpel\s+[a-zA-Z]+\s+([^\)]+?)\s*\)\s*$", re.IGNORECASE)
+
+
+def _norm_key(s: str) -> str:
+    ascii_s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return ascii_s.strip().lower()
+
+
+# Tabla fija de equipos de Teams por defecto para el período 2026-02 —
+# provista directamente por el usuario, para no depender de una búsqueda
+# en vivo por nombre en cada matrícula (más rápido y 100% confiable para
+# estas 32 materias conocidas). Clave: nombre base de la materia
+# normalizado (sin tildes/mayúsculas). Si una materia no está acá (ej. un
+# período futuro o una materia nueva), se cae al fallback de búsqueda por
+# nombre en Microsoft Graph (ver get_team_id).
+_TEAMS_DEFAULT_2026_02: dict[str, str] = {
+    _norm_key(nombre): team_id
+    for nombre, team_id in {
+        "Administracion de RRHH": "651c0a3b-5d10-4a5d-902b-23c1ba047687",
+        "Administracion I": "a48429b9-f69d-4708-842d-a08b482142fb",
+        "Administracion II": "37ccf899-ce34-4610-b046-8889d1582e37",
+        "Branding": "b0f50a6f-a700-4e63-9258-c1bd61e4fa6c",
+        "Comercio Internacional": "72568207-64e8-4035-abf1-b09c77afedd3",
+        "Comportamiento Organizacional en el Marketing": "0da0f95b-2b76-4e77-8f24-09f42ca0748c",
+        "Comunicacion Oral y Escrita": "8245190f-da5d-4f6e-8f71-6858d258be4d",
+        "Contabilidad de Costos": "a16bf034-1e48-47ca-bc82-17b882cca8db",
+        "Contabilidad General": "b0a9478b-75a2-46dd-b748-e3e25d46120b",
+        "Derecho Internacional": "729bf7e1-1ecc-4d77-9d44-79839aba6f59",
+        "Direccion y Planeamiento Estrategico": "011e0f15-1af2-423e-a657-217b06477558",
+        "English II": "da82c02a-ec0f-4e90-b3d4-94586c8f64b9",
+        "Estadistica": "e7fe8b0b-5746-4cf8-80b7-5526b3de1a47",
+        "Estrategia de Producto": "3c11a99f-41ef-49e9-980a-88bb4c0fb550",
+        "Estrategia Empresarial": "4955b876-2454-458a-a02e-258451e29cb8",
+        "Etica": "3de07d75-d660-49d3-8c85-90b7cd437e42",
+        "Formulacion y Evaluacion de Proyectos": "e546df0f-306f-48f8-8bba-1e7ff214e2bc",
+        "Introduccion a los Negocios": "2fbc25b8-5639-43ce-a979-72c4634289df",
+        "Investigacion y Analisis de Mercado II": "a5421cc7-8419-48c9-a82d-1d04cf35efce",
+        "Legislacion Comercial": "36fa2285-1b2e-4783-88be-0bad4ed25fa0",
+        "Legislacion Laboral": "d0a3f535-de28-4ccd-be31-a74363687f42",
+        "Liderazgo": "a5b84ac2-f4cd-45be-a178-ef146aa993f5",
+        "Logistica y DFI": "1ec91efc-5745-4621-8f22-c6e93f9e331d",
+        "Macroeconomia": "98f91f75-521e-455f-a343-d1832e001bd8",
+        "Marketing": "049a0fd1-9b90-4d48-ba3d-f022f430bd30",
+        "Marketing Digital": "e95ba7d0-e189-4c8b-88c9-db8a14b31841",
+        "Matematica I": "161f0d0a-a152-477a-a6f8-fde6a6a3aa2c",
+        "Matematica II": "e33c570b-db85-46e3-b264-f151467ecde6",
+        "Organizacion, Sistemas y Metodos": "a8470900-a159-49e0-a16e-499ae2fc1e1d",
+        "Pymes y Empresas Familiares": "94ffe240-db2c-46a9-b5af-3df4efb806f4",
+        "Sistema de Informacion Gerencial": "6035f4cf-53b3-44c4-9086-98d6c45dbe42",
+        "TIC": "6e49de2e-d377-4b6d-a3d0-7fe6a2f85470",
+        "Transporte Internacional y Local": "250776ad-daa1-4eb8-9613-d287e118cbf4",
+    }.items()
+}
 
 
 class SubaccountNode(BaseModel):
@@ -157,6 +210,16 @@ async def _process_cpel_enroll_bg(job_id: int, req: CPELEnrollRequest):
 
     async def get_team_id(materia: MateriaSeleccionada) -> tuple[str | None, str]:
         team_name = f"{materia.materia_base} (CPEL) {materia.periodo}" if materia.periodo else f"{materia.materia_base} (CPEL)"
+
+        # Tabla fija primero (conocida, 100% confiable para el período
+        # 2026-02) — solo se recurre a la búsqueda en vivo por nombre si la
+        # materia no está en la tabla (período nuevo, materia agregada
+        # después, etc.).
+        if materia.periodo == "2026-02":
+            fixed_id = _TEAMS_DEFAULT_2026_02.get(_norm_key(materia.materia_base))
+            if fixed_id:
+                return fixed_id, team_name
+
         if team_name in team_id_cache:
             return team_id_cache[team_name], team_name
         tid = await graph.search_group_by_name(team_name)
