@@ -1,24 +1,26 @@
 """Matriculación CPEL por Carrera.
 
 El programa CPEL dicta las mismas materias para 3 carreras (Administración,
-Marketing, Negocios Internacionales), pero con una particularidad: en
-Canvas existe un curso SEPARADO por carrera para cada materia (ej.
-"Administración I (CPEL ADM 2026-02)", "Administración I (CPEL MKT
-2026-02)", "Administración I (CPEL NEG 2026-02)"), mientras que en Teams
-las 3 carreras comparten UN solo equipo por materia (ej. "Administración I
-(CPEL) 2026-02").
+Marketing, Negocios), pero con dos particularidades:
 
-Matricular a mano obliga a elegir, para cada alumno, el curso Canvas
-correcto entre 3 casi idénticos — este router automatiza esa elección:
-dada la carrera y el período, resuelve el curso Canvas específico de cada
-materia y el equipo Teams compartido, y matricula a un lote de alumnos
-(pegados a mano, sin planilla) en todas las materias seleccionadas.
+1. En Canvas, cada carrera tiene su propia SUBCUENTA (no solo un sufijo en
+   el nombre): la jerarquía real es
+   Cuenta raíz > <Período, ej. "2026-2"> > CPEL > <Administración|Marketing|Negocios>,
+   y los cursos de esa carrera viven directamente adentro de esa subcuenta.
+   La API de Canvas para "listar cursos de una cuenta" NO busca recursivo
+   en subcuentas hijas — hay que apuntar directo a la subcuenta de la
+   carrera, no se puede filtrar por período con un simple search_term en
+   la cuenta raíz (eso fue un intento anterior que no encontraba nada).
+2. En Teams, las 3 carreras comparten un solo equipo por materia — el
+   nombre del curso en Canvas trae el período embebido al final (ej.
+   "Administración I (CPEL ADM 2026-02)"), del que se puede derivar el
+   nombre del equipo compartido ("Administración I (CPEL) 2026-02") sin
+   pedirle el período al usuario por separado.
 """
 import asyncio
 import json
 import logging
 import re
-import unicodedata
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
@@ -33,62 +35,78 @@ router = APIRouter(prefix="/cpel", tags=["Matriculación CPEL por Carrera"])
 logger = logging.getLogger(__name__)
 _ACCOUNT = settings.canvas_account_id
 
-CARRERAS = {"ADM": "Administración", "MKT": "Marketing", "NEG": "Negocios Internacionales"}
+# Suffix esperado al final del nombre del curso: "(CPEL <CODIGO CARRERA> <PERIODO>)".
+# Captura el período para poder derivar el nombre del equipo de Teams
+# compartido sin pedírselo al usuario por separado.
+_SUFFIX_RE = re.compile(r"\(\s*cpel\s+[a-zA-Z]+\s+([^\)]+?)\s*\)\s*$", re.IGNORECASE)
 
 
-def _normalize(s: str) -> str:
-    ascii_s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
-    return ascii_s.strip().lower()
+class SubaccountNode(BaseModel):
+    id: str
+    name: str
+    parent_account_id: str | None = None
+
+
+@router.get("/subaccounts", response_model=list[SubaccountNode], summary="Árbol completo de subcuentas de Canvas")
+async def listar_subcuentas():
+    """Devuelve TODAS las subcuentas (recursivo) para que el frontend arme
+    los 3 selects en cascada (Período > Programa > Carrera) navegando la
+    jerarquía real, en vez de adivinar nombres/formatos de período."""
+    try:
+        data = await canvas.paginate(
+            f"/accounts/{_ACCOUNT}/sub_accounts", params={"recursive": "true", "per_page": 100},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo obtener el árbol de subcuentas de Canvas. {e}")
+
+    return [
+        SubaccountNode(
+            id=str(sa["id"]),
+            name=sa.get("name") or "",
+            parent_account_id=str(sa["parent_account_id"]) if sa.get("parent_account_id") else None,
+        )
+        for sa in (data or [])
+    ]
 
 
 class MateriaCandidate(BaseModel):
     course_id: str
     course_name: str
-    materia_base: str  # nombre de la materia sin el sufijo "(CPEL <CARRERA> <PERIODO>)"
+    materia_base: str
+    periodo: str | None = None  # None si el nombre del curso no sigue el patrón "(CPEL <CARRERA> <PERIODO>)"
 
 
 class BuscarMateriasResponse(BaseModel):
-    carrera: str
-    periodo: str
     materias: list[MateriaCandidate]
 
 
-@router.get("/materias", response_model=BuscarMateriasResponse, summary="Buscar los cursos de Canvas de una carrera+período CPEL")
-async def buscar_materias_cpel(carrera: str, periodo: str):
-    carrera = carrera.strip().upper()
-    if carrera not in CARRERAS:
-        raise HTTPException(status_code=400, detail=f"Carrera inválida: '{carrera}'. Debe ser una de {', '.join(CARRERAS)}.")
-    periodo = periodo.strip()
-    if not periodo:
-        raise HTTPException(status_code=400, detail="Falta el período (ej. 2026-02).")
-
+@router.get("/materias", response_model=BuscarMateriasResponse, summary="Cursos de Canvas dentro de la subcuenta de una carrera")
+async def buscar_materias_cpel(subaccount_id: str):
     try:
         courses = await canvas.paginate(
-            f"/accounts/{_ACCOUNT}/courses",
+            f"/accounts/{subaccount_id}/courses",
             params={"state[]": ["available", "unpublished", "created", "claimed"]},
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No se pudo obtener la lista de cursos de Canvas. {e}")
-
-    suffix_pattern = _normalize(f"(cpel {carrera} {periodo})")
-    strip_re = re.compile(r"\(\s*cpel\s+" + re.escape(carrera) + r"\s+" + re.escape(periodo) + r"\s*\)", re.IGNORECASE)
+        raise HTTPException(status_code=400, detail=f"No se pudo obtener los cursos de esa subcuenta. {e}")
 
     materias: list[MateriaCandidate] = []
     for c in courses or []:
         name = c.get("name") or ""
-        if suffix_pattern not in _normalize(name):
-            continue
-        base = strip_re.sub("", name).strip()
-        materias.append(MateriaCandidate(course_id=str(c["id"]), course_name=name, materia_base=base or name))
+        m = _SUFFIX_RE.search(name)
+        periodo = m.group(1).strip() if m else None
+        base = _SUFFIX_RE.sub("", name).strip() if m else name
+        materias.append(MateriaCandidate(course_id=str(c["id"]), course_name=name, materia_base=base or name, periodo=periodo))
 
     materias.sort(key=lambda m: m.materia_base)
-    return BuscarMateriasResponse(carrera=carrera, periodo=periodo, materias=materias)
+    return BuscarMateriasResponse(materias=materias)
 
 
 class MateriaSeleccionada(BaseModel):
     course_id: str
     course_name: str
     materia_base: str
+    periodo: str | None = None
 
 
 class AlumnoCPEL(BaseModel):
@@ -97,8 +115,7 @@ class AlumnoCPEL(BaseModel):
 
 
 class CPELEnrollRequest(BaseModel):
-    carrera: str
-    periodo: str
+    carrera_label: str = ""  # solo informativo, para el historial de trabajos
     materias: list[MateriaSeleccionada]
     alumnos: list[AlumnoCPEL]
 
@@ -138,13 +155,13 @@ async def _process_cpel_enroll_bg(job_id: int, req: CPELEnrollRequest):
     # veces.
     team_id_cache: dict[str, str | None] = {}
 
-    async def get_team_id(materia_base: str) -> str | None:
-        if materia_base in team_id_cache:
-            return team_id_cache[materia_base]
-        team_name = f"{materia_base} (CPEL) {req.periodo}"
+    async def get_team_id(materia: MateriaSeleccionada) -> tuple[str | None, str]:
+        team_name = f"{materia.materia_base} (CPEL) {materia.periodo}" if materia.periodo else f"{materia.materia_base} (CPEL)"
+        if team_name in team_id_cache:
+            return team_id_cache[team_name], team_name
         tid = await graph.search_group_by_name(team_name)
-        team_id_cache[materia_base] = tid
-        return tid
+        team_id_cache[team_name] = tid
+        return tid, team_name
 
     async def process_one(alumno: AlumnoCPEL, materia: MateriaSeleccionada):
         nonlocal success_count, error_count
@@ -170,9 +187,9 @@ async def _process_cpel_enroll_bg(job_id: int, req: CPELEnrollRequest):
             if "already" not in msg.lower() and "enrolled" not in msg.lower():
                 row_errors.append(f"Canvas: {msg}")
 
-        team_id = await get_team_id(materia.materia_base)
+        team_id, team_name = await get_team_id(materia)
         if not team_id:
-            row_errors.append(f"Teams: no se encontró el equipo '{materia.materia_base} (CPEL) {req.periodo}'")
+            row_errors.append(f"Teams: no se encontró el equipo '{team_name}' — revisar el nombre en Teams")
         else:
             try:
                 await graph.post(f"/teams/{team_id}/members", {

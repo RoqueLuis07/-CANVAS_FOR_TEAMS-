@@ -12,34 +12,35 @@
 
 <div class="card shadow-sm mb-4">
   <div class="card-header">
-    <h5 class="mb-0"><i class="bi bi-mortarboard-fill me-2"></i>1. Carrera y materias</h5>
+    <h5 class="mb-0"><i class="bi bi-mortarboard-fill me-2"></i>1. Período, programa y carrera</h5>
   </div>
   <div class="card-body">
     <div class="alert alert-info border-info">
       <i class="bi bi-info-circle-fill me-2"></i>
-      <strong>¿Para qué sirve esto?</strong> El programa CPEL dicta las mismas materias para 3 carreras, pero en Canvas
-      cada carrera tiene su propio curso por materia (ej. <em>"Administración I (CPEL ADM 2026-02)"</em>), mientras que
-      en Teams las 3 carreras comparten un solo equipo por materia (ej. <em>"Administración I (CPEL) 2026-02"</em>).
-      Acá elegís la carrera, el sistema busca automáticamente el curso de Canvas correcto de esa carrera para cada
-      materia, y matricula a tu lote de alumnos en Canvas (curso de su carrera) y Teams (equipo compartido) en un solo paso.
+      <strong>¿Para qué sirve esto?</strong> Las materias de CPEL están organizadas en Canvas por subcuentas
+      (<em>Período → CPEL → Carrera</em>), con un curso separado por carrera para cada materia. En Teams en cambio las
+      3 carreras comparten un solo equipo por materia. Acá navegás hasta la subcuenta de tu carrera, elegís las
+      materias, y el sistema matricula en Canvas al curso correcto y en Teams al equipo compartido — derivando el
+      período automáticamente del nombre del curso, sin tipearlo a mano.
     </div>
     <div class="row g-2 align-items-end">
       <div class="col-md-4">
-        <label class="form-label fw-bold">Carrera</label>
-        <select class="form-select" id="cpelCarrera">
-          <option value="ADM">Administración</option>
-          <option value="MKT">Marketing</option>
-          <option value="NEG">Negocios Internacionales</option>
+        <label class="form-label fw-bold">Período</label>
+        <select class="form-select" id="cpelPeriodoSelect" onchange="onPeriodoChange()" disabled>
+          <option value="">Cargando...</option>
         </select>
       </div>
       <div class="col-md-4">
-        <label class="form-label fw-bold">Período</label>
-        <input type="text" class="form-control" id="cpelPeriodo" placeholder="ej. 2026-02">
+        <label class="form-label fw-bold">Programa</label>
+        <select class="form-select" id="cpelProgramaSelect" onchange="onProgramaChange()" disabled>
+          <option value="">— Elegí un período primero —</option>
+        </select>
       </div>
       <div class="col-md-4">
-        <button class="btn btn-primary w-100" id="btnBuscarMaterias" onclick="buscarMateriasCpel()">
-          <i class="bi bi-search me-1"></i>Buscar materias
-        </button>
+        <label class="form-label fw-bold">Carrera</label>
+        <select class="form-select" id="cpelCarreraSelect" onchange="onCarreraChange()" disabled>
+          <option value="">— Elegí un programa primero —</option>
+        </select>
       </div>
     </div>
 
@@ -96,32 +97,87 @@
 </div>
 
 <script>
+let cpelSubaccounts = [];   // árbol completo, plano: {id, name, parent_account_id}
 let cpelMaterias = [];
 let cpelAlumnos = [];
 
-async function buscarMateriasCpel() {
-  const carrera = document.getElementById('cpelCarrera').value;
-  const periodo = document.getElementById('cpelPeriodo').value.trim();
-  if (!periodo) return toast('Ingresá el período (ej. 2026-02).', 'warning');
+document.addEventListener('DOMContentLoaded', loadSubaccountTree);
 
-  const btn = document.getElementById('btnBuscarMaterias');
-  setLoading(btn, true);
+async function loadSubaccountTree() {
+  try {
+    cpelSubaccounts = await api.get('/cpel/subaccounts');
+    const ids = new Set(cpelSubaccounts.map(s => s.id));
+    // Nivel "Período": subcuentas cuyo padre NO está en el árbol devuelto
+    // (es decir, cuelgan directo de la cuenta raíz).
+    const periodos = cpelSubaccounts.filter(s => !s.parent_account_id || !ids.has(s.parent_account_id));
+    const sel = document.getElementById('cpelPeriodoSelect');
+    sel.innerHTML = '<option value="">— Elegí un período —</option>' +
+      periodos.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    sel.disabled = false;
+  } catch (e) {
+    toast('No se pudo cargar el árbol de subcuentas de Canvas: ' + (e.message || e), 'danger');
+  }
+}
+
+function childrenOf(parentId) {
+  return cpelSubaccounts.filter(s => s.parent_account_id === parentId);
+}
+
+function onPeriodoChange() {
+  const periodoId = document.getElementById('cpelPeriodoSelect').value;
+  const progSel = document.getElementById('cpelProgramaSelect');
+  const carrSel = document.getElementById('cpelCarreraSelect');
+  carrSel.innerHTML = '<option value="">— Elegí un programa primero —</option>';
+  carrSel.disabled = true;
   document.getElementById('cpelMateriasWrap').style.display = 'none';
   document.getElementById('cpelPreviewWrap').style.display = 'none';
 
+  if (!periodoId) {
+    progSel.innerHTML = '<option value="">— Elegí un período primero —</option>';
+    progSel.disabled = true;
+    return;
+  }
+  const programas = childrenOf(periodoId);
+  progSel.innerHTML = '<option value="">— Elegí un programa —</option>' +
+    programas.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  progSel.disabled = false;
+}
+
+function onProgramaChange() {
+  const programaId = document.getElementById('cpelProgramaSelect').value;
+  const carrSel = document.getElementById('cpelCarreraSelect');
+  document.getElementById('cpelMateriasWrap').style.display = 'none';
+  document.getElementById('cpelPreviewWrap').style.display = 'none';
+
+  if (!programaId) {
+    carrSel.innerHTML = '<option value="">— Elegí un programa primero —</option>';
+    carrSel.disabled = true;
+    return;
+  }
+  const carreras = childrenOf(programaId);
+  carrSel.innerHTML = '<option value="">— Elegí una carrera —</option>' +
+    carreras.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  carrSel.disabled = false;
+}
+
+async function onCarreraChange() {
+  const carreraId = document.getElementById('cpelCarreraSelect').value;
+  document.getElementById('cpelPreviewWrap').style.display = 'none';
+  if (!carreraId) {
+    document.getElementById('cpelMateriasWrap').style.display = 'none';
+    return;
+  }
+
   try {
-    const params = new URLSearchParams({ carrera, periodo });
-    const data = await api.get(`/cpel/materias?${params}`);
+    const data = await api.get(`/cpel/materias?subaccount_id=${encodeURIComponent(carreraId)}`);
     cpelMaterias = data.materias || [];
     renderMateriasCpel();
     document.getElementById('cpelMateriasWrap').style.display = 'block';
     if (cpelMaterias.length === 0) {
-      toast(`No se encontraron cursos de Canvas con el patrón "(CPEL ${carrera} ${periodo})". Revisá el período o la carrera.`, 'warning');
+      toast('Esa subcuenta no tiene cursos cargados.', 'warning');
     }
   } catch (e) {
     toast('Error: ' + (e.message || e), 'danger');
-  } finally {
-    setLoading(btn, false);
   }
 }
 
@@ -134,7 +190,10 @@ function renderMateriasCpel() {
   list.innerHTML = cpelMaterias.map((m, i) => `
     <label class="list-group-item d-flex align-items-center gap-2">
       <input type="checkbox" class="form-check-input chk-cpel-materia" data-idx="${i}" checked>
-      <span><strong>${m.materia_base}</strong> <span class="text-muted small">— ${m.course_name}</span></span>
+      <span>
+        <strong>${m.materia_base}</strong> <span class="text-muted small">— ${m.course_name}</span>
+        ${!m.periodo ? '<span class="badge bg-warning text-dark ms-1">período no detectado — revisar equipo de Teams manualmente</span>' : ''}
+      </span>
     </label>
   `).join('');
 }
@@ -153,7 +212,6 @@ function parseAlumnosText(text) {
       errores.push(`Línea ${i + 1}: "${line}" — falta nombre o cédula.`);
       return;
     }
-    // La cédula es el token que parece numérico; el resto es el nombre.
     const cedulaIdx = parts.findIndex(p => /^\d[\d.\-]*$/.test(p));
     if (cedulaIdx === -1) {
       errores.push(`Línea ${i + 1}: "${line}" — no se encontró una cédula numérica.`);
@@ -175,7 +233,7 @@ function previewCpel() {
     document.querySelector(`.chk-cpel-materia[data-idx="${i}"]`)?.checked
   );
   if (materiasSeleccionadas.length === 0) {
-    return toast('Buscá y tildá al menos una materia primero.', 'warning');
+    return toast('Elegí Período/Programa/Carrera y tildá al menos una materia primero.', 'warning');
   }
 
   const text = document.getElementById('cpelAlumnosText').value;
@@ -221,9 +279,9 @@ async function _confirmarCpelConfirmed(materiasSeleccionadas) {
   const btn = document.getElementById('btnConfirmarCpel');
   setLoading(btn, true);
   try {
+    const carreraLabel = document.getElementById('cpelCarreraSelect').selectedOptions[0]?.textContent || '';
     const res = await api.post('/cpel/enroll', {
-      carrera: document.getElementById('cpelCarrera').value,
-      periodo: document.getElementById('cpelPeriodo').value.trim(),
+      carrera_label: carreraLabel,
       materias: materiasSeleccionadas,
       alumnos: cpelAlumnos,
     });
