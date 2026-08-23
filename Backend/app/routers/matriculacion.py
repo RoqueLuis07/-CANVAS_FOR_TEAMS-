@@ -74,19 +74,21 @@ async def search_materias(q: str = ""):
 async def matriculate_individual(req: IndividualEnrollmentRequest,):
     results = []
     
-    # Look up the user in canvas to get canvas user ID if needed
+    # Look up the user in canvas to get canvas user ID if needed. Se exige
+    # coincidencia EXACTA (sis_user_id o email) contra lo tipeado — nunca
+    # "el primero que aparezca" de una búsqueda difusa, que puede matricular
+    # a la persona equivocada si el término coincide parcialmente con más
+    # de una cuenta.
     canvas_user_id = None
     if req.platforms in ["canvas", "both"]:
-        # Try to find by SIS ID first
         try:
-            res = await canvas.get(f"/accounts/1/users?search_term={req.sys_id}")
-            if res and len(res) > 0:
-                canvas_user_id = res[0]["id"]
-            else:
-                # Try by email
-                res = await canvas.get(f"/accounts/1/users?search_term={req.email}")
-                if res and len(res) > 0:
-                    canvas_user_id = res[0]["id"]
+            match = None
+            if req.sys_id:
+                match = await canvas.find_user_exact(settings.canvas_account_id, req.sys_id, fields=("sis_user_id",))
+            if not match and req.email:
+                match = await canvas.find_user_exact(settings.canvas_account_id, req.email, fields=("email", "login_id"))
+            if match:
+                canvas_user_id = match["id"]
         except Exception as e:
             print(f"Error finding canvas user: {e}")
 
