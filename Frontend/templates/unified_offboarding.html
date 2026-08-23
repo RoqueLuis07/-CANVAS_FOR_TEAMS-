@@ -174,7 +174,11 @@ async function fetchUser(query) {
                 document.getElementById('sysInput').value = data.sis_user_id;
                 document.getElementById('emailInput').value = data.email || '';
                 input.value = data.name;
-                toast("Usuario validado: " + data.name, 'success');
+                if (data.fuzzy_match) {
+                    toast("⚠️ No hubo coincidencia exacta — este es el resultado más parecido: " + data.name + ". Verificá que sea la persona correcta antes de confirmar la baja.", 'warning');
+                } else {
+                    toast("Usuario validado: " + data.name, 'success');
+                }
                 btnExecute.disabled = false;
             } else if (data.detail || data.error) {
                 toast(data.detail || data.error, 'danger');

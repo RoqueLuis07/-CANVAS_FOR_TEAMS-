@@ -426,21 +426,34 @@ async def get_courses(search: str = ""):
 
 @router.get("/find_user", summary="Buscar usuario en Canvas por nombre/cédula/correo (usado por Egreso)")
 async def find_user(query: str = ""):
-    """Busca un usuario en Canvas para prellenar el formulario de Desvinculación."""
+    """Busca un usuario en Canvas para prellenar el formulario de Desvinculación.
+
+    Esto alimenta un formulario de BAJA de cuenta — prellenar con la
+    persona equivocada es peligroso si el admin no lo nota antes de
+    confirmar. Se prioriza una coincidencia EXACTA (sis_user_id/login_id/
+    email) sobre "el primer resultado que devuelva Canvas" (que antes se
+    forzaba con per_page=1, sin ningún criterio de selección); si no hay
+    exacta, se devuelve el resultado más parecido pero marcado como
+    `fuzzy_match` para que el frontend lo muestre con aviso.
+    """
     query = query.strip()
     if len(query) < 3:
         raise HTTPException(status_code=400, detail="La búsqueda requiere al menos 3 caracteres")
     try:
-        users = await canvas.get(f"/accounts/{_ACCOUNT}/users", {"search_term": query, "per_page": 1})
+        match = await canvas.find_user_exact(_ACCOUNT, query)
+        is_exact = match is not None
+        if not match:
+            candidates = await canvas.get(f"/accounts/{_ACCOUNT}/users", {"search_term": query, "per_page": 5})
+            match = candidates[0] if candidates else None
     except Exception as exc:
         raise HTTPException(status_code=400, detail=_err(exc))
-    if not users:
+    if not match:
         raise HTTPException(status_code=404, detail="Usuario no encontrado en Canvas")
-    u = users[0]
     return {
-        "name": u.get("name"),
-        "sis_user_id": u.get("sis_user_id"),
-        "email": u.get("email") or u.get("login_id"),
+        "name": match.get("name"),
+        "sis_user_id": match.get("sis_user_id"),
+        "email": match.get("email") or match.get("login_id"),
+        "fuzzy_match": not is_exact,
     }
 
 

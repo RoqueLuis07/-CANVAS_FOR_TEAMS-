@@ -146,9 +146,19 @@ async def buscar_materias_cpel(subaccount_id: str):
     materias: list[MateriaCandidate] = []
     for c in courses or []:
         name = c.get("name") or ""
+        # El primer match (antes de recortar nada) es siempre el sufijo más
+        # a la derecha — de ahí sale el período real del curso.
         m = _SUFFIX_RE.search(name)
         periodo = m.group(1).strip() if m else None
-        base = _SUFFIX_RE.sub("", name).strip() if m else name
+        # Un curso reciclado de un período anterior puede haber quedado con
+        # MÁS de un sufijo "(CPEL ... ...)" pegado (ej. "Materia (CPEL ADM
+        # 2025-01) (CPEL ADM 2026-02)") si se retagueó sin limpiar el
+        # nombre viejo. Se recorta en bucle hasta que no quede ninguno al
+        # final, no solo el último — si no, el sufijo viejo queda pegado al
+        # nombre base y nunca matchea la tabla de equipos de Teams.
+        base = name
+        while _SUFFIX_RE.search(base):
+            base = _SUFFIX_RE.sub("", base).strip()
         materias.append(MateriaCandidate(course_id=str(c["id"]), course_name=name, materia_base=base or name, periodo=periodo))
 
     materias.sort(key=lambda m: m.materia_base)
