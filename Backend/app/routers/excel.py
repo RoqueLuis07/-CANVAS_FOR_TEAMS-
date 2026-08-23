@@ -2239,8 +2239,8 @@ async def preview_fix_coordinador_role(req: DiplomadosUrlRequest):
         async def process_email(email: str):
             nonlocal already_correct
             try:
-                matches = await canvas.get(f"/accounts/{_ACCOUNT}/users", params={"search_term": email})
-                user_id = str(matches[0]["id"]) if matches else None
+                match = await canvas.find_user_exact(_ACCOUNT, email, fields=("email", "login_id"))
+                user_id = str(match["id"]) if match else None
             except Exception:
                 user_id = None
             if not user_id:
@@ -2921,11 +2921,8 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
             # 1b. Inscribir al docente indicado como Teacher del curso recién creado
             if canvas_id and docente_email:
                 try:
-                    matches = await canvas.get(
-                        f"/accounts/{_ACCOUNT_LOCAL}/users",
-                        params={"search_term": docente_email},
-                    )
-                    docente_canvas_id = matches[0]["id"] if matches else None
+                    match = await canvas.find_user_exact(_ACCOUNT_LOCAL, docente_email, fields=("email", "login_id"))
+                    docente_canvas_id = match["id"] if match else None
                     if not docente_canvas_id:
                         error_docente_canvas = f"No se encontró el usuario '{docente_email}' en Canvas"
                     else:
@@ -2945,11 +2942,8 @@ async def _process_courses_bg(job_id: int, req: DiplomadosUrlRequest, contents: 
             if canvas_id and coordinador_emails:
                 async def _enroll_coordinador_canvas(email: str):
                     try:
-                        matches = await canvas.get(
-                            f"/accounts/{_ACCOUNT_LOCAL}/users",
-                            params={"search_term": email},
-                        )
-                        coord_canvas_id = matches[0]["id"] if matches else None
+                        match = await canvas.find_user_exact(_ACCOUNT_LOCAL, email, fields=("email", "login_id"))
+                        coord_canvas_id = match["id"] if match else None
                         if not coord_canvas_id:
                             coordinadores_canvas_failed.append(f"{email} (no encontrado en Canvas)")
                             return
@@ -3784,9 +3778,9 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
                 entry["canvas"] = "creado"
             except Exception as e:
                 try:
-                    ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
-                    if ex_c:
-                        canvas_id = ex_c[0]["id"]
+                    match = await canvas.find_user_exact(_ACCOUNT_LOCAL, login_id)
+                    if match:
+                        canvas_id = match["id"]
                         entry["canvas"] = "exista"
                 except:
                     pass
@@ -4200,13 +4194,15 @@ async def _process_rollback_bg(job_id: int, req: DiplomadosUrlRequest, contents:
                 uid = user_data["id"]
         except: pass
         
-        # Canvas Rollback
+        # Canvas Rollback — coincidencia EXACTA de login_id/email/SIS ID, no
+        # "el primero que aparezca" de una búsqueda difusa: eso podría
+        # desmatricular a otro alumno con correo/nombre parecido en vez del
+        # que realmente corresponde a esta fila.
         if id_curso and id_curso != "None":
             try:
-                ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
-                if ex_c and len(ex_c) > 0:
-                    cid = ex_c[0]["id"]
-                    await canvas.remove_user_from_course(id_curso, str(cid))
+                match = await canvas.find_user_exact(_ACCOUNT_LOCAL, login_id)
+                if match:
+                    await canvas.remove_user_from_course(id_curso, str(match["id"]))
             except Exception as e:
                 error += f"CanvasUnenroll: {e} | "
         
@@ -4378,13 +4374,13 @@ async def _process_rollback_json_bg(job_id: int, data: list[dict]):
                 uid = user_data["id"]
         except: pass
         
-        # Canvas Rollback
+        # Canvas Rollback — coincidencia EXACTA, no "el primero que
+        # aparezca" de la búsqueda difusa (ver mismo fix más arriba).
         if id_curso:
             try:
-                ex_c = await canvas.get(f"/accounts/{_ACCOUNT_LOCAL}/users", params={"search_term": login_id})
-                if ex_c and len(ex_c) > 0:
-                    cid = ex_c[0]["id"]
-                    await canvas.remove_user_from_course(id_curso, str(cid))
+                match = await canvas.find_user_exact(_ACCOUNT_LOCAL, login_id)
+                if match:
+                    await canvas.remove_user_from_course(id_curso, str(match["id"]))
             except Exception as e:
                 error += f"CanvasUnenroll: {e} | "
         

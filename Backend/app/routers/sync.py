@@ -146,12 +146,17 @@ async def resolve_user_identities(user_ref: str):
     except Exception:
         pass
 
-    # Fallback to search
+    # Fallback a búsqueda de texto — SOLO se acepta si hay una coincidencia
+    # EXACTA (sis_user_id/login_id/email) contra user_ref, nunca "el primero
+    # que aparezca" de una búsqueda difusa: un identificador que no matchea
+    # exacto en ningún lado (typo, cédula mal tipeada) resolvería a un
+    # alumno distinto en silencio en vez de fallar con el error claro de
+    # abajo.
     account_id = settings.canvas_account_id
     try:
-        users = await canvas.paginate_limited(f"/accounts/{account_id}/users", {"search_term": user_ref, "per_page": 5}, max_records=5)
-        if users and len(users) > 0 and "login_id" in users[0]:
-            return _validated(str(users[0]["id"]), users[0]["login_id"])
+        match = await canvas.find_user_exact(account_id, user_ref, fields=("sis_user_id", "login_id", "email"))
+        if match and "login_id" in match:
+            return _validated(str(match["id"]), match["login_id"])
     except ValueError:
         raise
     except Exception as e:

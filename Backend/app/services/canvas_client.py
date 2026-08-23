@@ -208,6 +208,33 @@ async def search_course_by_name(account_id: str, course_name: str) -> str | None
         pass
     return None
 
+
+async def find_user_exact(
+    account_id: str, search_term: str, fields: tuple[str, ...] = ("email", "login_id", "sis_user_id")
+) -> dict | None:
+    """Busca usuarios en Canvas por texto libre (search_term, que matchea
+    parcial/difuso contra nombre/correo/SIS ID) pero SOLO devuelve un
+    resultado si hay una coincidencia EXACTA (sin importar mayúsculas) en
+    alguno de los campos indicados — nunca "el primero que aparezca" de la
+    búsqueda difusa, que puede ser una persona distinta con nombre/correo
+    parecido. Usar en cualquier lugar que decida a qué cuenta matricular,
+    desmatricular, o dar de alta/baja a partir de un identificador de
+    texto libre."""
+    try:
+        results = await paginate_limited(
+            f"/accounts/{account_id}/users", {"search_term": search_term, "per_page": 10}, max_records=10
+        )
+    except Exception:
+        return None
+    if not results:
+        return None
+    target = (search_term or "").strip().lower()
+    for u in results:
+        for f in fields:
+            if (str(u.get(f) or "")).strip().lower() == target:
+                return u
+    return None
+
 async def create_course(account_id: str, course_name: str) -> str | None:
     """Create a Canvas course in the given account."""
     try:
