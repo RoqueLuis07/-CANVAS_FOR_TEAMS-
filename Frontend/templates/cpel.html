@@ -137,7 +137,18 @@ function onPeriodoChange() {
     progSel.disabled = true;
     return;
   }
-  const programas = childrenOf(periodoId);
+  const allProgramas = childrenOf(periodoId);
+  // Esta pantalla es específica del programa CPEL — si ese período tiene
+  // una subcuenta "CPEL" entre sus hijos, se muestra SOLO esa (evita que
+  // se elija por error un programa no relacionado y se termine
+  // matriculando alumnos en cursos que no son de CPEL). Si no hay ninguna
+  // con ese nombre, se muestran todas igual (con aviso) por si la
+  // convención de nombres varía.
+  const cpelProgramas = allProgramas.filter(p => (p.name || '').trim().toLowerCase() === 'cpel');
+  const programas = cpelProgramas.length > 0 ? cpelProgramas : allProgramas;
+  if (cpelProgramas.length === 0 && allProgramas.length > 0) {
+    toast('No se encontró una subcuenta "CPEL" en ese período — mostrando todos los programas disponibles, verificá que elegís el correcto.', 'warning');
+  }
   progSel.innerHTML = '<option value="">— Elegí un programa —</option>' +
     programas.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
   progSel.disabled = false;
@@ -212,11 +223,21 @@ function parseAlumnosText(text) {
       errores.push(`Línea ${i + 1}: "${line}" — falta nombre o cédula.`);
       return;
     }
-    const cedulaIdx = parts.findIndex(p => /^\d[\d.\-]*$/.test(p));
-    if (cedulaIdx === -1) {
+    const numericIdxs = [];
+    parts.forEach((p, idx) => { if (/^\d[\d.\-]*$/.test(p)) numericIdxs.push(idx); });
+    if (numericIdxs.length === 0) {
       errores.push(`Línea ${i + 1}: "${line}" — no se encontró una cédula numérica.`);
       return;
     }
+    if (numericIdxs.length > 1) {
+      // Más de un token numérico (ej. una fecha de nacimiento antes de la
+      // cédula) — ambiguo, no se adivina cuál es la cédula real. Se pide
+      // corregir la línea en vez de matricular con un dato potencialmente
+      // equivocado.
+      errores.push(`Línea ${i + 1}: "${line}" — hay más de un valor numérico, no se puede saber cuál es la cédula. Dejá solo nombre y cédula.`);
+      return;
+    }
+    const cedulaIdx = numericIdxs[0];
     const cedula = parts[cedulaIdx].replace(/[.\-\s]/g, '');
     const nombre = parts.filter((_, idx) => idx !== cedulaIdx).join(' ').trim();
     if (!nombre) {

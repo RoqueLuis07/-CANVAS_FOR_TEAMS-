@@ -85,9 +85,17 @@
     const headerHtml = buildUnifiedHeader(data.canvas?.user, data.teams?.user, query, data.canvas?.enrollments?.length || 0, data.teams?.teams?.length || 0);
     const canvasHtml = buildCanvasSection(data.canvas);
     const teamsHtml = buildTeamsSection(data.teams);
+    const fuzzyWarningHtml = data.canvas?.fuzzy_match ? `
+      <div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span>No se encontró una coincidencia exacta en Canvas para "<strong>${esc(query)}</strong>" — este es el resultado más
+        parecido de una búsqueda por texto, puede ser una persona distinta. Verificá el nombre y el SIS ID antes de actuar
+        sobre esta cuenta.</span>
+      </div>` : '';
 
     detailPane.innerHTML = `
       <div class="p-4 p-xl-5">
+        ${fuzzyWarningHtml}
         ${headerHtml}
         <div class="row g-4 mt-1">
           <div class="col-12">

@@ -20,31 +20,36 @@ def get_current_user(request: Request) -> dict:
     return user
 
 
-async def _find_canvas_user(identifier: str) -> dict | None:
+async def _find_canvas_user(identifier: str) -> tuple[dict | None, bool]:
+    """Devuelve (usuario, es_match_exacto). El segundo valor indica si el
+    resultado vino de un lookup exacto (sis_user_id/login_id/email) o del
+    último recurso — el primer resultado de una búsqueda de texto libre sin
+    ninguna coincidencia exacta — para que el caller decida si mostrarlo
+    igual (con aviso) o tratarlo como "no encontrado", según el contexto."""
     if not identifier:
-        return None
-    
+        return None, False
+
     identifier = identifier.strip()
-    
+
     # Si es numérico (C.I.), busca al usuario usando sis_user_id:{cedula}
     if identifier.replace("-", "").replace(".", "").isdigit():
         try:
-            return await canvas.get(f"/users/sis_user_id:{identifier}")
+            return await canvas.get(f"/users/sis_user_id:{identifier}"), True
         except Exception:
             pass
 
     # Si contiene @ o es texto, intentamos buscar por sis_user_id:{email} primero
     if "@" in identifier:
         try:
-            return await canvas.get(f"/users/sis_user_id:{identifier}")
+            return await canvas.get(f"/users/sis_user_id:{identifier}"), True
         except Exception:
             pass
 
     try:
         users = await canvas.paginate(f"/accounts/{_ACCOUNT}/users", {"search_term": identifier, "per_page": 100})
     except Exception:
-        return None
-        
+        return None, False
+
     local = identifier.split("@")[0] if "@" in identifier else identifier
     # Priority: exact match on login_id or email fields first
     for user in users:
@@ -52,8 +57,8 @@ async def _find_canvas_user(identifier: str) -> dict | None:
                 or user.get("email") == identifier
                 or user.get("sis_user_id") == identifier
                 or user.get("login_id") == local):
-            return user
-    return users[0] if users else None
+            return user, True
+    return (users[0], False) if users else (None, False)
 
 
 async def _canvas_enrollments(uid: str) -> tuple[list, list]:
@@ -132,8 +137,12 @@ async def canvas_profile(
     current_user: dict = Depends(get_current_user),
 ):
     email = current_user["email"]
-    canvas_user = await _find_canvas_user(email)
-    if not canvas_user:
+    # "/profile/canvas" muestra las notas/inscripciones del usuario
+    # AUTENTICADO — acá NUNCA se acepta un match no-exacto (mostraría las
+    # calificaciones de otra persona), a diferencia del buscador admin de
+    # abajo donde un humano revisa el resultado.
+    canvas_user, is_exact = await _find_canvas_user(email)
+    if not canvas_user or not is_exact:
         raise HTTPException(status_code=404, detail="Usuario Canvas no encontrado")
 
     user_id = str(canvas_user.get("id"))
@@ -248,13 +257,14 @@ async def lookup_user_profile(
 
     # ── Canvas ────────────────────────────────────────────────────────────────
     canvas_user = None
+    canvas_is_exact = True
     if canvas_id:
         try:
             canvas_user = await canvas.get(f"/users/{canvas_id}/profile")
         except Exception:
             pass
     if canvas_user is None and identifier:
-        canvas_user = await _find_canvas_user(identifier)
+        canvas_user, canvas_is_exact = await _find_canvas_user(identifier)
 
     if canvas_user:
         uid = str(canvas_user.get("id"))
@@ -275,6 +285,12 @@ async def lookup_user_profile(
                 "sis_user_id": canvas_user.get("sis_user_id"),
                 "avatar_url": canvas_user.get("avatar_url"),
             },
+            # No hubo coincidencia EXACTA por sis_user_id/login_id/email —
+            # esto es el resultado más parecido de una búsqueda de texto
+            # libre, puede ser una persona distinta. El frontend debe
+            # mostrar esto de forma visible antes de que se actúe sobre
+            # este usuario.
+            "fuzzy_match": not canvas_is_exact,
             "enrollments": enrollments,
             "groups": [{"id": g.get("id"), "name": g.get("name"),
                         "course_id": g.get("course_id")} for g in groups],
