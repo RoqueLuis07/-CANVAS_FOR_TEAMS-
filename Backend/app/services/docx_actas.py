@@ -162,41 +162,46 @@ def generar_docx_entrega_equipo(a: dict) -> bytes:
         for p in cell.paragraphs:
             _check_symbol_in_paragraph(p, lambda label: label in accesorios)
 
-    # "Otros: [Detallar accesorios adicionales, si corresponde]"
-    if a.get("accesorios_otros"):
-        p6 = d.paragraphs[6]
-        if len(p6.runs) > 1:
-            p6.runs[1].text = a["accesorios_otros"]
+    # "Otros: [Detallar accesorios adicionales, si corresponde]" — SIEMPRE
+    # se pisa el placeholder entre corchetes, vacío si no hay dato (nunca
+    # se deja el texto de ejemplo de la plantilla).
+    p6 = d.paragraphs[6]
+    if len(p6.runs) > 1:
+        p6.runs[1].text = _v(a.get("accesorios_otros"))
 
     # Tabla 4: Estado del equipo a la entrega (checkboxes Nuevo / Usado)
     estado = (a.get("estado_equipo") or "").strip()
     _check_estado_table(d.tables[4], estado)
 
-    # "Observaciones: [Observaciones]" (entrega)
+    # "Observaciones: [Observaciones]" (entrega) — vacío si no hay dato,
+    # sin texto de relleno tipo "Sin observaciones".
     p8 = d.paragraphs[8]
     if len(p8.runs) > 1:
-        p8.runs[1].text = _v(a.get("observaciones_entrega")) or "Sin observaciones"
+        p8.runs[1].text = _v(a.get("observaciones_entrega"))
 
     # Tabla 5: Firma Entrega / Recibe (primera, sección 1)
     _fill_entrega_recibe_cell(d.tables[5].rows[0].cells[0], "Entrega", a.get("entrega_nombre"), a.get("entrega_ci"), a.get("entrega_cargo"))
     _fill_entrega_recibe_cell(d.tables[5].rows[0].cells[1], "Recibe", a.get("recibe_nombre"), a.get("recibe_ci"), a.get("recibe_cargo"))
 
-    # Sección 2: devolución
-    if a.get("fecha_devolucion"):
-        _set_paragraph_text(d.paragraphs[13], f"Fecha: {_v(a.get('fecha_devolucion'))}")
-    if a.get("motivo_devolucion"):
-        _set_paragraph_text(d.paragraphs[14], f"Motivo de la devolución: {_v(a.get('motivo_devolucion'))}")
+    # Sección 2: devolución — igual que arriba, SIEMPRE se procesa (con
+    # valor vacío si no hay dato) en vez de solo cuando hay algo cargado;
+    # si no, la tabla 7 (firma) queda con los placeholders "[Nombre
+    # completo]"/"[N° de C.I.]"/"[Cargo]" de la plantilla sin tocar.
+    _set_paragraph_text(d.paragraphs[13], f"Fecha: {_v(a.get('fecha_devolucion'))}")
+    _set_paragraph_text(d.paragraphs[14], f"Motivo de la devolución: {_v(a.get('motivo_devolucion'))}")
 
     estado_dev = (a.get("estado_equipo_devolucion") or "").strip()
-    if estado_dev:
-        _check_estado_table(d.tables[6], estado_dev)
+    _check_estado_table(d.tables[6], estado_dev)
 
-    if a.get("observaciones_devolucion"):
-        _set_paragraph_text(d.paragraphs[16], f"Observaciones: {_v(a.get('observaciones_devolucion'))}")
+    _set_paragraph_text(d.paragraphs[16], f"Observaciones: {_v(a.get('observaciones_devolucion'))}")
 
-    if any([a.get("fecha_devolucion"), a.get("motivo_devolucion"), a.get("observaciones_devolucion")]):
+    tiene_devolucion = any([a.get("fecha_devolucion"), a.get("motivo_devolucion"), a.get("observaciones_devolucion")])
+    if tiene_devolucion:
         _fill_entrega_recibe_cell(d.tables[7].rows[0].cells[0], "Entrega", a.get("recibe_nombre"), a.get("recibe_ci"), a.get("recibe_cargo"))
         _fill_entrega_recibe_cell(d.tables[7].rows[0].cells[1], "Recibe", a.get("entrega_nombre"), a.get("entrega_ci"), a.get("entrega_cargo"))
+    else:
+        _fill_entrega_recibe_cell(d.tables[7].rows[0].cells[0], "Entrega", "", "", "")
+        _fill_entrega_recibe_cell(d.tables[7].rows[0].cells[1], "Recibe", "", "", "")
 
     buf = io.BytesIO()
     d.save(buf)
