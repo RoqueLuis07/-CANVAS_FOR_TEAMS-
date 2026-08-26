@@ -159,6 +159,11 @@ async def cpel_page(request: Request):
     return _r(request, "cpel.html")
 
 
+@router.get("/ui/actas", response_class=HTMLResponse)
+async def actas_page(request: Request):
+    return _r(request, "actas.html")
+
+
 @router.get("/diagnostics", tags=["Health"])
 async def diagnostics():
     """Test Canvas and Azure credentials and return status for each."""

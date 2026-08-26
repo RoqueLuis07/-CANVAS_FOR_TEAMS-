@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{% block title %}Actas{% endblock %}
+{% block breadcrumb %}Administración › Actas{% endblock %}
+{% block nav_actas %}active{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+  <div class="col-auto">
+    <h1 class="h3 mb-0"><i class="bi bi-file-earmark-text-fill me-2"></i>Actas</h1>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-4" id="actasTabs">
+  <li class="nav-item">
+    <button class="nav-link active" id="tab-st-btn" data-bs-toggle="tab" data-bs-target="#tab-st" type="button">
+      <i class="bi bi-tools me-1"></i>Servicio Técnico
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" id="tab-ee-btn" data-bs-toggle="tab" data-bs-target="#tab-ee" type="button">
+      <i class="bi bi-laptop me-1"></i>Entrega de Equipos
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+<!-- ═══════════════════════ SERVICIO TÉCNICO ═══════════════════════ -->
+<div class="tab-pane fade show active" id="tab-st">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0" id="stFormTitle"><i class="bi bi-plus-circle me-2"></i>Nueva Acta de Servicio Técnico</h5>
+      <button class="btn btn-sm btn-outline-secondary" id="stCancelEdit" style="display:none;" onclick="cancelarEdicionST()">Cancelar edición</button>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Fecha</label>
+          <input type="date" class="form-control" id="st_fecha">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Hora</label>
+          <input type="time" class="form-control" id="st_hora">
+        </div>
+        <div class="col-md-6"></div>
+
+        <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold">1. DATOS DE LA SOLICITUD</small></div>
+        <div class="col-md-4">
+          <label class="form-label">Departamento / Área solicitante</label>
+          <input type="text" class="form-control" id="st_departamento_area">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Ubicación / Oficina</label>
+          <input type="text" class="form-control" id="st_ubicacion_oficina">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Persona que reporta / solicita</label>
+          <input type="text" class="form-control" id="st_persona_reporta">
+        </div>
+
+        <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold">2. DATOS DEL EQUIPO</small></div>
+        <div class="col-md-4">
+          <label class="form-label">Tipo de equipo</label>
+          <select class="form-select" id="st_tipo_equipo">
+            <option value="Computadora">Computadora</option>
+            <option value="Impresora">Impresora</option>
+            <option value="Teléfono">Teléfono</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Especificar (si es "Otro")</label>
+          <input type="text" class="form-control" id="st_tipo_equipo_otro">
+        </div>
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+          <label class="form-label">Marca</label>
+          <input type="text" class="form-control" id="st_marca">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Modelo</label>
+          <input type="text" class="form-control" id="st_modelo">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">N° de serie / inventario</label>
+          <input type="text" class="form-control" id="st_nro_serie">
+        </div>
+
+        <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold">3. DETALLE DEL SERVICIO REALIZADO</small></div>
+        <div class="col-md-6">
+          <label class="form-label">Falla / motivo reportado</label>
+          <textarea class="form-control" id="st_falla_motivo" rows="2"></textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Trabajo realizado</label>
+          <textarea class="form-control" id="st_trabajo_realizado" rows="2"></textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Repuestos / insumos utilizados</label>
+          <input type="text" class="form-control" id="st_repuestos_insumos">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Técnico responsable</label>
+          <input type="text" class="form-control" id="st_tecnico_responsable">
+        </div>
+
+        <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold">5. FIRMAS</small></div>
+        <div class="col-md-3">
+          <label class="form-label">Nombre — Encargado de TI</label>
+          <input type="text" class="form-control" id="st_encargado_ti_nombre">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">C.I. — Encargado de TI</label>
+          <input type="text" class="form-control" id="st_encargado_ti_ci">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Nombre — Usuario Conforme</label>
+          <input type="text" class="form-control" id="st_usuario_nombre">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">C.I. — Usuario Conforme</label>
+          <input type="text" class="form-control" id="st_usuario_ci">
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button class="btn btn-outline-primary" onclick="previewST()"><i class="bi bi-eye me-1"></i>Vista previa</button>
+        <button class="btn btn-success" id="stSaveBtn" onclick="guardarST()"><i class="bi bi-check-circle me-1"></i>Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Actas registradas</h5>
+      <input type="text" class="form-control form-control-sm" style="max-width:250px;" placeholder="Buscar..." id="stSearch" onkeyup="if(event.key==='Enter') cargarListaST()">
+    </div>
+    <div class="table-scroll">
+      <table class="table table-sm">
+        <thead>
+          <tr><th>N°</th><th>Fecha</th><th>Área</th><th>Solicitante</th><th>Equipo</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody id="stListBody"><tr><td colspan="7" class="text-center p-4">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ENTREGA DE EQUIPOS ═══════════════════════ -->
+<div class="tab-pane fade" id="tab-ee">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0" id="eeFormTitle"><i class="bi bi-plus-circle me-2"></i>Nueva Acta de Entrega de Equipo</h5>
+      <button class="btn btn-sm btn-outline-secondary" id="eeCancelEdit" style="display:none;" onclick="cancelarEdicionEE()">Cancelar edición</button>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Fecha de emisión</label>
+          <input type="date" class="form-control" id="ee_fecha_emision">
+        </div>
+
+        <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold">1. ENTREGA DE INSUMO</small></div>
+        <div class="col-md-4">
+          <label class="form-label">Entrega — Nombre</label>
+          <input type="text" class="form-control" id="ee_entrega_nombre">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Entrega — C.I.</label>
+          <input type="text" class="form-control" id="ee_entrega_ci">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Entrega — Cargo</label>
+          <input type="text" class="form-control" id="ee_entrega_cargo">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Recibe — Nombre</label>
+          <input type="text" class="form-control" id="ee_recibe_nombre">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Recibe — C.I.</label>
+          <input type="text" class="form-control" id="ee_recibe_ci">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Recibe — Cargo</label>
+          <input type="text" class="form-control" id="ee_recibe_cargo">
+        </div>
+
+        <div class="col-12"><small class="text-muted fw-bold">1.1 Datos del equipo</small></div>
+        <div class="col-md-4">
+          <label class="form-label">Insumo</label>
+          <input type="text" class="form-control" id="ee_insumo" placeholder="Notebook, Impresora, etc.">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Marca</label>
+          <input type="text" class="form-control" id="ee_marca">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Modelo</label>
+          <input type="text" class="form-control" id="ee_modelo">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">N° de Serie</label>
+          <input type="text" class="form-control" id="ee_nro_serie">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Especificaciones técnicas</label>
+          <input type="text" class="form-control" id="ee_especificaciones">
+        </div>
+
+        <div class="col-12"><small class="text-muted fw-bold">1.2 Accesorios entregados</small></div>
+        <div class="col-12 d-flex gap-4 flex-wrap">
+          <div class="form-check"><input class="form-check-input chk-accesorio" type="checkbox" value="Cargador" id="acc_cargador"><label class="form-check-label" for="acc_cargador">Cargador</label></div>
+          <div class="form-check"><input class="form-check-input chk-accesorio" type="checkbox" value="Mouse" id="acc_mouse"><label class="form-check-label" for="acc_mouse">Mouse</label></div>
+          <div class="form-check"><input class="form-check-input chk-accesorio" type="checkbox" value="Teclado" id="acc_teclado"><label class="form-check-label" for="acc_teclado">Teclado</label></div>
+          <div class="form-check"><input class="form-check-input chk-accesorio" type="checkbox" value="Funda / Maletín" id="acc_funda"><label class="form-check-label" for="acc_funda">Funda / Maletín</label></div>
+          <div class="form-check"><input class="form-check-input chk-accesorio" type="checkbox" value="Cable / Adaptador" id="acc_cable"><label class="form-check-label" for="acc_cable">Cable / Adaptador</label></div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Otros accesorios</label>
+          <input type="text" class="form-control" id="ee_accesorios_otros">
+        </div>
+
+        <div class="col-12"><small class="text-muted fw-bold">1.3 Estado del equipo al momento de la entrega</small></div>
+        <div class="col-md-4">
+          <select class="form-select" id="ee_estado_equipo">
+            <option value="Nuevo">Nuevo</option>
+            <option value="Usado — en buen estado">Usado — en buen estado</option>
+          </select>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Observaciones</label>
+          <input type="text" class="form-control" id="ee_observaciones_entrega">
+        </div>
+
+        <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold">2. RECEPCIÓN / DEVOLUCIÓN DE INSUMO (opcional — completar cuando se devuelva el equipo)</small></div>
+        <div class="col-md-3">
+          <label class="form-label">Fecha de devolución</label>
+          <input type="date" class="form-control" id="ee_fecha_devolucion">
+        </div>
+        <div class="col-md-5">
+          <label class="form-label">Motivo de la devolución</label>
+          <input type="text" class="form-control" id="ee_motivo_devolucion">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Estado al momento de la devolución</label>
+          <select class="form-select" id="ee_estado_equipo_devolucion">
+            <option value="">—</option>
+            <option value="Nuevo">Nuevo</option>
+            <option value="Usado — en buen estado">Usado — en buen estado</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Observaciones de la devolución</label>
+          <input type="text" class="form-control" id="ee_observaciones_devolucion">
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button class="btn btn-outline-primary" onclick="previewEE()"><i class="bi bi-eye me-1"></i>Vista previa</button>
+        <button class="btn btn-success" id="eeSaveBtn" onclick="guardarEE()"><i class="bi bi-check-circle me-1"></i>Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Actas registradas</h5>
+      <input type="text" class="form-control form-control-sm" style="max-width:250px;" placeholder="Buscar..." id="eeSearch" onkeyup="if(event.key==='Enter') cargarListaEE()">
+    </div>
+    <div class="table-scroll">
+      <table class="table table-sm">
+        <thead>
+          <tr><th>N°</th><th>Fecha</th><th>Entrega</th><th>Recibe</th><th>Equipo</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody id="eeListBody"><tr><td colspan="7" class="text-center p-4">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<input type="file" id="firmadoFileInput" accept="application/pdf" style="display:none;">
+
+<script>
+let stEditId = null;
+let eeEditId = null;
+let firmadoTarget = null; // {tipo, id}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+function stCollect() {
+  return {
+    fecha: document.getElementById('st_fecha').value,
+    hora: document.getElementById('st_hora').value,
+    departamento_area: document.getElementById('st_departamento_area').value,
+    ubicacion_oficina: document.getElementById('st_ubicacion_oficina').value,
+    persona_reporta: document.getElementById('st_persona_reporta').value,
+    tipo_equipo: document.getElementById('st_tipo_equipo').value,
+    tipo_equipo_otro: document.getElementById('st_tipo_equipo_otro').value,
+    marca: document.getElementById('st_marca').value,
+    modelo: document.getElementById('st_modelo').value,
+    nro_serie: document.getElementById('st_nro_serie').value,
+    falla_motivo: document.getElementById('st_falla_motivo').value,
+    trabajo_realizado: document.getElementById('st_trabajo_realizado').value,
+    repuestos_insumos: document.getElementById('st_repuestos_insumos').value,
+    tecnico_responsable: document.getElementById('st_tecnico_responsable').value,
+    encargado_ti_nombre: document.getElementById('st_encargado_ti_nombre').value,
+    encargado_ti_ci: document.getElementById('st_encargado_ti_ci').value,
+    usuario_nombre: document.getElementById('st_usuario_nombre').value,
+    usuario_ci: document.getElementById('st_usuario_ci').value,
+  };
+}
+
+function stFill(a) {
+  document.getElementById('st_fecha').value = a.fecha || '';
+  document.getElementById('st_hora').value = a.hora || '';
+  document.getElementById('st_departamento_area').value = a.departamento_area || '';
+  document.getElementById('st_ubicacion_oficina').value = a.ubicacion_oficina || '';
+  document.getElementById('st_persona_reporta').value = a.persona_reporta || '';
+  document.getElementById('st_tipo_equipo').value = a.tipo_equipo || 'Computadora';
+  document.getElementById('st_tipo_equipo_otro').value = a.tipo_equipo_otro || '';
+  document.getElementById('st_marca').value = a.marca || '';
+  document.getElementById('st_modelo').value = a.modelo || '';
+  document.getElementById('st_nro_serie').value = a.nro_serie || '';
+  document.getElementById('st_falla_motivo').value = a.falla_motivo || '';
+  document.getElementById('st_trabajo_realizado').value = a.trabajo_realizado || '';
+  document.getElementById('st_repuestos_insumos').value = a.repuestos_insumos || '';
+  document.getElementById('st_tecnico_responsable').value = a.tecnico_responsable || '';
+  document.getElementById('st_encargado_ti_nombre').value = a.encargado_ti_nombre || '';
+  document.getElementById('st_encargado_ti_ci').value = a.encargado_ti_ci || '';
+  document.getElementById('st_usuario_nombre').value = a.usuario_nombre || '';
+  document.getElementById('st_usuario_ci').value = a.usuario_ci || '';
+}
+
+function stClear() {
+  stFill({});
+  stEditId = null;
+  document.getElementById('stFormTitle').innerHTML = '<i class="bi bi-plus-circle me-2"></i>Nueva Acta de Servicio Técnico';
+  document.getElementById('stCancelEdit').style.display = 'none';
+}
+
+function openPdfBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+}
+
+async function previewST() {
+  try {
+    const res = await fetch('/actas/servicio-tecnico/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(stCollect()),
+    });
+    if (!res.ok) { const e = await res.json(); return toast(e.detail || 'Error al generar la vista previa', 'danger'); }
+    openPdfBlob(await res.blob());
+  } catch (e) { toast('Error de conexión', 'danger'); }
+}
+
+async function guardarST() {
+  const btn = document.getElementById('stSaveBtn');
+  setLoading(btn, true);
+  try {
+    const isEdit = !!stEditId;
+    const url = isEdit ? `/actas/servicio-tecnico/${stEditId}` : '/actas/servicio-tecnico';
+    const res = await fetch(url, {
+      method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(stCollect()),
+    });
+    if (!res.ok) { const e = await res.json(); toast(e.detail || 'Error al guardar', 'danger'); return; }
+    const data = await res.json();
+    toast(isEdit ? `Acta ${data.numero} actualizada.` : `Acta ${data.numero} creada.`, 'success');
+    stClear();
+    cargarListaST();
+  } catch (e) {
+    toast('Error de conexión', 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function cancelarEdicionST() { stClear(); }
+
+async function cargarListaST() {
+  const search = document.getElementById('stSearch').value;
+  const res = await fetch(`/actas/servicio-tecnico?search=${encodeURIComponent(search)}&limit=50`);
+  const data = await res.json();
+  const body = document.getElementById('stListBody');
+  if (!data.items || data.items.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="text-center p-4 text-muted">Sin actas registradas</td></tr>';
+    return;
+  }
+  body.innerHTML = data.items.map(a => `
+    <tr>
+      <td><strong>${a.numero}</strong></td>
+      <td>${a.fecha || '—'}</td>
+      <td>${a.departamento_area || '—'}</td>
+      <td>${a.persona_reporta || '—'}</td>
+      <td>${[a.tipo_equipo, a.marca, a.modelo].filter(Boolean).join(' · ') || '—'}</td>
+      <td>${estadoBadge(a.estado)}</td>
+      <td>${accionesHtml('servicio-tecnico', a.id)}</td>
+    </tr>
+  `).join('');
+}
+
+function estadoBadge(estado) {
+  if (estado === 'firmado') return '<span class="badge bg-success">Firmado</span>';
+  return '<span class="badge bg-secondary">Generado</span>';
+}
+
+function accionesHtml(tipo, id) {
+  return `
+    <div class="d-flex gap-1 flex-wrap">
+      <button class="btn btn-sm btn-outline-primary" title="Ver / Imprimir" onclick="verImprimir('${tipo}', ${id})"><i class="bi bi-printer"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" title="Editar" onclick="editar('${tipo}', ${id})"><i class="bi bi-pencil"></i></button>
+      <button class="btn btn-sm btn-outline-info" title="Subir PDF firmado" onclick="subirFirmado('${tipo}', ${id})"><i class="bi bi-upload"></i></button>
+      <button class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="eliminar('${tipo}', ${id})"><i class="bi bi-trash"></i></button>
+    </div>
+  `;
+}
+
+async function verImprimir(tipo, id) {
+  window.open(`/actas/${tipo}/${id}/pdf`, '_blank');
+}
+
+async function editar(tipo, id) {
+  const res = await fetch(`/actas/${tipo}/${id}`);
+  if (!res.ok) return toast('No se pudo cargar la acta', 'danger');
+  const a = await res.json();
+  if (tipo === 'servicio-tecnico') {
+    stEditId = id;
+    stFill(a);
+    document.getElementById('stFormTitle').innerHTML = `<i class="bi bi-pencil me-2"></i>Editando Acta ${a.numero}`;
+    document.getElementById('stCancelEdit').style.display = 'inline-block';
+    document.getElementById('tab-st-btn').click();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else {
+    eeEditId = id;
+    eeFill(a);
+    document.getElementById('eeFormTitle').innerHTML = `<i class="bi bi-pencil me-2"></i>Editando Acta ${a.numero}`;
+    document.getElementById('eeCancelEdit').style.display = 'inline-block';
+    document.getElementById('tab-ee-btn').click();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function subirFirmado(tipo, id) {
+  firmadoTarget = { tipo, id };
+  document.getElementById('firmadoFileInput').click();
+}
+
+document.getElementById('firmadoFileInput').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file || !firmadoTarget) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch(`/actas/${firmadoTarget.tipo}/${firmadoTarget.id}/firmado`, { method: 'POST', body: fd });
+    if (!res.ok) { const e = await res.json(); return toast(e.detail || 'Error al subir el PDF firmado', 'danger'); }
+    toast('PDF firmado cargado correctamente.', 'success');
+    if (firmadoTarget.tipo === 'servicio-tecnico') cargarListaST(); else cargarListaEE();
+  } catch (e) {
+    toast('Error de conexión al subir el archivo', 'danger');
+  }
+});
+
+function eliminar(tipo, id) {
+  confirmAction(
+    '¿Eliminar esta acta? Esta acción no se puede deshacer.',
+    async () => {
+      const res = await fetch(`/actas/${tipo}/${id}`, { method: 'DELETE' });
+      if (!res.ok) return toast('Error al eliminar', 'danger');
+      toast('Acta eliminada.', 'success');
+      if (tipo === 'servicio-tecnico') cargarListaST(); else cargarListaEE();
+    },
+    '¿Confirmar eliminación?', true
+  );
+}
+
+// ── Entrega de Equipos ───────────────────────────────────────────────────
+
+function eeCollect() {
+  const accesorios = Array.from(document.querySelectorAll('.chk-accesorio:checked')).map(c => c.value);
+  return {
+    fecha_emision: document.getElementById('ee_fecha_emision').value,
+    entrega_nombre: document.getElementById('ee_entrega_nombre').value,
+    entrega_ci: document.getElementById('ee_entrega_ci').value,
+    entrega_cargo: document.getElementById('ee_entrega_cargo').value,
+    recibe_nombre: document.getElementById('ee_recibe_nombre').value,
+    recibe_ci: document.getElementById('ee_recibe_ci').value,
+    recibe_cargo: document.getElementById('ee_recibe_cargo').value,
+    insumo: document.getElementById('ee_insumo').value,
+    marca: document.getElementById('ee_marca').value,
+    modelo: document.getElementById('ee_modelo').value,
+    nro_serie: document.getElementById('ee_nro_serie').value,
+    especificaciones: document.getElementById('ee_especificaciones').value,
+    accesorios: accesorios,
+    accesorios_otros: document.getElementById('ee_accesorios_otros').value,
+    estado_equipo: document.getElementById('ee_estado_equipo').value,
+    observaciones_entrega: document.getElementById('ee_observaciones_entrega').value,
+    fecha_devolucion: document.getElementById('ee_fecha_devolucion').value || null,
+    motivo_devolucion: document.getElementById('ee_motivo_devolucion').value,
+    estado_equipo_devolucion: document.getElementById('ee_estado_equipo_devolucion').value,
+    observaciones_devolucion: document.getElementById('ee_observaciones_devolucion').value,
+  };
+}
+
+function eeFill(a) {
+  document.getElementById('ee_fecha_emision').value = a.fecha_emision || '';
+  document.getElementById('ee_entrega_nombre').value = a.entrega_nombre || '';
+  document.getElementById('ee_entrega_ci').value = a.entrega_ci || '';
+  document.getElementById('ee_entrega_cargo').value = a.entrega_cargo || '';
+  document.getElementById('ee_recibe_nombre').value = a.recibe_nombre || '';
+  document.getElementById('ee_recibe_ci').value = a.recibe_ci || '';
+  document.getElementById('ee_recibe_cargo').value = a.recibe_cargo || '';
+  document.getElementById('ee_insumo').value = a.insumo || '';
+  document.getElementById('ee_marca').value = a.marca || '';
+  document.getElementById('ee_modelo').value = a.modelo || '';
+  document.getElementById('ee_nro_serie').value = a.nro_serie || '';
+  document.getElementById('ee_especificaciones').value = a.especificaciones || '';
+  document.querySelectorAll('.chk-accesorio').forEach(c => c.checked = (a.accesorios || []).includes(c.value));
+  document.getElementById('ee_accesorios_otros').value = a.accesorios_otros || '';
+  document.getElementById('ee_estado_equipo').value = a.estado_equipo || 'Nuevo';
+  document.getElementById('ee_observaciones_entrega').value = a.observaciones_entrega || '';
+  document.getElementById('ee_fecha_devolucion').value = a.fecha_devolucion || '';
+  document.getElementById('ee_motivo_devolucion').value = a.motivo_devolucion || '';
+  document.getElementById('ee_estado_equipo_devolucion').value = a.estado_equipo_devolucion || '';
+  document.getElementById('ee_observaciones_devolucion').value = a.observaciones_devolucion || '';
+}
+
+function eeClear() {
+  eeFill({});
+  eeEditId = null;
+  document.getElementById('eeFormTitle').innerHTML = '<i class="bi bi-plus-circle me-2"></i>Nueva Acta de Entrega de Equipo';
+  document.getElementById('eeCancelEdit').style.display = 'none';
+}
+
+async function previewEE() {
+  try {
+    const res = await fetch('/actas/entrega-equipo/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eeCollect()),
+    });
+    if (!res.ok) { const e = await res.json(); return toast(e.detail || 'Error al generar la vista previa', 'danger'); }
+    openPdfBlob(await res.blob());
+  } catch (e) { toast('Error de conexión', 'danger'); }
+}
+
+async function guardarEE() {
+  const btn = document.getElementById('eeSaveBtn');
+  setLoading(btn, true);
+  try {
+    const isEdit = !!eeEditId;
+    const url = isEdit ? `/actas/entrega-equipo/${eeEditId}` : '/actas/entrega-equipo';
+    const res = await fetch(url, {
+      method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eeCollect()),
+    });
+    if (!res.ok) { const e = await res.json(); toast(e.detail || 'Error al guardar', 'danger'); return; }
+    const data = await res.json();
+    toast(isEdit ? `Acta ${data.numero} actualizada.` : `Acta ${data.numero} creada.`, 'success');
+    eeClear();
+    cargarListaEE();
+  } catch (e) {
+    toast('Error de conexión', 'danger');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function cancelarEdicionEE() { eeClear(); }
+
+async function cargarListaEE() {
+  const search = document.getElementById('eeSearch').value;
+  const res = await fetch(`/actas/entrega-equipo?search=${encodeURIComponent(search)}&limit=50`);
+  const data = await res.json();
+  const body = document.getElementById('eeListBody');
+  if (!data.items || data.items.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="text-center p-4 text-muted">Sin actas registradas</td></tr>';
+    return;
+  }
+  body.innerHTML = data.items.map(a => `
+    <tr>
+      <td><strong>${a.numero}</strong></td>
+      <td>${a.fecha_emision || '—'}</td>
+      <td>${a.entrega_nombre || '—'}</td>
+      <td>${a.recibe_nombre || '—'}</td>
+      <td>${[a.insumo, a.marca, a.modelo].filter(Boolean).join(' · ') || '—'}</td>
+      <td>${estadoBadge(a.estado)}</td>
+      <td>${accionesHtml('entrega-equipo', a.id)}</td>
+    </tr>
+  `).join('');
+}
+
+// Init
+cargarListaST();
+cargarListaEE();
+</script>
+{% endblock %}
