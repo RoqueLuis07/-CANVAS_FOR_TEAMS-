@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     site_url: str = "http://localhost:3000"
     secret_key: str = _DEFAULT_SECRET
     auth_cookie_name: str = "usil_auth"
+    sentry_dsn: str = ""
 
     # Institutional domain & defaults
     institutional_domain: str = "usil.edu.py"
