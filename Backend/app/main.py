@@ -12,11 +12,14 @@ from fastapi.templating import Jinja2Templates
 # Configure logging before imports
 import sentry_sdk
 
-sentry_sdk.init(
-    dsn="https://7dbdeba1deaf1093168df2821f89aa1a@o4511649123270656.ingest.us.sentry.io/4511649133101056",
-    send_default_pii=True,
-    traces_sample_rate=1.0,
-)
+from app.core.config import settings
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        send_default_pii=False,
+        traces_sample_rate=1.0,
+    )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 from app.services import auth as auth_service
 from app.core import database, cache as _cache
-from app.core.config import settings
 from app.routers import (
     audit,
     auth,
@@ -137,12 +139,6 @@ if STATIC_DIR.exists():
 
 # Setup templates
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
-@app.get("/sentry-debug")
-async def trigger_error():
-    division_by_zero = 1 / 0
-    return {"message": "You will never see this"}
-
 
 # Health check endpoints
 @app.get("/health", tags=["Health"])

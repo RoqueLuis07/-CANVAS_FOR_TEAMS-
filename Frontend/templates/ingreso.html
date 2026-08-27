@@ -493,7 +493,10 @@ async function updateEmailPreview() {
     if (fullName && cedula) {
         try {
             const res = await api.post('/ingreso/preview', {
-                full_name: fullName, cedula: cedula, personal_email: 'test@usil.edu.py',
+                // personal_email no se usa para calcular el correo institucional
+                // (solo lo requiere el endpoint) — cualquier valor con formato
+                // válido sirve para esta vista previa.
+                full_name: fullName, cedula: cedula, personal_email: 'preview@example.com',
                 role: 'student', platform: plat, program_type: 'grado', cc: []
             });
             document.getElementById('ci_email_generated').innerText = "Email institucional: " + res.institutional_email;
