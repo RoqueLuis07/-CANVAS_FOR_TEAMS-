@@ -85,11 +85,6 @@ async def ingreso_page(request: Request):
     return _r(request, "ingreso.html", domain=settings.institutional_domain)
 
 
-@router.get("/ui/reenvio-credenciales", response_class=HTMLResponse)
-async def reenvio_credenciales_page(request: Request):
-    return _r(request, "reenvio_credenciales.html")
-
-
 @router.get("/ui/envio-credenciales", response_class=HTMLResponse)
 async def envio_credenciales_page(request: Request):
     return _r(request, "envio_credenciales.html")
