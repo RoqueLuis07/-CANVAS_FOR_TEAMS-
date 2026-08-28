@@ -47,11 +47,43 @@ function toggleSidebar() {
   }
 }
 
+/* ── Sidebar accordion groups (por zona/departamento) ──
+   Cada sección (Directorio & Ingresos, Gestión Académica, etc.) se puede
+   colapsar. El estado se recuerda en localStorage entre navegaciones (la
+   app es multi-página, no SPA, así que Bootstrap Collapse por sí solo no
+   persiste nada) — pero la sección que contiene la página actual siempre
+   se fuerza abierta, para que nunca quede escondida la entrada de menú de
+   donde estás parado. */
+function initSidebarGroups() {
+  document.querySelectorAll('.sidebar-group').forEach(group => {
+    const id = group.id;
+    const btn = document.querySelector(`[data-bs-target="#${id}"]`);
+    if (!btn) return;
+
+    const hasActive = group.querySelector('.sidebar-link.active, .sidebar-sublink.active');
+    const saved = localStorage.getItem('sidebarGroup:' + id);
+    const shouldExpand = !!hasActive || saved === null || saved === 'true';
+
+    if (shouldExpand) {
+      group.classList.add('show');
+      btn.setAttribute('aria-expanded', 'true');
+    } else {
+      group.classList.remove('show');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    group.addEventListener('shown.bs.collapse', () => localStorage.setItem('sidebarGroup:' + id, 'true'));
+    group.addEventListener('hidden.bs.collapse', () => localStorage.setItem('sidebarGroup:' + id, 'false'));
+  });
+}
+
 // Init on DOM ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initThemeToggle);
+  document.addEventListener('DOMContentLoaded', initSidebarGroups);
 } else {
   initThemeToggle();
+  initSidebarGroups();
 }
 
 /* ── Copy to clipboard ── */
