@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="/static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/vendor/bootstrap-icons/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="/static/css/style.css?v=24" rel="stylesheet">
+  <link href="/static/css/style.css?v=25" rel="stylesheet">
 </head>
 <body>
 
@@ -29,7 +29,11 @@
   </a>
 
   <!-- Directorio & Ingresos -->
-  <div class="sidebar-section mt-3">Directorio & Ingresos</div>
+  <button type="button" class="sidebar-section sidebar-section-btn mt-3" data-bs-toggle="collapse"
+          data-bs-target="#grupoDirectorio" aria-expanded="true" aria-controls="grupoDirectorio">
+    <span>Directorio & Ingresos</span><i class="bi bi-chevron-down"></i>
+  </button>
+  <div class="collapse show sidebar-group" id="grupoDirectorio">
   <a href="/ui/unified-users" class="sidebar-link {% block nav_uu %}{% endblock %}">
     <i class="bi bi-search"></i><span>Buscar Usuarios</span>
   </a>
@@ -57,9 +61,14 @@
       <i class="bi bi-cloud-arrow-down-fill"></i><span>Egreso Masivo</span>
     </a>
   </div>
+  </div>
 
   <!-- Gestión Académica -->
-  <div class="sidebar-section mt-3">Gestión Académica</div>
+  <button type="button" class="sidebar-section sidebar-section-btn mt-3" data-bs-toggle="collapse"
+          data-bs-target="#grupoAcademica" aria-expanded="true" aria-controls="grupoAcademica">
+    <span>Gestión Académica</span><i class="bi bi-chevron-down"></i>
+  </button>
+  <div class="collapse show sidebar-group" id="grupoAcademica">
   <div class="sidebar-link-group">
     <a href="/ui/canvas/courses" class="sidebar-link {% block nav_cc %}{% endblock %}">
       <i class="bi bi-book-fill"></i><span>Cursos (Canvas)</span>
@@ -105,9 +114,14 @@
   <a href="/ui/sync" class="sidebar-link {% block nav_sy %}{% endblock %}">
     <i class="bi bi-arrow-left-right"></i><span>Sincronización</span>
   </a>
+  </div>
 
   <!-- Administración -->
-  <div class="sidebar-section mt-3">Administración</div>
+  <button type="button" class="sidebar-section sidebar-section-btn mt-3" data-bs-toggle="collapse"
+          data-bs-target="#grupoAdministracion" aria-expanded="true" aria-controls="grupoAdministracion">
+    <span>Administración</span><i class="bi bi-chevron-down"></i>
+  </button>
+  <div class="collapse show sidebar-group" id="grupoAdministracion">
   <a href="/ui/actas" class="sidebar-link {% block nav_actas %}{% endblock %}">
     <i class="bi bi-file-earmark-text-fill"></i><span>Actas</span>
   </a>
@@ -144,11 +158,17 @@
       <i class="bi bi-person-slash"></i><span>Cuentas sin Uso</span>
     </a>
   </div>
+  </div>
 
-  <div class="sidebar-section mt-3">Personal</div>
+  <button type="button" class="sidebar-section sidebar-section-btn mt-3" data-bs-toggle="collapse"
+          data-bs-target="#grupoPersonal" aria-expanded="true" aria-controls="grupoPersonal">
+    <span>Personal</span><i class="bi bi-chevron-down"></i>
+  </button>
+  <div class="collapse show sidebar-group" id="grupoPersonal">
   <a href="/ui/profile" class="sidebar-link {% block nav_pf %}{% endblock %}">
     <i class="bi bi-person-circle"></i><span>Mi Perfil</span>
   </a>
+  </div>
 
   <div class="sidebar-footer">
     <i class="bi bi-circle-fill me-1 sidebar-status-dot"></i>
@@ -335,7 +355,7 @@
 
 <script src="/static/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/static/vendor/xlsx/xlsx.full.min.js"></script>
-<script src="/static/js/main.js?v=11"></script>
+<script src="/static/js/main.js?v=12"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
