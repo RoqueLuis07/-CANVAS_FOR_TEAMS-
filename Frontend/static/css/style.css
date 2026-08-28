@@ -510,6 +510,34 @@ html.dark-mode .canvas-tile-footer .tile-link { color: #5BBDE8; }
   font-size: .9rem; font-weight: 700; margin: 0;
 }
 
+/* ── 11b. Canvas panel — flat admin-list style (no shadow/blur/radius) ── */
+.canvas-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 3px;
+  box-shadow: none;
+  overflow: hidden;
+}
+.canvas-panel .card-header {
+  background: transparent;
+  border-bottom: 1px solid var(--card-border);
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-primary);
+}
+.canvas-panel .card-header .card-title {
+  font-size: .95rem; font-weight: 700; margin: 0;
+}
+.canvas-panel .table thead th {
+  background: transparent;
+  border-bottom: 2px solid var(--card-border);
+}
+.canvas-panel .table tbody tr:last-child td { border-bottom: none; }
+.canvas-panel a.entity-link {
+  color: var(--canvas-blue); text-decoration: none; font-weight: 600;
+}
+.canvas-panel a.entity-link:hover { text-decoration: underline; }
+
 /* ── 12. Tables ── */
 .table { color: var(--text-primary); border-color: var(--card-border); margin-bottom: 0; }
 .table thead th {
