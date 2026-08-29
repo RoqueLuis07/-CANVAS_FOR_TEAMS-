@@ -40,6 +40,17 @@ _VALID_PLATFORMS = {"canvas", "teams", "both"}
 _VALID_PROGRAMS  = {"grado", "mba", "diplomado"}
 _VALID_ROLES     = {"student", "teacher"}
 
+# Contraseña genérica para todos los docentes dados de alta desde este módulo
+# (a diferencia de los alumnos, que siguen usando el esquema cédula-iniciales).
+_TEACHER_DEFAULT_PASSWORD = "Usil2026*"
+
+
+def _apply_role_password(creds: dict, role: str) -> dict:
+    """Sobrescribe la contraseña generada con la genérica de docentes cuando corresponde."""
+    if role == "teacher":
+        return {**creds, "password": _TEACHER_DEFAULT_PASSWORD}
+    return creds
+
 
 # ── Modelos ────────────────────────────────────────────────────────────────────
 
@@ -276,6 +287,7 @@ async def _create_student(student: StudentIn) -> dict[str, Any]:
         Diccionario con estado de cada plataforma y las credenciales generadas.
     """
     creds, _ = await user_service.generate_unique_credentials(student.full_name, student.cedula, platform=student.platform)
+    creds = _apply_role_password(creds, student.role)
     login_id, sis_user_id = _resolve_login(creds, student.role)
     results: dict[str, Any] = {
         "student": student.full_name,
@@ -461,6 +473,7 @@ async def find_user(query: str = ""):
 async def preview_credentials(body: StudentIn):
     """Genera y muestra las credenciales que se asignarían al usuario, sin crear nada."""
     creds, _ = await user_service.generate_unique_credentials(body.full_name, body.cedula, body.platform)
+    creds = _apply_role_password(creds, body.role)
     login_id, _ = _resolve_login(creds, body.role)
     return CredentialPreview(
         full_name=body.full_name,
@@ -727,6 +740,7 @@ async def preview_students_bulk(body: BulkStudentsIn) -> dict:
         creds, status = await user_service.generate_unique_credentials(
             student.full_name, student.cedula, platform=student.platform
         )
+        creds = _apply_role_password(creds, student.role)
         login_id, sis_user_id = _resolve_login(creds, student.role)
         
         status_canvas = "-"
