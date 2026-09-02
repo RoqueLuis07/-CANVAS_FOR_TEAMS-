@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 _SMALL_ATTACHMENT_LIMIT = 3 * 1024 * 1024
 
 # CC fijo compartido por todos los envíos de credenciales.
-_BASE_CC = ["lflorentin@usil.edu.py", "comercialcredenciales@usil.edu.py", "resteche@usil.edu.py"]
+_BASE_CC = ["comercialcredenciales@usil.edu.py", "resteche@usil.edu.py"]
 
 # CC adicional según el tipo de programa, replicando "Envio Credenciales"
 # (grado) vs "Envio Credenciales UBS" (diplomados) de la planilla de referencia.
@@ -64,7 +64,7 @@ _GRADO_ATTACHMENT_ZIP = _GRADO_ATTACHMENTS_DIR / "Manuales e Instructivos de las
 
 # Datos de contacto de TI UBS, tal como aparecen en el correo real que el
 # equipo venía enviando a mano (mismo texto, mismo WhatsApp).
-_DIPLOMADO_CONTACT_EMAILS = ["lflorentin@usil.edu.py", "glezcano@usil.edu.py", "resteche@usil.edu.py"]
+_DIPLOMADO_CONTACT_EMAILS = ["glezcano@usil.edu.py", "resteche@usil.edu.py"]
 _DIPLOMADO_WHATSAPP = "0991 856 488"
 _DIPLOMADO_TEAMS_LINK = "https://teams.cloud.microsoft/"
 
@@ -184,7 +184,6 @@ def _erp_docente_canvas_link() -> str:
 
 
 _STUDENT_CONTACTS = [
-    ("Luciano Florentín", "lflorentin@usil.edu.py"),
     ("Giovanni Lezcano", "glezcano@usil.edu.py"),
     ("Roque Esteche", "resteche@usil.edu.py"),
 ]
@@ -348,7 +347,6 @@ _ERP_DOCENTE_FEATURES = [
 ]
 
 _ERP_DOCENTE_CONTACTS = [
-    ("Luciano Florentín", "lflorentin@usil.edu.py"),
     ("Giovanni Lezcano", "glezcano@usil.edu.py"),
     ("Roque Esteche", "resteche@usil.edu.py"),
 ]

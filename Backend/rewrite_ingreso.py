@@ -104,10 +104,6 @@ html_content = """{% extends "base.html" %}
                 <label class="form-check-label text-secondary" for="cc1">Comercial</label>
               </div>
               <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="lflorentin@usil.edu.py" data-group="ci" id="cc2">
-                <label class="form-check-label text-secondary" for="cc2">L. Florentín</label>
-              </div>
-              <div class="form-check">
                 <input class="form-check-input cc-check" type="checkbox" value="resteche@usil.edu.py" data-group="ci" id="cc3">
                 <label class="form-check-label text-secondary" for="cc3">R. Esteche</label>
               </div>
@@ -189,10 +185,6 @@ html_content = """{% extends "base.html" %}
               <div class="form-check">
                 <input class="form-check-input cc-check" type="checkbox" value="comercialcredenciales@usil.edu.py" data-group="ri" id="rcc1">
                 <label class="form-check-label text-secondary" for="rcc1">Comercial</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input cc-check" type="checkbox" value="lflorentin@usil.edu.py" data-group="ri" id="rcc2">
-                <label class="form-check-label text-secondary" for="rcc2">L. Florentín</label>
               </div>
               <div class="form-check">
                 <input class="form-check-input cc-check" type="checkbox" value="resteche@usil.edu.py" data-group="ri" id="rcc3">
