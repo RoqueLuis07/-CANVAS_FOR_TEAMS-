@@ -3564,12 +3564,17 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
     col_plat = get_col_idx("plataforma")
     col_curso = get_col_idx("curso", "id curso", "canvas")
     col_equipo = get_col_idx("equipo", "id equipo", "teams")
-    col_curso_nombre = get_col_idx("nombre del curso", "curso", "diplomado")
-    
+    # Nota: "curso" NO va en las claves de este fallback — si sólo existe una
+    # columna "Curso" (sin una columna aparte de "Nombre del Curso"/"Diplomado"),
+    # col_curso_nombre debe quedar vacío en vez de apuntar a la misma columna
+    # que col_curso; si no, la validación de más abajo compara el ID contra sí
+    # mismo como si fuera un nombre y siempre falla.
+    col_curso_nombre = get_col_idx("nombre del curso", "diplomado")
+
     col_usuario = get_col_idx("usuario")
     col_contra = get_col_idx("contrasena", "contrasea", "clave")
     col_enviado = get_col_idx("estado", "enviado")
-    
+
     col_cc = get_col_idx("cc", "copia")
     sheet_cc_list = []
     if col_cc:
@@ -3622,6 +3627,13 @@ async def import_docentes_onedrive(req: DiplomadosUrlRequest) -> BulkResult:
         id_curso = str(ws.cell(row=r_idx, column=col_curso).value or "").strip() if col_curso else ""
         id_equipo = str(ws.cell(row=r_idx, column=col_equipo).value or "").strip() if col_equipo else ""
         curso_nombre = str(ws.cell(row=r_idx, column=col_curso_nombre).value or "").strip() if col_curso_nombre else ""
+
+        # Planillas solo-Teams (ej. "Usuarios Docentes (Teams)") suelen tener
+        # una única columna "Curso" y ninguna columna "Equipo" dedicada. En
+        # ese caso el ID que se cargó en "Curso" es el ID del equipo de Teams
+        # al que hay que matricular directamente al docente.
+        if not id_equipo and not col_equipo and id_curso and id_curso != "None" and plat == "teams":
+            id_equipo = id_curso
 
         creds, status = await user_service.generate_unique_credentials(nombre, cedula, plat)
         login_id = creds["email"]
