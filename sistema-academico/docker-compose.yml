@@ -1,0 +1,63 @@
+version: '3.9'
+
+# Stack para desplegar vía Portainer (Avance 2). Balanceo con HAProxy entre
+# dos arquitecturas activas se agrega en el Avance 3 — este compose es la
+# "Arquitectura A" de base.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: sync_usil_app
+    volumes:
+      - ./:/var/www/html
+    environment:
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_DATABASE=sistema_academico
+      - DB_USERNAME=sistema_academico
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SESSION_DRIVER=redis
+      - CACHE_STORE=redis
+      - REDIS_HOST=redis
+    depends_on:
+      - db
+      - redis
+    networks: [academico_net]
+
+  webserver:
+    image: nginx:1.27-alpine
+    container_name: sync_usil_web
+    ports:
+      - '8080:80'
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on: [app]
+    networks: [academico_net]
+
+  db:
+    image: mysql:8.0
+    container_name: sync_usil_db
+    environment:
+      - MYSQL_DATABASE=sistema_academico
+      - MYSQL_USER=sistema_academico
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - '3306:3306'
+    networks: [academico_net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: sync_usil_redis
+    networks: [academico_net]
+
+volumes:
+  db_data:
+
+networks:
+  academico_net:
+    driver: bridge
