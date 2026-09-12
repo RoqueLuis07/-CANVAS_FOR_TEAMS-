@@ -12,7 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Railway termina el TLS y reenvía al contenedor por HTTP: sin esto,
+        // Laravel genera URLs de assets con esquema http:// aunque la página
+        // se sirva por https://, y el navegador bloquea ese contenido mixto.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
