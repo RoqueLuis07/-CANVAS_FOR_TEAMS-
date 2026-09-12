@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\Curso;
 use App\Models\InscripcionMateria;
-use App\Models\Materia;
 use App\Models\Matricula;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -16,7 +16,7 @@ class InscripcionMateriaFactory extends Factory
     {
         return [
             'matricula_id' => Matricula::factory(),
-            'materia_id' => Materia::factory(),
+            'curso_id' => Curso::factory()->creadoEnCanvasYTeams(),
             'origen' => 'manual',
             'estado' => 'inscrita',
             'fecha_inscripcion' => now(),

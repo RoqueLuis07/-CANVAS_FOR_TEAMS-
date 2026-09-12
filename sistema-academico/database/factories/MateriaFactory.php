@@ -23,7 +23,6 @@ class MateriaFactory extends Factory
             ]),
             'creditos' => fake()->numberBetween(2, 6),
             'semestre_sugerido' => fake()->numberBetween(1, 8),
-            'cupo_maximo' => fake()->randomElement([30, 40, 50, null]),
             'activa' => true,
         ];
     }

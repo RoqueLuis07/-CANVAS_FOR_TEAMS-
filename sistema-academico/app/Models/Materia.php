@@ -20,7 +20,6 @@ class Materia extends Model
         'nombre',
         'creditos',
         'semestre_sugerido',
-        'cupo_maximo',
         'activa',
     ];
 
@@ -52,23 +51,12 @@ class Materia extends Model
         return $this->belongsToMany(Materia::class, 'materia_prerequisito', 'prerequisito_id', 'materia_id');
     }
 
-    public function inscripciones(): HasMany
-    {
-        return $this->hasMany(InscripcionMateria::class);
-    }
-
     /**
-     * Cuántas inscripciones activas (no retiradas) tiene hoy, para
-     * validar el cupo máximo antes de dar de alta a un alumno más.
+     * Ofertas concretas de esta materia por período (las que efectivamente
+     * se crean como curso en Canvas / equipo en Teams).
      */
-    public function cupoDisponible(): ?int
+    public function cursos(): HasMany
     {
-        if ($this->cupo_maximo === null) {
-            return null;
-        }
-
-        $ocupados = $this->inscripciones()->where('estado', '!=', 'retirada')->count();
-
-        return max(0, $this->cupo_maximo - $ocupados);
+        return $this->hasMany(Curso::class);
     }
 }

@@ -15,7 +15,6 @@ return new class extends Migration
             $table->string('nombre');
             $table->unsignedTinyInteger('creditos')->default(0);
             $table->unsignedTinyInteger('semestre_sugerido')->default(1);
-            $table->unsignedSmallInteger('cupo_maximo')->nullable();
             $table->boolean('activa')->default(true);
             $table->timestamps();
 

@@ -16,16 +16,20 @@ class InscripcionMateria extends Model
 
     protected $fillable = [
         'matricula_id',
-        'materia_id',
+        'curso_id',
         'origen',
         'estado',
         'fecha_inscripcion',
+        'canvas_enrollment_at',
+        'teams_enrollment_at',
     ];
 
     protected function casts(): array
     {
         return [
             'fecha_inscripcion' => 'date',
+            'canvas_enrollment_at' => 'datetime',
+            'teams_enrollment_at' => 'datetime',
         ];
     }
 
@@ -34,8 +38,18 @@ class InscripcionMateria extends Model
         return $this->belongsTo(Matricula::class);
     }
 
-    public function materia(): BelongsTo
+    public function curso(): BelongsTo
     {
-        return $this->belongsTo(Materia::class);
+        return $this->belongsTo(Curso::class);
+    }
+
+    public function estaAlDiaEnCanvas(): bool
+    {
+        return $this->canvas_enrollment_at !== null;
+    }
+
+    public function estaAlDiaEnTeams(): bool
+    {
+        return $this->teams_enrollment_at !== null;
     }
 }

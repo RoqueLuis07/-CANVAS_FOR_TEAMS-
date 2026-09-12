@@ -35,4 +35,16 @@ return [
         ],
     ],
 
+    'canvas' => [
+        'base_url' => env('CANVAS_BASE_URL', 'https://canvas.instructure.com'),
+        'access_token' => env('CANVAS_ACCESS_TOKEN'),
+        'account_id' => env('CANVAS_ACCOUNT_ID', '1'),
+    ],
+
+    'azure' => [
+        'tenant_id' => env('AZURE_TENANT_ID'),
+        'client_id' => env('AZURE_CLIENT_ID'),
+        'client_secret' => env('AZURE_CLIENT_SECRET'),
+    ],
+
 ];

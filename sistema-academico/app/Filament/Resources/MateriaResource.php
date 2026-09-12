@@ -35,8 +35,6 @@ class MateriaResource extends Resource
                     ->required()
                     ->numeric()
                     ->default(1),
-                Forms\Components\TextInput::make('cupo_maximo')
-                    ->numeric(),
                 Forms\Components\Toggle::make('activa')
                     ->required(),
             ]);
@@ -57,9 +55,6 @@ class MateriaResource extends Resource
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('semestre_sugerido')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('cupo_maximo')
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\IconColumn::make('activa')

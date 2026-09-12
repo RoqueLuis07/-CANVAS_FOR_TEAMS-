@@ -2,6 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Contracts\CanvasClient;
+use App\Contracts\TeamsClient;
+use App\Models\Curso;
 use App\Models\Materia;
 use App\Models\Matricula;
 use App\Models\PeriodoAcademico;
@@ -10,6 +13,7 @@ use App\Models\PlanEstudio;
 use App\Models\Postulacion;
 use App\Models\Programa;
 use App\Models\User;
+use App\Services\CursoService;
 use App\Services\InscripcionMateriaService;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -19,9 +23,14 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database con un caso completo, de punta a
-     * punta: postulación → admisión → matrícula → alta en materias (tanto
-     * predefinida para un alumno nuevo, como manual para uno que continúa).
+     * Seed de un caso completo, de punta a punta: postulación → admisión →
+     * matrícula → asignación de curso (Canvas/Teams) → alta en materias
+     * (predefinida para un alumno nuevo, manual para uno que continúa),
+     * incluyendo la matriculación automática en Canvas y Teams.
+     *
+     * Sin CANVAS_ACCESS_TOKEN / credenciales de Azure configuradas, los
+     * clientes usados son los simulados (Null*Client) — ver
+     * App\Providers\AppServiceProvider.
      */
     public function run(): void
     {
@@ -58,7 +67,6 @@ class DatabaseSeeder extends Seeder
             'codigo' => 'MAT-201',
             'nombre' => 'Cálculo I',
             'semestre_sugerido' => 2,
-            'cupo_maximo' => 2,
         ]);
         $calculoI->prerequisitos()->attach($matematicaI);
 
@@ -67,12 +75,28 @@ class DatabaseSeeder extends Seeder
             'estado' => 'inscripciones_abiertas',
         ]);
 
-        $inscripciones = new InscripcionMateriaService;
+        // ── Asignación de curso: el Departamento Académico crea el Curso
+        //    (oferta de la materia en este período) y lo publica en Canvas
+        //    y Teams — paso obligatorio antes de poder matricular. ────────
+        $cursoService = new CursoService(app(CanvasClient::class), app(TeamsClient::class));
+        $inscripciones = new InscripcionMateriaService(app(CanvasClient::class), app(TeamsClient::class));
 
-        // ── Caso 1: alumno nuevo — postulación admitida, materias del
-        //    primer semestre predefinidas automáticamente por el
-        //    Departamento Académico. ──────────────────────────────────
-        $aspiranteNuevo = Persona::factory()->create(['nombre_completo' => 'Ana Benítez']);
+        $cursoMatematica = Curso::factory()->create(['materia_id' => $matematicaI->id, 'periodo_academico_id' => $periodo->id, 'cupo_maximo' => null]);
+        $cursoIntroProgramacion = Curso::factory()->create(['materia_id' => $introProgramacion->id, 'periodo_academico_id' => $periodo->id, 'cupo_maximo' => null]);
+        $cursoCalculo = Curso::factory()->create(['materia_id' => $calculoI->id, 'periodo_academico_id' => $periodo->id, 'cupo_maximo' => 2]);
+
+        foreach ([$cursoMatematica, $cursoIntroProgramacion, $cursoCalculo] as $curso) {
+            $cursoService->crearEnCanvas($curso);
+            $cursoService->crearEnTeams($curso);
+        }
+
+        // ── Caso 1: alumno nuevo — postulación admitida, cursos del primer
+        //    semestre predefinidos automáticamente por el Departamento. ───
+        $aspiranteNuevo = Persona::factory()->create([
+            'nombre_completo' => 'Ana Benítez',
+            'canvas_user_id' => 'canvas-ana',
+            'azure_user_id' => 'azure-ana',
+        ]);
         $postulacion = Postulacion::factory()->admitido()->create([
             'persona_id' => $aspiranteNuevo->id,
             'programa_id' => $programa->id,
@@ -89,11 +113,19 @@ class DatabaseSeeder extends Seeder
 
         // ── Caso 2: alumno que continúa — ya aprobó el prerrequisito
         //    (Matemática I) en un período anterior, y ahora da de alta
-        //    Cálculo I manualmente, respetando prerrequisitos y cupo. ────
-        $alumnoContinua = Persona::factory()->alumno()->create(['nombre_completo' => 'Carlos Rojas']);
+        //    Cálculo I manualmente. ─────────────────────────────────────
+        $alumnoContinua = Persona::factory()->alumno()->create([
+            'nombre_completo' => 'Carlos Rojas',
+            'canvas_user_id' => 'canvas-carlos',
+            'azure_user_id' => 'azure-carlos',
+        ]);
         $periodoAnterior = PeriodoAcademico::factory()->create([
             'nombre' => '2026-1',
             'estado' => 'cerrado',
+        ]);
+        $cursoMatematicaAnterior = Curso::factory()->creadoEnCanvasYTeams()->create([
+            'materia_id' => $matematicaI->id,
+            'periodo_academico_id' => $periodoAnterior->id,
         ]);
         $matriculaAnterior = Matricula::factory()->create([
             'persona_id' => $alumnoContinua->id,
@@ -103,7 +135,7 @@ class DatabaseSeeder extends Seeder
             'estado' => 'finalizada',
         ]);
         $matriculaAnterior->inscripciones()->create([
-            'materia_id' => $matematicaI->id,
+            'curso_id' => $cursoMatematicaAnterior->id,
             'origen' => 'manual',
             'estado' => 'aprobada',
             'fecha_inscripcion' => now()->subMonths(6),
@@ -115,7 +147,7 @@ class DatabaseSeeder extends Seeder
             'periodo_academico_id' => $periodo->id,
             'postulacion_id' => null,
         ]);
-        $inscripciones->inscribirManual($matriculaContinua, $calculoI);
+        $inscripciones->inscribirManual($matriculaContinua, $cursoCalculo);
 
         $this->command?->info("Seed listo. Login de prueba: {$admin->email}");
     }
