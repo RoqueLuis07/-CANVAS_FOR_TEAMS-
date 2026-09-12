@@ -20,6 +20,14 @@ services:
       - SESSION_DRIVER=redis
       - CACHE_STORE=redis
       - REDIS_HOST=redis
+      # Mismas credenciales que el sistema FastAPI (Canvas_for_Teams) —
+      # se cargan desde el .env de este stack en Portainer.
+      - CANVAS_BASE_URL=${CANVAS_BASE_URL}
+      - CANVAS_ACCESS_TOKEN=${CANVAS_ACCESS_TOKEN}
+      - CANVAS_ACCOUNT_ID=${CANVAS_ACCOUNT_ID}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
     depends_on:
       - db
       - redis
