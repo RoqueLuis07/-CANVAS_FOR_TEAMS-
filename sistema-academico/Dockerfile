@@ -5,7 +5,7 @@
 FROM php:8.4-cli
 
 RUN apt-get update && apt-get install -y \
-    git unzip libzip-dev libpng-dev libonig-dev \
+    git unzip libzip-dev libpng-dev libonig-dev libsqlite3-dev \
  && docker-php-ext-install pdo_mysql pdo_sqlite zip gd \
  && pecl install redis \
  && docker-php-ext-enable redis
